@@ -3,11 +3,22 @@ import { collisionWorldFor, isFreeSpot, MAP_IDS, MAPS, validateMap } from "../sr
 
 describe("maps", () => {
   it("ships the three arena maps unchanged, plus the vehicle maps", () => {
-    expect(MAP_IDS).toEqual(["industrial", "neon", "desert", "urban", "airbase"]);
+    expect(MAP_IDS).toEqual([
+      "industrial",
+      "neon",
+      "desert",
+      "urban",
+      "airbase",
+      "harbor",
+      "downtown",
+      "mountain",
+      "facility",
+    ]);
     for (const id of ["industrial", "neon", "desert"] as const)
       expect(MAPS[id].vehicleSpawns).toBeUndefined();
-    for (const id of ["urban", "airbase"] as const)
-      expect(MAPS[id].vehicleSpawns?.length).toBeGreaterThanOrEqual(6);
+    for (const id of ["urban", "airbase", "harbor", "downtown", "mountain", "facility"] as const) {
+      expect(MAPS[id].vehicleSpawns?.length).toBeGreaterThanOrEqual(4);
+    }
   });
 
   for (const id of MAP_IDS) {

@@ -78,7 +78,7 @@ export const MATCH_DEFAULTS = {
 
 export const MATCH_LIMITS = {
   durationSec: { min: 120, max: 20 * 60 },
-  killLimit: { min: 5, max: 100 },
+  killLimit: { min: 1, max: 200 },
   maxPlayers: { min: 2, max: 8 },
 } as const;
 

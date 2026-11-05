@@ -1,9 +1,12 @@
 import {
   type GameMode,
   isTeamMode,
+  MAPS,
   MATCH_LIMITS,
+  type MapId,
   type MatchState,
   MODE_DEFAULTS,
+  modeNeedsVehicles,
   TEAM_ALPHA,
   TEAM_BRAVO,
   TEAM_SIZE,
@@ -87,6 +90,21 @@ export class MatchRules {
 
   applyCombatRules(): void {
     this.sim.rules = { teams: this.teamMode, friendlyFire: this.teamMode && this.state.friendlyFire };
+    if (this.sim.mode !== this.state.mode) this.sim.setMode(this.state.mode as GameMode);
+  }
+
+  /**
+   * The map a mode must be played on instead of `mapId`, or null when `mapId` is fine: Vehicle
+   * Mayhem needs a map with vehicles (the first one is used).
+   */
+  static mapForMode(mode: string, mapId: MapId): MapId | null {
+    if (!modeNeedsVehicles(mode) || MAPS[mapId].vehicleSpawns?.length) return null;
+    return (Object.keys(MAPS) as MapId[]).find((id) => MAPS[id].vehicleSpawns?.length) ?? null;
+  }
+
+  /** A map the host may pick under the current mode. */
+  mapAllowed(mapId: MapId): boolean {
+    return MatchRules.mapForMode(this.state.mode, mapId) === null;
   }
 
   /**

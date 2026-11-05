@@ -5,9 +5,13 @@ import type { Vec2 } from "../sim/math.ts";
 import { bodyFits } from "../sim/vehicle.ts";
 import { MILITARY_AIRBASE } from "./airbase.ts";
 import { DESERT_OUTPOST } from "./desert.ts";
+import { DOWNTOWN } from "./downtown.ts";
+import { TACTICAL_FACILITY } from "./facility.ts";
+import { HARBOR_CONFLICT } from "./harbor.ts";
 import { INDUSTRIAL_ARENA } from "./industrial.ts";
+import { MOUNTAIN_OUTPOST } from "./mountain.ts";
 import { NEON_DISTRICT } from "./neon.ts";
-import { type MapDef, type MapId, TALL_SOLIDS } from "./types.ts";
+import { type MapDef, type MapId, SHOOT_THROUGH, TALL_SOLIDS } from "./types.ts";
 import { URBAN_WARFARE } from "./urban.ts";
 
 export * from "./types.ts";
@@ -18,6 +22,10 @@ export const MAPS: Record<MapId, MapDef> = {
   desert: DESERT_OUTPOST,
   urban: URBAN_WARFARE,
   airbase: MILITARY_AIRBASE,
+  harbor: HARBOR_CONFLICT,
+  downtown: DOWNTOWN,
+  mountain: MOUNTAIN_OUTPOST,
+  facility: TACTICAL_FACILITY,
 };
 
 export const MAP_IDS = Object.keys(MAPS) as MapId[];
@@ -29,6 +37,26 @@ export function isMapId(v: unknown): v is MapId {
 
 const worldCache = new Map<MapId, CollisionWorld>();
 const airWorldCache = new Map<MapId, CollisionWorld>();
+
+const shotWorldCache = new Map<MapId, CollisionWorld>();
+
+/**
+ * What bullets and sight lines meet at ground level: every solid except the ones that only stop
+ * movement (water, fences). Identical to the collision world on maps without such solids.
+ */
+export function shotWorldFor(map: MapDef): CollisionWorld {
+  if (!map.solids.some((s) => SHOOT_THROUGH.has(s.kind))) return collisionWorldFor(map);
+  let w = shotWorldCache.get(map.id);
+  if (!w) {
+    w = buildCollisionWorld(
+      map.width,
+      map.height,
+      map.solids.filter((s) => !SHOOT_THROUGH.has(s.kind)),
+    );
+    shotWorldCache.set(map.id, w);
+  }
+  return w;
+}
 
 /** Collision world of the tall solids only: what flying helicopters and air shots meet. */
 export function airWorldFor(map: MapDef): CollisionWorld {

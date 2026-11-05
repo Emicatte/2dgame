@@ -4,6 +4,7 @@ export * from "./config/progression.ts";
 export * from "./config/vehicles.ts";
 export * from "./config/weapons.ts";
 export * from "./maps/index.ts";
+export * from "./maps/objectives.ts";
 export * from "./protocol/api.ts";
 export * from "./protocol/input.ts";
 export * from "./protocol/messages.ts";

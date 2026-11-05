@@ -32,6 +32,7 @@ import {
   NET,
   type NetEvent,
   NO_WEAPON,
+  objectivesFor,
   PLAYER as P,
   PLAYER,
   type PlayerState,
@@ -41,6 +42,7 @@ import {
   seatOccupant,
   seatWorld,
   secToSteps,
+  shotWorldFor,
   tracePellet,
   VEHICLE_STATUS,
   VEHICLES,
@@ -60,9 +62,10 @@ import { TEX, TEX_SCALE } from "../art/textures.ts";
 import { sfx } from "../audio/sfx.ts";
 import { autopilot } from "../bench/autopilot.ts";
 import { Effects } from "../effects/Effects.ts";
+import { FlagView, PointView } from "../entities/ObjectiveView.ts";
 import { PlayerView } from "../entities/PlayerView.ts";
 import { VehicleView } from "../entities/VehicleView.ts";
-import { type HudVehicle, hudStore, uiStore } from "../hudStore.ts";
+import { type HudObjective, type HudVehicle, hudStore, uiStore } from "../hudStore.ts";
 import { InputManager } from "../input/InputManager.ts";
 import { ServerClock } from "../net/clock.ts";
 import {
@@ -137,6 +140,8 @@ export class ArenaScene extends Phaser.Scene {
   private engineTimer = 0;
   private mapTiles: Phaser.GameObjects.Image[] = [];
   private pendingMap: MapId | null = null;
+  private pointViews = new Map<string, PointView>();
+  private flagViews = new Map<string, FlagView>();
   private controls!: InputManager;
   private predictor!: Predictor;
   private netMetrics = new NetMetrics();
@@ -412,6 +417,7 @@ export class ArenaScene extends Phaser.Scene {
     for (const v of this.vehicleViews.values()) v.destroy();
     this.vehicleViews.clear();
     this.vbuffer.clear();
+    this.clearObjectiveViews();
     this.fitCamera();
   }
 
@@ -422,6 +428,52 @@ export class ArenaScene extends Phaser.Scene {
    */
   private addStaticCanvas(key: string, canvas: HTMLCanvasElement) {
     this.textures.addImage(key, canvas as unknown as HTMLImageElement);
+  }
+
+  private clearObjectiveViews() {
+    for (const v of this.pointViews.values()) v.destroy();
+    for (const v of this.flagViews.values()) v.destroy();
+    this.pointViews.clear();
+    this.flagViews.clear();
+  }
+
+  /** Creates / removes the views of Domination points and CTF flags to match the state. */
+  private syncObjectiveViews(state: MatchState) {
+    if (state.mapId !== this.map.id) return;
+    state.objectives.forEach((o, id) => {
+      if (o.kind === "point" && !this.pointViews.has(id)) {
+        this.pointViews.set(id, new PointView(this, o.x, o.y, id));
+      } else if (o.kind === "flag" && !this.flagViews.has(id) && (o.team === 1 || o.team === 2)) {
+        const home = objectivesFor(this.map).flags[o.team];
+        this.flagViews.set(id, new FlagView(this, o.team, home.x, home.y));
+      }
+    });
+    for (const [id, v] of this.pointViews) {
+      if (state.objectives.get(id)?.kind !== "point") {
+        v.destroy();
+        this.pointViews.delete(id);
+      }
+    }
+    for (const [id, v] of this.flagViews) {
+      if (state.objectives.get(id)?.kind !== "flag") {
+        v.destroy();
+        this.flagViews.delete(id);
+      }
+    }
+  }
+
+  private renderObjectives(state: MatchState, dtSec: number) {
+    for (const [id, v] of this.pointViews) {
+      const o = state.objectives.get(id);
+      if (o) v.update(o.team, o.progress);
+    }
+    for (const [id, v] of this.flagViews) {
+      const o = state.objectives.get(id);
+      if (!o) continue;
+      const carrier = o.carrier ? this.views.get(o.carrier) : undefined;
+      if (carrier?.visibleAlive) v.update(carrier.root.x, carrier.root.y, true, dtSec);
+      else v.update(o.x, o.y, false, dtSec);
+    }
   }
 
   // ---------------------------------------------------------------- room
@@ -437,6 +489,7 @@ export class ArenaScene extends Phaser.Scene {
     this.vehicleViews.clear();
     this.vbuffer.clear();
     this.vehiclePoses.clear();
+    this.clearObjectiveViews();
     this.buffer.clear();
     this.clock.reset();
     this.eventQueue = [];
@@ -554,6 +607,7 @@ export class ArenaScene extends Phaser.Scene {
       }
     }
     if (inMatch) this.vbuffer.push(state.tick, vsamples);
+    this.syncObjectiveViews(state);
 
     const me = state.players.get(this.room.sessionId);
     if (me && inMatch) {
@@ -659,6 +713,10 @@ export class ArenaScene extends Phaser.Scene {
           if (this.predictor.mount?.vehicleId === ev.v) {
             this.cameras.main.shake(260, 0.012 * settingsStore.get().screenShake);
           }
+          break;
+        case "obj":
+          if (ev.k === "capture" || ev.k === "score") sfx.pickup();
+          else if (ev.k === "take" || ev.k === "return") sfx.door(true);
           break;
         case "crash":
           if (this.predictor.mount?.vehicleId === ev.v || ev.o === self) {
@@ -808,6 +866,7 @@ export class ArenaScene extends Phaser.Scene {
     this.animateLights();
     this.animatePickups();
     this.effects.update(dt);
+    if (state) this.renderObjectives(state, dt / 1000);
 
     if (!inMatch || !this.room) {
       this.updateMenuCamera(dt);
@@ -967,7 +1026,7 @@ export class ArenaScene extends Phaser.Scene {
     const sim = this.predictor.sim;
     const ox = sim.x;
     const oy = sim.y;
-    const world = collisionWorldFor(this.map);
+    const world = shotWorldFor(this.map);
     const renderTick = this.clock.renderTick();
     const targets: HitTarget[] = [];
     const state = this.room?.state;
@@ -1267,7 +1326,7 @@ export class ArenaScene extends Phaser.Scene {
   private laserLength(x: number, y: number, aim: number, weaponIndex: number): number {
     const def = weaponIndex === NO_WEAPON ? undefined : weaponByIndex(weaponIndex);
     if (!def?.fx.laserSight) return 0;
-    return raycastSolids(collisionWorldFor(this.map), x, y, Math.cos(aim), Math.sin(aim), def.rangePx);
+    return raycastSolids(shotWorldFor(this.map), x, y, Math.cos(aim), Math.sin(aim), def.rangePx);
   }
 
   private updateCamera(dt: number) {
@@ -1504,6 +1563,7 @@ export class ArenaScene extends Phaser.Scene {
       killedBy: killerName,
       interactPrompt: interact,
       vehicle: this.vehicleHud(state),
+      objectives: this.objectiveHud(state),
       protected: !!me?.protected,
       ping: Math.round(this.ping),
       fps,
@@ -1528,6 +1588,23 @@ export class ArenaScene extends Phaser.Scene {
       },
     });
     void this.localAliveSince;
+  }
+
+  private objectiveHud(state: MatchState): HudObjective[] {
+    const out: HudObjective[] = [];
+    const selfId = this.room?.sessionId ?? "";
+    state.objectives.forEach((o, id) => {
+      out.push({
+        id,
+        kind: o.kind === "flag" ? "flag" : "point",
+        team: o.team,
+        progress: o.progress,
+        home: o.home,
+        carrier: o.carrier ? (state.players.get(o.carrier)?.name ?? "?") : "",
+        carriedByYou: o.carrier !== "" && o.carrier === selfId,
+      });
+    });
+    return out.sort((a, b) => a.id.localeCompare(b.id));
   }
 
   private vehicleHud(state: MatchState): HudVehicle | null {

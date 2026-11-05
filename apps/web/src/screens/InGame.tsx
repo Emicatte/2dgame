@@ -10,7 +10,7 @@ import {
 } from "@scrapline/shared";
 import { useEffect, useRef, useState } from "react";
 import { Button, formatClock, Panel } from "../components/ui.tsx";
-import { type HudVehicle, hudStore, uiStore } from "../game/hudStore.ts";
+import { type HudObjective, type HudVehicle, hudStore, uiStore } from "../game/hudStore.ts";
 import { keyLabel, settingsStore } from "../lib/settings.ts";
 import { useStore } from "../lib/store.ts";
 import { gameEvents, session, sessionStore } from "../net/session.ts";
@@ -142,13 +142,81 @@ function VehiclePanel({
   );
 }
 
+/** Domination points (owner + who is turning them) or CTF flags (where each flag is). */
+function ObjectiveStrip({ items, myTeam }: { items: HudObjective[]; myTeam: number }) {
+  if (items.length === 0) return null;
+  const teamLabel = (t: number) => (t === 1 || t === 2 ? TEAMS[t].name : "Neutral");
+  return (
+    <ul className="objectives" aria-label="Objectives" data-testid="objectives">
+      {items.map((o) => {
+        if (o.kind === "point") {
+          const turning = Math.abs(o.progress) > 0.001 && Math.abs(o.progress) < 0.999;
+          const toward = o.progress > 0 ? 1 : 2;
+          return (
+            <li
+              key={o.id}
+              className={`objective objective--${o.team || "n"}`}
+              data-testid={`objective-${o.id}`}
+              aria-label={`Point ${o.id}: ${teamLabel(o.team)}${turning ? `, ${teamLabel(toward)} capturing` : ""}`}
+            >
+              <b>{o.id}</b>
+              <small>
+                {o.team ? teamLabel(o.team) : turning ? `${Math.round(Math.abs(o.progress) * 100)}%` : "Free"}
+              </small>
+            </li>
+          );
+        }
+        const status = o.carrier
+          ? o.carriedByYou
+            ? "You carry it"
+            : `Taken by ${o.carrier}`
+          : o.home
+            ? "Home"
+            : "Dropped";
+        return (
+          <li
+            key={o.id}
+            className={`objective objective--${o.team} objective--flag`}
+            data-testid={`flag-${o.team}`}
+            aria-label={`${teamLabel(o.team)} flag: ${status}`}
+          >
+            <b>
+              {teamLabel(o.team)} flag{o.team === myTeam ? " (yours)" : ""}
+            </b>
+            <small>{status}</small>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function objectiveLine(e: Extract<NetEvent, { t: "obj" }>, name: (id: string) => string): string {
+  const team = (t: number) => (t === 1 || t === 2 ? TEAMS[t].name : "");
+  switch (e.k) {
+    case "capture":
+      return `${team(e.team)} captured ${e.o}`;
+    case "neutral":
+      return `${e.o} is neutral`;
+    case "take":
+      return `${name(e.p)} took the ${team(e.team)} flag`;
+    case "drop":
+      return `${team(e.team)} flag dropped`;
+    case "return":
+      return `${team(e.team)} flag returned`;
+    case "score":
+      return `${name(e.p)} captured a flag for ${team(e.team)}`;
+  }
+}
+
 function KillFeed() {
   const [items, setItems] = useState<FeedItem[]>([]);
   const counter = useRef(0);
   useEffect(() => {
     const off = gameEvents.on("net", ({ events }) => {
       const kills = events.filter((e): e is Extract<NetEvent, { t: "kill" }> => e.t === "kill");
-      if (kills.length === 0) return;
+      const objectives = events.filter((e): e is Extract<NetEvent, { t: "obj" }> => e.t === "obj");
+      if (kills.length === 0 && objectives.length === 0) return;
       const s = sessionStore.get();
       const name = (id: string) => s.players.find((p) => p.id === id)?.name ?? "?";
       const teams = isTeamMode(s.mode);
@@ -165,6 +233,16 @@ function KillFeed() {
             victimTeam: team(k.v),
             weapon: killCause(k.w),
             self: k.k === s.selfId || k.v === s.selfId,
+            at: now,
+          })),
+          ...objectives.map((o) => ({
+            id: ++counter.current,
+            killer: "",
+            victim: "",
+            killerTeam: 0,
+            victimTeam: 0,
+            weapon: objectiveLine(o, name),
+            self: o.p === s.selfId,
             at: now,
           })),
         ].slice(-6),
@@ -335,6 +413,12 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
           </div>
         )}
 
+        <ObjectiveStrip items={hud.objectives} myTeam={myTeam} />
+        {hud.objectives.some((o) => o.carriedByYou) && (
+          <div className="carrier-banner" role="status">
+            You have the enemy flag: bring it to your flag stand
+          </div>
+        )}
         {teams ? (
           <div className="hud__top" data-testid="team-scores">
             {([1, 2] as const).map((t, i) => (

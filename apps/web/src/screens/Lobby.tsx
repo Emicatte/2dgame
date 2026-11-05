@@ -1,10 +1,14 @@
 import {
   GAME_MODES,
+  type GameMode,
   isTeamMode,
   MAP_IDS,
   MAPS,
   MATCH_LIMITS,
+  MODE_BLURBS,
   MODE_NAMES,
+  MODE_SCORE_UNIT,
+  modeNeedsVehicles,
   skinById,
   TEAM_SIZE,
   TEAMS,
@@ -19,6 +23,14 @@ import { type LobbyPlayer, session, sessionStore } from "../net/session.ts";
 const DURATIONS = [180, 300, 420, 600, 900];
 const EMPTY_SLOT_KEYS = ["empty-a", "empty-b", "empty-c", "empty-d"];
 const KILL_LIMITS = [10, 15, 20, 30, 50];
+/** Score limits offered per mode (the current value is always offered too). */
+const SCORE_LIMITS: Record<GameMode, number[]> = {
+  deathmatch: KILL_LIMITS,
+  tdm: KILL_LIMITS,
+  dom: [50, 100, 150, 200],
+  ctf: [1, 2, 3, 5],
+  mayhem: [20, 30, 50, 80],
+};
 
 export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
   const s = useStore(sessionStore);
@@ -174,11 +186,12 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
           <Panel title="Match">
             <div className="stack">
               {canHost && (
-                <fieldset className="seg" aria-label="Game mode" data-testid="mode-select">
+                <fieldset className="mode-grid" aria-label="Game mode" data-testid="mode-select">
                   {GAME_MODES.map((m) => (
                     <button
                       key={m}
                       type="button"
+                      className="mode-card"
                       aria-pressed={s.mode === m}
                       onClick={() => session.updateSettings({ mode: m })}
                       data-testid={`mode-${m}`}
@@ -188,16 +201,24 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                   ))}
                 </fieldset>
               )}
+              <p className="mode-blurb" data-testid="mode-blurb">
+                {MODE_BLURBS[s.mode]}
+              </p>
               <div className="grid-3">
                 {MAP_IDS.map((id) => (
                   <button
                     key={id}
                     type="button"
-                    className="map-card"
+                    className={`map-card ${modeNeedsVehicles(s.mode) && !MAPS[id].vehicleSpawns ? "is-unavailable" : ""}`}
                     aria-pressed={s.mapId === id}
-                    disabled={!canHost}
+                    disabled={!canHost || (modeNeedsVehicles(s.mode) && !MAPS[id].vehicleSpawns)}
                     onClick={() => session.updateSettings({ map: id })}
-                    title={MAPS[id].tagline}
+                    title={
+                      modeNeedsVehicles(s.mode) && !MAPS[id].vehicleSpawns
+                        ? `${MODE_NAMES[s.mode]} needs a map with vehicles`
+                        : MAPS[id].tagline
+                    }
+                    data-testid={`map-${id}`}
                   >
                     <img className="map-card__preview" src={mapThumb(id)} alt="" />
                     <span className="map-card__label">
@@ -216,7 +237,7 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                 )}
                 <span className="badge">{formatClock(s.durationSec)} min</span>
                 <span className="badge">
-                  {s.killLimit} {teams ? "team points" : "eliminations"}
+                  {s.killLimit} {MODE_SCORE_UNIT[s.mode]}
                 </span>
                 {teams && <span className="badge">Friendly fire {s.friendlyFire ? "on" : "off"}</span>}
               </div>
@@ -259,13 +280,16 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                     </select>
                   </div>
                   <div className="setting-row">
-                    <span>{teams ? "Team points to win" : "Eliminations to win"}</span>
+                    <span>
+                      {MODE_SCORE_UNIT[s.mode].charAt(0).toUpperCase() + MODE_SCORE_UNIT[s.mode].slice(1)} to
+                      win
+                    </span>
                     <select
                       className="input"
                       value={s.killLimit}
                       onChange={(e) => session.updateSettings({ killLimit: Number(e.target.value) })}
                     >
-                      {[...new Set([...KILL_LIMITS, s.killLimit])]
+                      {[...new Set([...SCORE_LIMITS[s.mode], s.killLimit])]
                         .sort((a, b) => a - b)
                         .map((k) => (
                           <option key={k} value={k}>

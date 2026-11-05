@@ -15,6 +15,7 @@ import {
   ENTER_REACH,
   findExitSpot,
   fullSlot,
+  type GameMode,
   giveWeapon,
   type HitTarget,
   hasLineOfSight,
@@ -25,9 +26,12 @@ import {
   KILL_BY_VEHICLE,
   lerpAngle,
   type MapDef,
+  modeScoresObjectives,
   NET,
   type NetEvent,
   NO_WEAPON,
+  OBJECTIVES,
+  objectivesFor,
   type PickupDef,
   PLAYER,
   type PlayerSim,
@@ -40,6 +44,7 @@ import {
   type SimEvent,
   SLOT_PICKUP,
   seatWorld,
+  shotWorldFor,
   stepPlayer,
   stepVehicle,
   teamSpawns,
@@ -70,6 +75,12 @@ export interface PlayerMatchStats {
   activeTicks: number;
   /** Order in which the player reached their current kill count (tie-breaker). */
   lastKillTick: number;
+  /** Objective play: point captures taken part in, flags returned, flags captured. */
+  captures: number;
+  returns: number;
+  flagCaptures: number;
+  /** Enemy vehicles wrecked. */
+  vehicleKills: number;
 }
 
 export interface ServerPlayer {
@@ -256,7 +267,33 @@ export function emptyStats(): PlayerMatchStats {
     firstBlood: false,
     activeTicks: 0,
     lastKillTick: 0,
+    captures: 0,
+    returns: 0,
+    flagCaptures: 0,
+    vehicleKills: 0,
   };
+}
+
+export interface PointRuntime {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  /** 0 neutral, 1 Alpha, 2 Bravo. */
+  owner: number;
+  /** -1 (Bravo) … 1 (Alpha). */
+  progress: number;
+}
+
+export interface FlagRuntime {
+  team: 1 | 2;
+  homeX: number;
+  homeY: number;
+  x: number;
+  y: number;
+  carrier: string | null;
+  home: boolean;
+  returnTick: number;
 }
 
 /**
@@ -271,8 +308,14 @@ export class GameSimulation {
   readonly pickups = new Map<string, PickupRuntime>();
   readonly vehicles = new Map<string, ServerVehicle>();
   airWorld: CollisionWorld;
+  /** What bullets meet at ground level (water and fences only stop movement). */
+  shotWorld: CollisionWorld;
   firstBloodDone = false;
   rules: CombatRules = { teams: false, friendlyFire: false };
+  mode: GameMode = "deathmatch";
+  points: PointRuntime[] = [];
+  flags: FlagRuntime[] = [];
+  private domTicks = 0;
   /** Team scores indexed by team id (index 0 unused). */
   readonly teamScores: [number, number, number] = [0, 0, 0];
   /** Test-only fixed spawn list (enabled exclusively with ENABLE_DEBUG_ROUTES). */
@@ -288,6 +331,7 @@ export class GameSimulation {
     this.map = map;
     this.world = collisionWorldFor(map);
     this.airWorld = airWorldFor(map);
+    this.shotWorld = shotWorldFor(map);
     this.tickRate = opts.tickRate;
     this.rng = opts.rng ?? Math.random;
     this.resetPickups();
@@ -306,9 +350,39 @@ export class GameSimulation {
     this.map = map;
     this.world = collisionWorldFor(map);
     this.airWorld = airWorldFor(map);
+    this.shotWorld = shotWorldFor(map);
     this.history.length = 0;
     this.resetPickups();
     this.resetVehicles();
+    this.resetObjectives();
+  }
+
+  /** Mode objectives (Domination points, CTF flags) for the current map. */
+  setMode(mode: GameMode): void {
+    this.mode = mode;
+    this.resetObjectives();
+  }
+
+  resetObjectives(): void {
+    const o = objectivesFor(this.map);
+    this.domTicks = 0;
+    this.points =
+      this.mode === "dom"
+        ? o.points.map((p) => ({ id: p.id, label: p.label, x: p.x, y: p.y, owner: 0, progress: 0 }))
+        : [];
+    this.flags =
+      this.mode === "ctf"
+        ? ([1, 2] as const).map((team) => ({
+            team,
+            homeX: o.flags[team].x,
+            homeY: o.flags[team].y,
+            x: o.flags[team].x,
+            y: o.flags[team].y,
+            carrier: null,
+            home: true,
+            returnTick: 0,
+          }))
+        : [];
   }
 
   private resetPickups(): void {
@@ -350,6 +424,7 @@ export class GameSimulation {
   removePlayer(id: string): ServerPlayer | undefined {
     const p = this.players.get(id);
     if (p) this.leaveVehicle(p, true);
+    if (p) this.dropFlag(p);
     this.players.delete(id);
     return p;
   }
@@ -407,6 +482,7 @@ export class GameSimulation {
     this.resetPickups();
     for (const p of this.players.values()) this.leaveVehicle(p, true);
     this.resetVehicles();
+    this.resetObjectives();
     this.history.length = 0;
     for (const p of this.players.values()) {
       p.stats = emptyStats();
@@ -475,6 +551,7 @@ export class GameSimulation {
       }
       this.updatePickups();
       this.updateVehicleLifecycle();
+      this.updateObjectives();
     }
     this.recordHistory();
     return this.events;
@@ -638,7 +715,16 @@ export class GameSimulation {
     const dists: number[] = [];
     const opts = { airWorld: this.airWorld, shooterAir };
     for (const angle of shot.angles) {
-      const r = tracePellet(this.world, shot.ox, shot.oy, angle, weapon.rangePx, targets, shooter.id, opts);
+      const r = tracePellet(
+        this.shotWorld,
+        shot.ox,
+        shot.oy,
+        angle,
+        weapon.rangePx,
+        targets,
+        shooter.id,
+        opts,
+      );
       angles.push(Math.round(angle * 1000));
       dists.push(Math.round(r.dist));
       if (r.targetId) {
@@ -706,6 +792,7 @@ export class GameSimulation {
 
   private kill(victim: ServerPlayer, killer: ServerPlayer | null, weapon: number): void {
     this.leaveVehicle(victim, true, true);
+    this.dropFlag(victim);
     victim.alive = false;
     victim.hp = 0;
     victim.sim.vx = 0;
@@ -722,7 +809,13 @@ export class GameSimulation {
     killer.stats.bestStreak = Math.max(killer.stats.bestStreak, killer.stats.streak);
     killer.stats.lastKillTick = this.tick;
     // Team score: only eliminations of the other team count (a friendly-fire kill scores nothing).
-    if (this.rules.teams && (killer.team === 1 || killer.team === 2) && killer.team !== victim.team) {
+    // Objective modes (Domination, CTF) score objectives only; every other team mode scores kills.
+    if (
+      this.rules.teams &&
+      !modeScoresObjectives(this.mode) &&
+      (killer.team === 1 || killer.team === 2) &&
+      killer.team !== victim.team
+    ) {
       this.teamScores[killer.team] += 1;
     }
     const fb = !this.firstBloodDone;
@@ -760,7 +853,7 @@ export class GameSimulation {
         let visible = 0;
         for (const e of enemies) {
           nearest = Math.min(nearest, Math.sqrt(distSq(e.sim.x, e.sim.y, s.x, s.y)));
-          if (hasLineOfSight(this.world, e.sim.x, e.sim.y, s.x, s.y)) visible++;
+          if (hasLineOfSight(this.shotWorld, e.sim.x, e.sim.y, s.x, s.y)) visible++;
         }
         score = nearest * (visible > 0 ? 0.45 : 1) + this.rng() * 60;
       }
@@ -978,14 +1071,15 @@ export class GameSimulation {
         other.sim.vy += (ny / len) * push;
         this.damageVehicle(
           other,
-          over * COLLIDE_DAMAGE_PER_SPEED * (v.def.mass / other.def.mass),
+          // The lighter body takes more: damage scales with the square root of the mass ratio.
+          over * COLLIDE_DAMAGE_PER_SPEED * Math.sqrt(v.def.mass / other.def.mass),
           credit,
           other.sim.x,
           other.sim.y,
         );
         this.damageVehicle(
           v,
-          over * COLLIDE_DAMAGE_PER_SPEED * (other.def.mass / v.def.mass),
+          over * COLLIDE_DAMAGE_PER_SPEED * Math.sqrt(other.def.mass / v.def.mass),
           otherCredit,
           v.sim.x,
           v.sim.y,
@@ -1120,6 +1214,14 @@ export class GameSimulation {
       x: Math.round(v.sim.x),
       y: Math.round(v.sim.y),
     });
+    const crewTeam = this.vehicleTeam(v);
+    const crewed = v.seats.some((id) => id !== null);
+    if (attacker && crewed && (!this.rules.teams || crewTeam !== attacker.team)) {
+      attacker.stats.vehicleKills += 1;
+      if (this.mode === "mayhem" && (attacker.team === 1 || attacker.team === 2)) {
+        this.teamScores[attacker.team] += OBJECTIVES.wreckPoints;
+      }
+    }
     const occupants = v.seats
       .map((id) => (id ? this.players.get(id) : undefined))
       .filter((p): p is ServerPlayer => !!p);
@@ -1156,7 +1258,8 @@ export class GameSimulation {
     for (const v of this.vehicles.values()) {
       if (v.status === VEHICLE_WRECK && this.tick >= v.statusTick) {
         v.status = VEHICLE_GONE;
-        v.statusTick = this.tick + this.secToTicks(v.def.respawnSec);
+        const factor = this.mode === "mayhem" ? OBJECTIVES.mayhemRespawnFactor : 1;
+        v.statusTick = this.tick + this.secToTicks(v.def.respawnSec * factor);
       } else if (v.status === VEHICLE_GONE && this.tick >= v.statusTick) {
         // Respawn only onto a clear spot: never inside a player or another vehicle.
         const probe = createVehicleSim(v.spawn.x, v.spawn.y, v.spawn.angle);
@@ -1225,7 +1328,14 @@ export class GameSimulation {
     return best ? { v: best.v, seat: best.seat } : null;
   }
 
+  /** CTF: the flag carrier (if any) is this player. */
+  carriesFlag(p: ServerPlayer): boolean {
+    return this.flags.some((f) => f.carrier === p.id);
+  }
+
   private tryEnter(p: ServerPlayer): boolean {
+    // Flag carriers travel on foot: a flag must be chased down, not driven away at 100 km/h.
+    if (this.carriesFlag(p)) return false;
     const target = this.enterableVehicle(p);
     if (!target) return false;
     p.protectedUntil = 0;
@@ -1341,6 +1451,136 @@ export class GameSimulation {
       }
     }
     return this.chooseSpawn("");
+  }
+
+  // ---------------------------------------------------------------- objectives
+
+  private dropFlag(p: ServerPlayer): void {
+    for (const f of this.flags) {
+      if (f.carrier !== p.id) continue;
+      f.carrier = null;
+      f.home = false;
+      f.x = p.sim.x;
+      f.y = p.sim.y;
+      f.returnTick = this.tick + this.secToTicks(OBJECTIVES.flagReturnSec);
+      this.events.push({ t: "obj", k: "drop", o: String(f.team), team: f.team, p: p.id });
+    }
+  }
+
+  private updateObjectives(): void {
+    if (this.points.length > 0) this.updatePoints();
+    if (this.flags.length > 0) this.updateFlags();
+  }
+
+  /**
+   * Domination: a point is turned by the only team standing in it (contested = frozen), faster
+   * with more players (up to 3). It changes owner when fully captured and becomes neutral when
+   * the progress crosses the middle. Owned points score at a fixed rate.
+   */
+  private updatePoints(): void {
+    const dt = 1 / this.tickRate;
+    const r2 = OBJECTIVES.pointRadius ** 2;
+    for (const pt of this.points) {
+      const inside: [ServerPlayer[], ServerPlayer[], ServerPlayer[]] = [[], [], []];
+      for (const p of this.players.values()) {
+        if (!p.alive || (p.team !== 1 && p.team !== 2)) continue;
+        const v = p.vehicle ? this.vehicles.get(p.vehicle) : undefined;
+        // A helicopter in the air does not hold ground.
+        if (v && v.sim.alt >= AIRBORNE_ALT) continue;
+        if ((p.sim.x - pt.x) ** 2 + (p.sim.y - pt.y) ** 2 <= r2) inside[p.team].push(p);
+      }
+      const a = inside[1].length;
+      const b = inside[2].length;
+      if (a > 0 === b > 0) continue;
+      const team = a > 0 ? 1 : 2;
+      const n = Math.min(3, a + b);
+      const rate = (1 + 0.5 * (n - 1)) / OBJECTIVES.captureSec;
+      const before = pt.progress;
+      pt.progress = clamp(pt.progress + (team === 1 ? rate : -rate) * dt, -1, 1);
+      if (
+        pt.owner !== 0 &&
+        pt.owner !== team &&
+        Math.sign(pt.progress) !== Math.sign(before) &&
+        before !== 0
+      ) {
+        pt.owner = 0;
+        this.events.push({ t: "obj", k: "neutral", o: pt.id, team: 0, p: "" });
+      }
+      if (pt.owner !== team && Math.abs(pt.progress) >= 1) {
+        pt.owner = team;
+        for (const p of inside[team]) p.stats.captures += 1;
+        this.events.push({ t: "obj", k: "capture", o: pt.id, team, p: inside[team][0]?.id ?? "" });
+      }
+    }
+    this.domTicks += 1;
+    if (this.domTicks >= this.secToTicks(OBJECTIVES.scoreEverySec)) {
+      this.domTicks = 0;
+      for (const pt of this.points) if (pt.owner === 1 || pt.owner === 2) this.teamScores[pt.owner] += 1;
+    }
+  }
+
+  /**
+   * Capture the Flag: touch the enemy flag to carry it; touch your own dropped flag to send it
+   * home; bring the enemy flag to your stand while your own flag is home to score. A dropped flag
+   * goes home on its own after a while.
+   */
+  private updateFlags(): void {
+    const reach2 = OBJECTIVES.flagReach ** 2;
+    for (const f of this.flags) {
+      if (f.carrier) {
+        const c = this.players.get(f.carrier);
+        if (!c?.alive) {
+          if (c) this.dropFlag(c);
+          else {
+            f.carrier = null;
+            f.home = true;
+            f.x = f.homeX;
+            f.y = f.homeY;
+          }
+          continue;
+        }
+        f.x = c.sim.x;
+        f.y = c.sim.y;
+        const own = this.flags.find((g) => g.team === c.team);
+        if (own?.home && (c.sim.x - own.homeX) ** 2 + (c.sim.y - own.homeY) ** 2 <= reach2) {
+          // Capture.
+          f.carrier = null;
+          f.home = true;
+          f.x = f.homeX;
+          f.y = f.homeY;
+          c.stats.flagCaptures += 1;
+          if (c.team === 1 || c.team === 2) this.teamScores[c.team] += 1;
+          this.events.push({ t: "obj", k: "score", o: String(f.team), team: c.team, p: c.id });
+        }
+        continue;
+      }
+      if (!f.home && this.tick >= f.returnTick) {
+        f.home = true;
+        f.x = f.homeX;
+        f.y = f.homeY;
+        this.events.push({ t: "obj", k: "return", o: String(f.team), team: f.team, p: "" });
+        continue;
+      }
+      for (const p of this.players.values()) {
+        if (!p.alive || p.vehicle) continue;
+        if ((p.sim.x - f.x) ** 2 + (p.sim.y - f.y) ** 2 > reach2) continue;
+        if (p.team === f.team) {
+          if (!f.home) {
+            f.home = true;
+            f.x = f.homeX;
+            f.y = f.homeY;
+            p.stats.returns += 1;
+            this.events.push({ t: "obj", k: "return", o: String(f.team), team: f.team, p: p.id });
+          }
+        } else if ((p.team === 1 || p.team === 2) && !this.carriesFlag(p)) {
+          f.carrier = p.id;
+          f.home = false;
+          p.protectedUntil = 0;
+          this.events.push({ t: "obj", k: "take", o: String(f.team), team: f.team, p: p.id });
+          break;
+        }
+      }
+    }
   }
 
   /** Ranking: kills desc, deaths asc, earliest to reach the score first. */

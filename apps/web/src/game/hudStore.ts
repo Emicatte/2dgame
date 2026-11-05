@@ -38,6 +38,19 @@ export interface HudVehicle {
   canExit: boolean;
 }
 
+/** Domination point or CTF flag, for the HUD strip. */
+export interface HudObjective {
+  id: string;
+  kind: "point" | "flag";
+  /** Point: owner (0 neutral). Flag: its team. */
+  team: number;
+  progress: number;
+  home: boolean;
+  /** Flag carrier's name ("" when not carried). */
+  carrier: string;
+  carriedByYou: boolean;
+}
+
 export interface HudState {
   ready: boolean;
   alive: boolean;
@@ -61,6 +74,7 @@ export interface HudState {
   killedBy: string | null;
   interactPrompt: string | null;
   vehicle: HudVehicle | null;
+  objectives: HudObjective[];
   protected: boolean;
   ping: number;
   fps: number;
@@ -112,6 +126,7 @@ export const hudStore = createStore<HudState>({
   killedBy: null,
   interactPrompt: null,
   vehicle: null,
+  objectives: [],
   protected: false,
   ping: 0,
   fps: 0,

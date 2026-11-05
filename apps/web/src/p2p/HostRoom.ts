@@ -33,7 +33,7 @@ import { z } from "zod";
 import { type ComputedResult, computeResults, resultRows } from "../../../server/src/players/results.ts";
 import { MatchRules } from "../../../server/src/rules/MatchRules.ts";
 import { GameSimulation, type ServerPlayer } from "../../../server/src/simulation/GameSimulation.ts";
-import { syncPlayerState, syncVehicles } from "../../../server/src/simulation/stateSync.ts";
+import { syncObjectives, syncPlayerState, syncVehicles } from "../../../server/src/simulation/stateSync.ts";
 import { signal } from "../net/signal.ts";
 import type { PeerLink, WireData } from "./link.ts";
 import {
@@ -598,16 +598,28 @@ export class HostRoom {
   private handleSettings(id: string, s: z.infer<typeof settingsSchema>) {
     if (id !== this.sessionId || this.state.phase !== "lobby") return;
     // Mode first: it resets length, score limit and size to the mode's defaults.
-    if (s.mode && s.mode !== this.state.mode) this.rules.setMode(s.mode);
+    if (s.mode && s.mode !== this.state.mode) {
+      this.rules.setMode(s.mode);
+      const forced = MatchRules.mapForMode(this.state.mode, this.state.mapId as MapId);
+      if (forced) {
+        this.state.mapId = forced;
+        this.sim.setMap(MAPS[forced]);
+        this.syncPickups(true);
+      }
+    }
     if (s.teamSize && this.rules.teamMode && s.teamSize !== this.state.teamSize) {
       if (!this.rules.setTeamSize(s.teamSize))
         this.notice("Too many players in the room for that team size", "warn", undefined, id);
     }
     if (s.friendlyFire !== undefined && this.rules.teamMode) this.rules.setFriendlyFire(s.friendlyFire);
     if (s.map && s.map !== this.state.mapId) {
-      this.state.mapId = s.map;
-      this.sim.setMap(MAPS[s.map]);
-      this.syncPickups(true);
+      if (this.rules.mapAllowed(s.map)) {
+        this.state.mapId = s.map;
+        this.sim.setMap(MAPS[s.map]);
+        this.syncPickups(true);
+      } else {
+        this.notice("That mode needs a map with vehicles", "warn", undefined, id);
+      }
     }
     if (s.durationSec) this.state.durationSec = s.durationSec;
     if (s.killLimit) this.state.killLimit = s.killLimit;
@@ -816,6 +828,7 @@ export class HostRoom {
     this.rules.sync();
     this.syncPickups(false);
     syncVehicles(this.state, this.sim);
+    syncObjectives(this.state, this.sim);
   }
 
   private syncPickups(rebuild: boolean) {

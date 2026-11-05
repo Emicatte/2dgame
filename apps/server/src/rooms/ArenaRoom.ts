@@ -6,6 +6,7 @@ import {
   DEFAULT_MAP,
   DEFAULT_SKIN,
   decodeInput,
+  GAME_MODES,
   type GameMode,
   hashString,
   type InputBatch,
@@ -19,6 +20,7 @@ import {
   type MapId,
   type MatchPhase,
   MatchState,
+  MODE_NAMES,
   NET,
   type NoticeMessage,
   PickupState,
@@ -43,7 +45,7 @@ import { MatchRules } from "../rules/MatchRules.ts";
 import { verifyToken } from "../security/tokens.ts";
 import { getServices } from "../services.ts";
 import { GameSimulation, type ServerPlayer } from "../simulation/GameSimulation.ts";
-import { syncPlayerState, syncVehicles } from "../simulation/stateSync.ts";
+import { syncObjectives, syncPlayerState, syncVehicles } from "../simulation/stateSync.ts";
 
 interface AuthData {
   playerId: string;
@@ -148,7 +150,9 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       tickRate: NET.serverTickRate,
     });
     this.rules = new MatchRules(this.sim, this.state, (id) => this.bots.has(id));
-    this.rules.setMode(options.mode === "tdm" ? "tdm" : "deathmatch");
+    const mode: GameMode = options.mode && GAME_MODES.includes(options.mode) ? options.mode : "deathmatch";
+    this.rules.setMode(mode);
+    this.enforceModeMap();
     this.maxClients = this.state.maxPlayers;
     this.syncPickups(true);
 
@@ -407,6 +411,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     if (s.mode && s.mode !== this.state.mode) {
       this.rules.setMode(s.mode);
       this.applyCapacity();
+      this.enforceModeMap();
     }
     if (s.teamSize && this.rules.teamMode && s.teamSize !== this.state.teamSize) {
       if (this.rules.setTeamSize(s.teamSize)) this.applyCapacity();
@@ -414,9 +419,18 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     }
     if (s.friendlyFire !== undefined && this.rules.teamMode) this.rules.setFriendlyFire(s.friendlyFire);
     if (s.map && s.map !== this.state.mapId) {
-      this.state.mapId = s.map;
-      this.sim.setMap(MAPS[s.map]);
-      this.syncPickups(true);
+      if (this.rules.mapAllowed(s.map)) {
+        this.state.mapId = s.map;
+        this.sim.setMap(MAPS[s.map]);
+        this.syncPickups(true);
+      } else {
+        this.notice(
+          `${MODE_NAMES[this.state.mode as GameMode]} needs a map with vehicles`,
+          "warn",
+          undefined,
+          client,
+        );
+      }
     }
     if (s.durationSec) this.state.durationSec = s.durationSec;
     if (s.killLimit) this.state.killLimit = s.killLimit;
@@ -426,6 +440,15 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     }
     this.touchActivity();
     void this.updateMetadata();
+  }
+
+  /** Vehicle Mayhem moves the room to a vehicle map. */
+  private enforceModeMap() {
+    const forced = MatchRules.mapForMode(this.state.mode, this.state.mapId as MapId);
+    if (!forced) return;
+    this.state.mapId = forced;
+    this.sim.setMap(MAPS[forced]);
+    this.syncPickups(true);
   }
 
   /** Room capacity follows the settings, never below the players already present. */
@@ -776,6 +799,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     this.rules.sync();
     this.syncPickups(false);
     syncVehicles(this.state, this.sim);
+    syncObjectives(this.state, this.sim);
   }
 
   /** Team modes: winner and final scores for the results message. */

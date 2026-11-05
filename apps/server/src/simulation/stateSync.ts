@@ -1,4 +1,10 @@
-import { type MatchState, NO_WEAPON, type PlayerState, VehicleState } from "@scrapline/shared";
+import {
+  type MatchState,
+  NO_WEAPON,
+  ObjectiveState,
+  type PlayerState,
+  VehicleState,
+} from "@scrapline/shared";
 import type { GameSimulation, ServerPlayer } from "./GameSimulation.ts";
 
 /**
@@ -79,5 +85,36 @@ export function syncVehicles(state: MatchState, sim: GameSimulation): void {
     vs.s1 = v.seats[1] ?? "";
     vs.s2 = v.seats[2] ?? "";
     vs.s3 = v.seats[3] ?? "";
+  }
+}
+
+/** Mirrors Domination points and CTF flags into the synchronized map. */
+export function syncObjectives(state: MatchState, sim: GameSimulation): void {
+  const keys = new Set<string>([...sim.points.map((p) => p.id), ...sim.flags.map((f) => String(f.team))]);
+  for (const id of [...state.objectives.keys()]) if (!keys.has(id)) state.objectives.delete(id);
+  const get = (id: string) => {
+    let o = state.objectives.get(id);
+    if (!o) {
+      o = new ObjectiveState();
+      state.objectives.set(id, o);
+    }
+    return o;
+  };
+  for (const p of sim.points) {
+    const o = get(p.id);
+    o.kind = "point";
+    o.team = p.owner;
+    o.progress = p.progress;
+    o.x = p.x;
+    o.y = p.y;
+  }
+  for (const f of sim.flags) {
+    const o = get(String(f.team));
+    o.kind = "flag";
+    o.team = f.team;
+    o.x = f.x;
+    o.y = f.y;
+    o.carrier = f.carrier ?? "";
+    o.home = f.home;
   }
 }

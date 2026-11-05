@@ -384,7 +384,8 @@ function drawShadows(ctx: CanvasRenderingContext2D, map: MapDef) {
   sctx.scale(k, k);
   sctx.fillStyle = hex(map.theme.shadow, 0.6);
   for (const s of map.solids) {
-    const off = tall.has(s.kind) ? 16 : 9;
+    if (s.kind === "water") continue;
+    const off = tall.has(s.kind) ? 16 : s.kind === "fence" ? 3 : 9;
     sctx.fillRect(s.x + off * 0.6, s.y + off, s.w, s.h);
   }
   ctx.save();
@@ -408,6 +409,55 @@ function drawSolid(ctx: CanvasRenderingContext2D, s: SolidDef, map: MapDef, rand
   const accent = t.accents[s.tone ?? 0] ?? t.accents[0]!;
   ctx.save();
   switch (s.kind) {
+    case "water": {
+      // Harbor water: deep blue with a lighter quay edge and soft swell lines.
+      const g = ctx.createLinearGradient(s.x, s.y, s.x + s.w * 0.3, s.y + s.h);
+      g.addColorStop(0, hex(0x123447));
+      g.addColorStop(1, hex(0x0c2433));
+      ctx.fillStyle = g;
+      ctx.fillRect(s.x, s.y, s.w, s.h);
+      ctx.strokeStyle = hex(0x6fb7d6, 0.12);
+      ctx.lineWidth = 2;
+      for (let y = s.y + 18; y < s.y + s.h; y += 26) {
+        ctx.beginPath();
+        for (let x = s.x; x <= s.x + s.w; x += 24) {
+          const yy = y + Math.sin((x + y) * 0.05) * 3;
+          if (x === s.x) ctx.moveTo(x, yy);
+          else ctx.lineTo(x, yy);
+        }
+        ctx.stroke();
+      }
+      ctx.strokeStyle = hex(0xb9b4aa, 0.35);
+      ctx.lineWidth = 3;
+      ctx.strokeRect(s.x + 1.5, s.y + 1.5, s.w - 3, s.h - 3);
+      break;
+    }
+    case "fence": {
+      // Chain-link: posts and a diagonal mesh you can see (and shoot) through.
+      ctx.fillStyle = hex(0x9aa0a6, 0.18);
+      ctx.fillRect(s.x, s.y, s.w, s.h);
+      ctx.strokeStyle = hex(0xb9c0c7, 0.45);
+      ctx.lineWidth = 1;
+      const horizontal = s.w >= s.h;
+      const len = horizontal ? s.w : s.h;
+      for (let i = 0; i < len; i += 8) {
+        ctx.beginPath();
+        if (horizontal) {
+          ctx.moveTo(s.x + i, s.y);
+          ctx.lineTo(s.x + i + s.h, s.y + s.h);
+        } else {
+          ctx.moveTo(s.x, s.y + i);
+          ctx.lineTo(s.x + s.w, s.y + i + s.w);
+        }
+        ctx.stroke();
+      }
+      ctx.fillStyle = hex(0x5a5f66);
+      for (let i = 0; i <= len; i += 64) {
+        if (horizontal) ctx.fillRect(s.x + Math.min(i, s.w - 4), s.y - 1, 4, s.h + 2);
+        else ctx.fillRect(s.x - 1, s.y + Math.min(i, s.h - 4), s.w + 2, 4);
+      }
+      break;
+    }
     case "container": {
       const base = accent;
       bevel(ctx, s, base, shade(base, -0.45), 2);

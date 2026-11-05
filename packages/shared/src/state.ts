@@ -109,6 +109,28 @@ export function seatOccupant(v: VehicleState, seat: number): string {
   return seat === 0 ? v.s0 : seat === 1 ? v.s1 : seat === 2 ? v.s2 : seat === 3 ? v.s3 : "";
 }
 
+/**
+ * Mode objective: a Domination capture point or a CTF flag. Positions of points never change;
+ * a flag's x / y follow its carrier or where it was dropped.
+ */
+export const ObjectiveState = schema(
+  {
+    kind: t.string().default("point"),
+    /** Point: owning team (0 = neutral). Flag: the team it belongs to. */
+    team: t.uint8().default(0),
+    /** Point: capture progress -1 (Bravo) … 1 (Alpha). */
+    progress: t.float32().default(0),
+    x: t.float32().default(0),
+    y: t.float32().default(0),
+    /** Flag: carrier id ("" when not carried). */
+    carrier: t.string().default(""),
+    /** Flag: on its stand. */
+    home: t.boolean().default(true),
+  },
+  "ObjectiveState",
+);
+export type ObjectiveState = SchemaType<typeof ObjectiveState>;
+
 export type MatchPhase = "lobby" | "countdown" | "playing" | "results";
 
 export const MatchState = schema(
@@ -132,6 +154,8 @@ export const MatchState = schema(
     players: t.map(PlayerState),
     pickups: t.map(PickupState),
     vehicles: t.map(VehicleState),
+    /** Domination points ("A", "B", "C") or CTF flags ("1", "2"); empty in other modes. */
+    objectives: t.map(ObjectiveState),
     /** Team modes: players per team (0 in free-for-all). */
     teamSize: t.uint8().default(0),
     friendlyFire: t.boolean().default(false),

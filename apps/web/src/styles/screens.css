@@ -1057,3 +1057,131 @@
     transition: none;
   }
 }
+
+/* ---------------------------------------------------------------- modes */
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.mode-card {
+  min-height: 44px;
+  padding: 6px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  color: var(--text-2);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: left;
+  transition:
+    border-color var(--t-fast) var(--ease-out),
+    background var(--t-fast) var(--ease-out);
+}
+
+.mode-card:hover {
+  border-color: var(--text-2);
+}
+
+.mode-card[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.mode-card:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.mode-blurb {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.map-card.is-unavailable {
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-card {
+    transition: none;
+  }
+}
+
+/* objectives strip (Domination / CTF) */
+.objectives {
+  position: absolute;
+  top: 78px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.objective {
+  display: grid;
+  justify-items: center;
+  min-width: 56px;
+  padding: 3px 10px;
+  background: rgba(14, 15, 17, 0.82);
+  border: 1px solid var(--line-2);
+  border-bottom-width: 3px;
+  font-size: 12px;
+}
+
+.objective b {
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.objective small {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.objective--flag b {
+  font-size: 13px;
+}
+
+.objective--1 {
+  border-bottom-color: #3da5ff;
+}
+
+.objective--1 b {
+  color: #3da5ff;
+}
+
+.objective--2 {
+  border-bottom-color: #ff8a3d;
+}
+
+.objective--2 b {
+  color: #ff8a3d;
+}
+
+.carrier-banner {
+  position: absolute;
+  top: 134px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  background: rgba(14, 15, 17, 0.88);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  font-weight: 600;
+  font-size: 14px;
+}

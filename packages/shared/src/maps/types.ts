@@ -2,7 +2,16 @@ import type { VehicleKind } from "../config/vehicles.ts";
 import type { WeaponId } from "../config/weapons.ts";
 import type { Rect, Vec2 } from "../sim/math.ts";
 
-export type MapId = "industrial" | "neon" | "desert" | "urban" | "airbase";
+export type MapId =
+  | "industrial"
+  | "neon"
+  | "desert"
+  | "urban"
+  | "airbase"
+  | "harbor"
+  | "downtown"
+  | "mountain"
+  | "facility";
 
 /** Visual style of a solid block; collision is always the rectangle itself. */
 export type SolidKind =
@@ -17,7 +26,14 @@ export type SolidKind =
   | "rock"
   | "sandbag"
   | "ruin"
-  | "tank";
+  | "tank"
+  /** Harbor water: stops anything on the ground, but bullets and helicopters pass over it. */
+  | "water"
+  /** Chain-link fence: stops movement, bullets pass through. */
+  | "fence";
+
+/** Solids that stop movement but not bullets (shots and sight lines pass over or through them). */
+export const SHOOT_THROUGH: ReadonlySet<SolidKind> = new Set<SolidKind>(["water", "fence"]);
 
 export interface SolidDef extends Rect {
   kind: SolidKind;
@@ -117,6 +133,11 @@ export interface MapDef {
   vehicleSpawns?: readonly VehicleSpawnDef[];
   /** Large maps: shown in the map picker as "vehicles" maps, sized for bigger matches. */
   large?: boolean;
+  /** Authored objective positions (otherwise derived from the team spawns, see objectivesFor). */
+  objectives?: {
+    points: { id: string; label: string; x: number; y: number }[];
+    flags: { 1: Vec2; 2: Vec2 };
+  };
 }
 
 /**

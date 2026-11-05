@@ -105,7 +105,18 @@ export type NetEvent =
   | { t: "wreck"; v: string; p: string; x: number; y: number }
   /** Hard contact: run-over, vehicle collision or crash (`v` = vehicle, `o` = other party or ""). */
   | { t: "crash"; v: string; o: string; x: number; y: number; f: number }
-  | { t: "vspawn"; v: string };
+  | { t: "vspawn"; v: string }
+  /**
+   * Objective events. Domination: "capture" (point `o` now owned by `team`), "neutral". CTF:
+   * "take" / "drop" / "return" / "score" for flag `o` (of team `team`) by player `p`.
+   */
+  | {
+      t: "obj";
+      k: "capture" | "neutral" | "take" | "drop" | "return" | "score";
+      o: string;
+      team: number;
+      p: string;
+    };
 
 export interface NoticeMessage {
   text: string;
