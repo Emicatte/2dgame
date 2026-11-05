@@ -26,6 +26,8 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.5",
     "@playwright/test": "1.64.1",
-    "typescript": "7.0.2"
+    "@types/ws": "^8.18.2",
+    "typescript": "7.0.2",
+    "ws": "^8.22.1"
   }
 }

@@ -90,6 +90,9 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   private matchStartPlayers = 0;
   private lastActivityTick = 0;
   private persisting = false;
+  /** Training targets present while a private room has a single human (solo practice). */
+  private readonly bots = new Set<string>();
+  private practiceMatch = false;
 
   override async onCreate(options: CreateOptions = {}) {
     const { log } = getServices();
@@ -196,6 +199,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     this.lastInputTick.set(client.sessionId, this.state.tick);
     this.touchActivity();
     this.notice(`${auth.nickname} joined`, "info", client);
+    this.syncPracticeTargets();
     void this.updateMetadata();
   }
 
@@ -244,8 +248,8 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       }
     }
     if (this.state.hostId === client.sessionId) {
-      const next = this.state.players.keys().next();
-      this.state.hostId = next.done ? "" : next.value;
+      const next = [...this.state.players.keys()].find((id) => !this.bots.has(id));
+      this.state.hostId = next ?? "";
       const host = this.state.players.get(this.state.hostId);
       if (host) this.notice(`${host.name} is now the host`, "info");
     }
@@ -258,6 +262,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     ) {
       this.endMatch("opponents-left");
     }
+    this.syncPracticeTargets();
     void this.updateMetadata();
   }
 
@@ -271,6 +276,28 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
 
   override onUncaughtException(error: Error, methodName: string) {
     getServices().log.error({ err: error, methodName, roomId: this.roomId }, "room exception");
+  }
+
+  /** Diagnostics for /api/debug/rooms (debug builds only). */
+  debugSnapshot() {
+    return {
+      roomId: this.roomId,
+      code: this.code,
+      phase: this.state.phase,
+      tick: this.sim.tick,
+      players: [...this.sim.players.values()].map((p) => ({
+        id: p.id,
+        name: p.name,
+        queue: p.queue.length,
+        credit: Math.round(p.credit * 100) / 100,
+        lastQueuedSeq: p.lastQueuedSeq,
+        lastProcessedSeq: p.lastProcessedSeq,
+        droppedInputs: p.droppedInputs,
+        alive: p.alive,
+        x: Math.round(p.sim.x),
+        y: Math.round(p.sim.y),
+      })),
+    };
   }
 
   // ---------------------------------------------------------------- messages
@@ -348,6 +375,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   private onTick(elapsedMs: number) {
     const phase = this.state.phase as MatchPhase;
     if (phase === "countdown" || phase === "playing") {
+      this.driveBots();
       const events = this.sim.step(elapsedMs, phase === "playing" ? "live" : "frozen");
       if (events.length > 0) this.broadcast(S2C.EVENTS, events);
     } else {
@@ -400,6 +428,8 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   }
 
   private startCountdown() {
+    this.syncPracticeTargets();
+    this.practiceMatch = this.bots.size > 0;
     this.sim.resetForMatch();
     this.leavers = [];
     this.state.phase = "countdown";
@@ -453,10 +483,110 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     }
   }
 
+  // ---------------------------------------------------------------- practice targets
+
+  /**
+   * Solo players in a private room get three strafing training targets, so the arena is
+   * playable alone. Targets disappear as soon as a second human joins. Practice matches never
+   * award XP or touch persistent stats (nothing to farm).
+   */
+  private syncPracticeTargets() {
+    const humans = this.clients.length;
+    const wanted = this.kind === "private" && humans === 1 && this.state.phase === "lobby" ? 3 : 0;
+    const keep = this.kind === "private" && humans === 1 && this.state.phase !== "lobby";
+    if (wanted > 0 && this.bots.size === 0) {
+      for (let i = 1; i <= wanted; i++) {
+        const id = `bot:${i}`;
+        this.sim.addPlayer({
+          id,
+          playerId: "",
+          name: `Target ${i}`,
+          skin: "ash",
+          level: 1,
+          primary: "rifle",
+          seed: hashString(id),
+        });
+        const ps = new PlayerState();
+        Object.assign(ps, {
+          name: `Target ${i}`,
+          skin: "ash",
+          level: 1,
+          primary: "rifle",
+          connected: true,
+          ready: true,
+        });
+        this.state.players.set(id, ps);
+        this.views.set(id, ps);
+        this.bots.add(id);
+      }
+    } else if (wanted === 0 && !keep && this.bots.size > 0) {
+      for (const id of this.bots) {
+        this.sim.removePlayer(id);
+        this.state.players.delete(id);
+        this.views.delete(id);
+      }
+      this.bots.clear();
+    }
+  }
+
+  private botSeq = 0;
+
+  /** Targets strafe on a slow deterministic pattern and never shoot back. */
+  private driveBots() {
+    if (this.bots.size === 0) return;
+    let k = 0;
+    for (const id of this.bots) {
+      k++;
+      const phase = Math.floor((this.sim.tick + k * 13) / (25 + k * 7)) % 2;
+      const frames = [0, 1, 2].map(() => ({
+        seq: ++this.botSeq,
+        mx: phase === 0 ? 1 : -1,
+        my: 0,
+        aim: Math.PI,
+        buttons: 0,
+        slot: -1,
+        viewTick: this.sim.tick,
+      }));
+      this.sim.enqueue(id, frames);
+    }
+  }
+
+  private sendPracticeResults(standings: ServerPlayer[]) {
+    const results = computeResults(standings, {
+      tickRate: NET.serverTickRate,
+      minParticipationTicks: Number.MAX_SAFE_INTEGER,
+      completed: false,
+    });
+    const rows = resultRows(results);
+    for (const r of results) {
+      const client = this.clients.getById(r.player.id);
+      if (!client) continue;
+      client.send(S2C.RESULTS, {
+        winnerId: this.state.winnerId,
+        rows,
+        personal: {
+          placement: r.placement,
+          xpGained: 0,
+          xpLines: [],
+          totalXp: null,
+          level: null,
+          leveledUp: false,
+          unlocked: [],
+          persisted: false,
+          practice: true,
+        },
+      } satisfies ResultsMessage);
+    }
+  }
+
   // ---------------------------------------------------------------- persistence
 
   private async persistMatch(standings: ServerPlayer[], reason: string) {
     const { repo, log } = getServices();
+    if (this.practiceMatch) {
+      this.sendPracticeResults(standings);
+      return;
+    }
     this.persisting = true;
     const results = computeResults(standings, {
       tickRate: NET.serverTickRate,

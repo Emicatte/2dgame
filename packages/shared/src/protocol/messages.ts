@@ -104,6 +104,8 @@ export interface PersonalResult {
   leveledUp: boolean;
   unlocked: string[];
   persisted: boolean;
+  /** Solo practice against training targets: nothing is recorded. */
+  practice?: boolean;
 }
 
 export interface ResultsMessage {

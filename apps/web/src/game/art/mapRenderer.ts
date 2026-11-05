@@ -462,7 +462,10 @@ function drawSolid(ctx: CanvasRenderingContext2D, s: SolidDef, map: MapDef, rand
       }
       const poly = (dx: number, dy: number) => {
         ctx.beginPath();
-        pts.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x + dx, y + dy) : ctx.lineTo(x + dx, y + dy)));
+        pts.forEach(([x, y], i) => {
+          if (i === 0) ctx.moveTo(x + dx, y + dy);
+          else ctx.lineTo(x + dx, y + dy);
+        });
         ctx.closePath();
       };
       ctx.fillStyle = hex(0x5e4630);

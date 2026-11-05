@@ -85,7 +85,10 @@ export function Results() {
                 {r.personal.unlocked.length > 0 && (
                   <span className="badge badge--good">Unlocked: {r.personal.unlocked.join(", ")}</span>
                 )}
-                {!r.personal.persisted && (
+                {r.personal.practice && (
+                  <span className="field__hint">Practice match: progress and stats are not recorded.</span>
+                )}
+                {!r.personal.persisted && !r.personal.practice && (
                   <span className="field__hint">
                     Progress could not be saved this time (server storage unavailable).
                   </span>

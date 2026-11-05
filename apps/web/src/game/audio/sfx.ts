@@ -273,7 +273,9 @@ class Sfx {
     if (!out) return;
     const t = this.ctx.currentTime;
     const notes = win ? [523, 659, 784, 1046] : [392, 349, 311, 262];
-    notes.forEach((n, i) => this.tone(out, t + i * 0.12, "triangle", n, n, 0.3, 0.45));
+    notes.forEach((n, i) => {
+      this.tone(out, t + i * 0.12, "triangle", n, n, 0.3, 0.45);
+    });
   }
 }
 

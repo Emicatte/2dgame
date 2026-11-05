@@ -144,10 +144,18 @@ export class ArenaScene extends Phaser.Scene {
       selfId: () => this.room?.sessionId ?? null,
       phase: () => this.room?.state?.phase ?? null,
       players: () => {
-        const out: { id: string; x: number; y: number; alive: boolean; hp: number; kills: number; deaths: number }[] = [];
-        this.room?.state?.players.forEach((p, id) =>
-          out.push({ id, x: p.x, y: p.y, alive: p.alive, hp: p.hp, kills: p.kills, deaths: p.deaths }),
-        );
+        const out: {
+          id: string;
+          x: number;
+          y: number;
+          alive: boolean;
+          hp: number;
+          kills: number;
+          deaths: number;
+        }[] = [];
+        this.room?.state?.players.forEach((p, id) => {
+          out.push({ id, x: p.x, y: p.y, alive: p.alive, hp: p.hp, kills: p.kills, deaths: p.deaths });
+        });
         return out;
       },
       rendered: (id: string) => {
@@ -430,7 +438,7 @@ export class ArenaScene extends Phaser.Scene {
           if (ev.p === self) break;
           const def = weaponByIndex(ev.w);
           const view = this.views.get(ev.p);
-          if (!def || !view || !view.visibleAlive) break;
+          if (!def || !view?.visibleAlive) break;
           const ox = view.root.x;
           const oy = view.root.y;
           const aim = (ev.a[0] ?? 0) / 1000;
@@ -731,7 +739,7 @@ export class ArenaScene extends Phaser.Scene {
     const sim = this.predictor.sim;
     const def = activeWeapon(sim);
     const me = this.views.get(this.room?.sessionId ?? "");
-    if (!me || !me.visibleAlive || uiStore.get().menuOpen) {
+    if (!me?.visibleAlive || uiStore.get().menuOpen) {
       this.game.canvas.style.cursor = "default";
       return;
     }

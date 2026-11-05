@@ -6,6 +6,7 @@ import { useStore } from "../lib/store.ts";
 import { session, sessionStore } from "../net/session.ts";
 
 const DURATIONS = [180, 300, 420, 600, 900];
+const EMPTY_SLOT_KEYS = ["empty-a", "empty-b", "empty-c"];
 const KILL_LIMITS = [10, 15, 20, 30, 50];
 
 export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
@@ -15,6 +16,7 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
   const isHost = s.hostId === s.selfId;
   const isPrivate = s.kind === "private";
   const others = s.players.filter((p) => p.id !== s.hostId);
+  const _humans = s.players.filter((p) => !p.id.startsWith("bot:")).length;
   const allReady = others.every((p) => p.ready);
   const startsIn = s.phaseEndTick > 0 ? (s.phaseEndTick - s.tick) / (s.tickRate || 20) : null;
   const inviteUrl = `${location.origin}${location.pathname}?join=${s.code}`;
@@ -64,12 +66,13 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                       <LevelChip level={p.level} />
                       <span>{p.name}</span>
                       {host && isPrivate && <span className="badge badge--accent">Host</span>}
+                      {p.id.startsWith("bot:") && <span className="badge">Training target</span>}
                       {!p.connected && <span className="badge badge--warn">Reconnecting</span>}
                     </span>
                     <span className={`badge ${p.ready || (host && isPrivate) ? "badge--good" : ""}`}>
                       {host && isPrivate ? "Host" : p.ready ? "Ready" : "Not ready"}
                     </span>
-                    {isHost && isPrivate && p.id !== s.selfId ? (
+                    {isHost && isPrivate && p.id !== s.selfId && !p.id.startsWith("bot:") ? (
                       <Button
                         size="sm"
                         variant="danger"
@@ -84,14 +87,16 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                   </div>
                 );
               })}
-              {Array.from({ length: Math.max(0, Math.min(3, s.maxPlayers - s.players.length)) }, (_, i) => (
-                <div key={`empty-${i}`} className="player-row player-row--empty">
-                  <span className="player-row__avatar" style={{ borderColor: "var(--line-2)" }} />
-                  <span className="field__hint">Waiting for player…</span>
-                  <span />
-                  <span />
-                </div>
-              ))}
+              {EMPTY_SLOT_KEYS.slice(0, Math.max(0, Math.min(3, s.maxPlayers - s.players.length))).map(
+                (key) => (
+                  <div key={key} className="player-row player-row--empty">
+                    <span className="player-row__avatar" style={{ borderColor: "var(--line-2)" }} />
+                    <span className="field__hint">Waiting for player…</span>
+                    <span />
+                    <span />
+                  </div>
+                ),
+              )}
             </div>
           </Panel>
         </div>

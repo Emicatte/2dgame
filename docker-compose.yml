@@ -1,0 +1,30 @@
+# Local stack: PostgreSQL + game server built from the same Dockerfile used in production.
+# The web client runs with `pnpm dev:web` (Vite) and points at http://localhost:2567.
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: scrapline
+      POSTGRES_PASSWORD: scrapline
+      POSTGRES_DB: scrapline
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scrapline"]
+      interval: 5s
+      retries: 10
+  server:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://scrapline:scrapline@db:5432/scrapline
+      TOKEN_SECRET: local-compose-secret-change-me-0123456789abcdef
+      ALLOWED_ORIGINS: http://localhost:5173,http://localhost:4173
+    ports: ["2567:2567"]
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  pgdata:

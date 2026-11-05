@@ -1,9 +1,9 @@
-@import "@fontsource/chakra-petch/400.css";
-@import "@fontsource/chakra-petch/500.css";
-@import "@fontsource/chakra-petch/600.css";
-@import "@fontsource/chakra-petch/700.css";
-@import "@fontsource/jetbrains-mono/400.css";
-@import "@fontsource/jetbrains-mono/700.css";
+@import "@fontsource/chakra-petch/latin-400.css";
+@import "@fontsource/chakra-petch/latin-500.css";
+@import "@fontsource/chakra-petch/latin-600.css";
+@import "@fontsource/chakra-petch/latin-700.css";
+@import "@fontsource/jetbrains-mono/latin-400.css";
+@import "@fontsource/jetbrains-mono/latin-700.css";
 
 /*
  * SCRAPLINE design tokens. Industrial / salvage sci-fi: graphite surfaces, stencil labels,
@@ -463,7 +463,7 @@ select {
   *,
   *::before,
   *::after {
-    animation-duration: 1ms !important;
-    transition-duration: 1ms !important;
+    animation-duration: 1ms;
+    transition-duration: 1ms;
   }
 }

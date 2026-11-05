@@ -57,7 +57,14 @@ export function MainMenu({
             <LevelChip level={profile.level} />
             <span className="profile-strip__name">{profile.nickname}</span>
             <span className="spacer" />
-            <span className="progress" aria-label={`Level progress ${Math.round(progress * 100)}%`}>
+            <span
+              className="progress"
+              role="progressbar"
+              aria-label="Level progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(progress * 100)}
+            >
               <span className="progress__fill" style={{ width: `${progress * 100}%` }} />
             </span>
           </button>

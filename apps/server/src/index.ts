@@ -1,4 +1,3 @@
-import { applySimulatedLatency } from "@colyseus/core";
 import { createGameServer } from "./app.ts";
 import { loadConfig } from "./config.ts";
 import { logger } from "./logger.ts";
@@ -7,11 +6,6 @@ import { createRepository } from "./persistence/index.ts";
 const cfg = loadConfig();
 const repo = await createRepository(cfg, logger);
 const server = createGameServer({ cfg, repo, log: logger });
-
-if (cfg.SIMULATED_LATENCY_MS > 0) {
-  applySimulatedLatency(server.transport, cfg.SIMULATED_LATENCY_MS);
-  logger.warn({ ms: cfg.SIMULATED_LATENCY_MS }, "simulated latency enabled");
-}
 
 await server.listen(cfg.PORT, cfg.HOST);
 logger.info({ port: cfg.PORT, env: cfg.NODE_ENV, db: repo.kind }, "game server listening");

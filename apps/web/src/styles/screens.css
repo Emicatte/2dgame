@@ -235,6 +235,9 @@
 .seg {
   display: inline-flex;
   border: 1px solid var(--line-2);
+  margin: 0;
+  padding: 0;
+  min-width: 0;
 }
 
 .seg button {

@@ -194,7 +194,7 @@ export function raycastSolids(
       continue;
     }
     if (tmax < 0 || tmin > tmax) continue;
-    const t = tmin < 0 ? 0 : tmin;
+    const t = Math.max(tmin, 0);
     if (t < best) best = t;
   }
   return best;

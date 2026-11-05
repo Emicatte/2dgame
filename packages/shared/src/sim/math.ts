@@ -14,7 +14,7 @@ export const TAU = Math.PI * 2;
 export const DEG = Math.PI / 180;
 
 export function clamp(v: number, min: number, max: number): number {
-  return v < min ? min : v > max ? max : v;
+  return v < min ? min : Math.min(v, max);
 }
 
 export function lerp(a: number, b: number, t: number): number {

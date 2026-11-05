@@ -369,7 +369,7 @@ export class GameSimulation {
     if (damageByTarget.size > 0) shooter.stats.shotsHit += 1;
     for (const [targetId, hit] of damageByTarget) {
       const target = this.players.get(targetId);
-      if (!target || !target.alive) continue;
+      if (!target?.alive) continue;
       const shielded = target.protectedUntil > this.tick;
       const dmg = shielded ? 0 : Math.max(1, Math.round(hit.dmg));
       target.hp = Math.max(0, target.hp - dmg);

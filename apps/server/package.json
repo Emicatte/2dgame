@@ -10,14 +10,14 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/persistence/migrate-cli.ts"
+    "db:migrate": "tsx src/persistence/migrate-cli.ts",
+    "db:migrate:prod": "node dist/persistence/migrate-cli.js"
   },
   "dependencies": {
     "@colyseus/core": "^0.18.26",
     "@colyseus/schema": "^5.0.45",
     "@colyseus/ws-transport": "^0.18.4",
     "@scrapline/shared": "workspace:*",
-    "colyseus": "^0.18.10",
     "drizzle-orm": "^0.45.4",
     "express": "^5.3.0",
     "pg": "^8.23.1",
@@ -26,7 +26,6 @@
   },
   "devDependencies": {
     "@colyseus/sdk": "^0.18.9",
-    "@colyseus/testing": "^0.18.6",
     "@types/express": "^5.0.6",
     "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",

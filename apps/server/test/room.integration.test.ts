@@ -7,8 +7,8 @@ import {
   MatchState,
   type NetEvent,
   quantizeInput,
-  ROOM_NAME,
   type ResultsMessage,
+  ROOM_NAME,
   S2C,
 } from "@scrapline/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -62,6 +62,43 @@ afterAll(async () => {
   await server.gracefullyShutdown(false);
 });
 
+describe("HTTP security", () => {
+  it("only grants CORS to configured origins (matchmaking included)", async () => {
+    const evil = await fetch(`${URL}/matchmake/joinOrCreate/arena`, {
+      method: "OPTIONS",
+      headers: { origin: "https://evil.example", "access-control-request-method": "POST" },
+    });
+    expect(evil.headers.get("access-control-allow-origin")).toBeNull();
+    const good = await fetch(`${URL}/matchmake/joinOrCreate/arena`, {
+      method: "OPTIONS",
+      headers: { origin: "http://localhost:5173", "access-control-request-method": "POST" },
+    });
+    expect(good.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
+    expect(good.headers.get("access-control-allow-credentials")).toBe("true");
+    const api = await fetch(`${URL}/api/rooms`, { headers: { origin: "https://evil.example" } });
+    expect(api.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("rejects tampered identity tokens", async () => {
+    const g = await guest("Tamper");
+    const [body, sig] = g.token.split(".");
+    const forged = `${Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(body!, "base64url").toString()), sub: "00000000-0000-4000-8000-000000000000" })).toString("base64url")}.${sig}`;
+    const res = await fetch(`${URL}/api/me`, { headers: { authorization: `Bearer ${forged}` } });
+    expect(res.status).toBe(401);
+    const ok = await fetch(`${URL}/api/me`, { headers: { authorization: `Bearer ${g.token}` } });
+    expect(ok.status).toBe(200);
+  });
+
+  it("validates nicknames", async () => {
+    const res = await fetch(`${URL}/api/guest`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ nickname: "<img src=x>" }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("ArenaRoom over real sockets", () => {
   let alpha: GuestSessionResponse;
   let bravo: GuestSessionResponse;
@@ -79,10 +116,20 @@ describe("ArenaRoom over real sockets", () => {
     bravo = await guest("Bravo");
     a = await sdkA.create(
       ROOM_NAME,
-      { token: alpha.token, kind: "private", primary: "sniper", debugSpawns: [{ x: 1000, y: 1180 }, { x: 1300, y: 1180 }] },
+      {
+        token: alpha.token,
+        kind: "private",
+        primary: "sniper",
+        debugSpawns: [
+          { x: 1000, y: 1180 },
+          { x: 1300, y: 1180 },
+        ],
+      },
       MatchState,
     );
     await until(() => a.state.code?.length === 5, 3000, "room code");
+    // Alone in a private room: three training targets are added for solo practice.
+    await until(() => a.state.players.size === 4, 3000, "practice targets");
     const lookup = await fetch(`${URL}/api/rooms/code/${a.state.code}`);
     expect(lookup.status).toBe(200);
     const { roomId } = (await lookup.json()) as { roomId: string };
@@ -120,7 +167,9 @@ describe("ArenaRoom over real sockets", () => {
     let seq = 0;
     for (let i = 0; i < 20; i++) {
       const frames = Array.from({ length: 3 }, () =>
-        encodeInput(quantizeInput({ seq: ++seq, mx: 1, my: 0, aim: 0, buttons: 0, slot: -1, viewTick: b.state.tick })),
+        encodeInput(
+          quantizeInput({ seq: ++seq, mx: 1, my: 0, aim: 0, buttons: 0, slot: -1, viewTick: b.state.tick }),
+        ),
       );
       b.send(C2S.INPUT, { i: frames });
       await wait(50);
@@ -132,7 +181,9 @@ describe("ArenaRoom over real sockets", () => {
     // B walks back along the duel lane
     for (let i = 0; i < 20; i++) {
       const frames = Array.from({ length: 3 }, () =>
-        encodeInput(quantizeInput({ seq: ++seq, mx: -1, my: 0, aim: 0, buttons: 0, slot: -1, viewTick: b.state.tick })),
+        encodeInput(
+          quantizeInput({ seq: ++seq, mx: -1, my: 0, aim: 0, buttons: 0, slot: -1, viewTick: b.state.tick }),
+        ),
       );
       b.send(C2S.INPUT, { i: frames });
       await wait(50);
@@ -173,14 +224,26 @@ describe("ArenaRoom over real sockets", () => {
       const angle = Math.atan2(target.y - shooter.y, target.x - shooter.x);
       // press, release (semi-auto sniper), then idle until the bolt cycles
       const frames = [BTN.FIRE, 0, 0].map((buttons) =>
-        encodeInput(quantizeInput({ seq: ++seq, mx: 0, my: 0, aim: angle, buttons, slot: -1, viewTick: a.state.tick })),
+        encodeInput(
+          quantizeInput({ seq: ++seq, mx: 0, my: 0, aim: angle, buttons, slot: -1, viewTick: a.state.tick }),
+        ),
       );
       a.send(C2S.INPUT, { i: frames });
       await wait(50);
       for (let k = 0; k < 26; k++) {
         a.send(C2S.INPUT, {
           i: [0, 0, 0].map(() =>
-            encodeInput(quantizeInput({ seq: ++seq, mx: 0, my: 0, aim: angle, buttons: 0, slot: -1, viewTick: a.state.tick })),
+            encodeInput(
+              quantizeInput({
+                seq: ++seq,
+                mx: 0,
+                my: 0,
+                aim: angle,
+                buttons: 0,
+                slot: -1,
+                viewTick: a.state.tick,
+              }),
+            ),
           ),
         });
         await wait(50);

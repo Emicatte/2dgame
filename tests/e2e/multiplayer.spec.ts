@@ -8,7 +8,15 @@ import { type Browser, chromium, expect, type Page, test } from "@playwright/tes
 interface Hooks {
   selfId(): string | null;
   phase(): string | null;
-  players(): { id: string; x: number; y: number; alive: boolean; hp: number; kills: number; deaths: number }[];
+  players(): {
+    id: string;
+    x: number;
+    y: number;
+    alive: boolean;
+    hp: number;
+    kills: number;
+    deaths: number;
+  }[];
   rendered(id: string): { x: number; y: number; visible: boolean } | null;
   toScreen(x: number, y: number): { x: number; y: number };
   createDebugRoom(spawns: { x: number; y: number }[]): Promise<void>;
@@ -38,7 +46,7 @@ async function onboard(page: Page, name: string) {
 const hooks = <T>(page: Page, fn: (h: Hooks) => T | Promise<T>) =>
   page.evaluate((src) => {
     const h = (window as unknown as { __scrapline: unknown }).__scrapline;
-    // biome-ignore lint/security/noGlobalEval: test-only bridge to run a serialized callback in the page
+    // Test-only bridge: runs a serialized callback in the page with the game hooks as argument.
     return new Function("h", `return (${src})(h);`)(h);
   }, fn.toString()) as Promise<T>;
 
@@ -54,8 +62,7 @@ test("two independent browsers play a real deathmatch exchange", async ({ baseUR
 
     // A hosts a private room; B joins through the code shown in A's lobby.
     await a.evaluate(
-      (spawns) =>
-        (window as unknown as { __scrapline: Hooks }).__scrapline.createDebugRoom(spawns),
+      (spawns) => (window as unknown as { __scrapline: Hooks }).__scrapline.createDebugRoom(spawns),
       DUEL_SPAWNS,
     );
     const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
@@ -75,9 +82,13 @@ test("two independent browsers play a real deathmatch exchange", async ({ baseUR
 
     await expect(a.getByTestId("hud")).toBeVisible();
     await expect(b.getByTestId("hud")).toBeVisible();
-    await a.waitForFunction(() => (window as unknown as { __scrapline: Hooks }).__scrapline.phase() === "playing", null, {
-      timeout: 15_000,
-    });
+    await a.waitForFunction(
+      () => (window as unknown as { __scrapline: Hooks }).__scrapline.phase() === "playing",
+      null,
+      {
+        timeout: 15_000,
+      },
+    );
 
     const ids = await hooks(a, (h) => ({ self: h.selfId(), all: h.players().map((p) => p.id) }));
     expect(ids.all).toHaveLength(2);
@@ -86,7 +97,9 @@ test("two independent browsers play a real deathmatch exchange", async ({ baseUR
     // Movement made in browser B is seen by browser A (authoritative sync + interpolation).
     const before = await hooks(a, (h) => h.players());
     const bBefore = before.find((p) => p.id !== h_self(before, ids.self))!;
-    const fps = await b.evaluate(() => (window as unknown as { __game?: { loop: { actualFps: number } } }).__game?.loop.actualFps ?? 0);
+    const fps = await b.evaluate(
+      () => (window as unknown as { __game?: { loop: { actualFps: number } } }).__game?.loop.actualFps ?? 0,
+    );
     console.log(`browser B fps: ${fps.toFixed(1)}`);
     await b.keyboard.down("KeyS");
     await b.waitForTimeout(700);
@@ -138,7 +151,9 @@ test("two independent browsers play a real deathmatch exchange", async ({ baseUR
 
     // B respawns after the respawn delay.
     await expect
-      .poll(async () => (await hooks(b, (h) => h.players())).find((p) => p.id === bId)?.alive, { timeout: 8000 })
+      .poll(async () => (await hooks(b, (h) => h.players())).find((p) => p.id === bId)?.alive, {
+        timeout: 8000,
+      })
       .toBe(true);
   } finally {
     await browserA.close();

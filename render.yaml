@@ -1,0 +1,43 @@
+# Render Blueprint for the game server + API and its PostgreSQL database.
+# Applying a Blueprint creates billable resources: review plans in the Render dashboard first.
+# Plan identifiers follow https://render.com/docs/blueprint-spec (verified November 2026).
+services:
+  - type: web
+    name: scrapline-server
+    runtime: docker
+    dockerfilePath: ./docker/server.Dockerfile
+    dockerContext: .
+    # Frankfurt is Render's EU region (lowest latency for Italy / central Europe).
+    region: frankfurt
+    # One instance by design (see docs/ARCHITECTURE.md "Scaling"). Start small and watch CPU:
+    # a tick that misses its 50 ms budget is felt by players before anything else.
+    plan: 0.5c-512mb
+    numInstances: 1
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: TOKEN_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: scrapline-db
+          property: connectionString
+      - key: DATABASE_SSL
+        value: "false"
+      # Comma separated, e.g. https://game.example.com,https://scrapline.vercel.app
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+databases:
+  - name: scrapline-db
+    region: frankfurt
+    plan: 0.1c-256mb
+    postgresMajorVersion: "17"
+    databaseName: scrapline
+    user: scrapline
+    # Only services in the same Render workspace/private network can connect.
+    ipAllowList: []

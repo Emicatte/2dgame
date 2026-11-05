@@ -186,6 +186,18 @@ export function registerRoutes(app: express.Application, services: Services): vo
     res.json(await repo.leaderboard(sort, 50));
   });
 
+  if (cfg.ENABLE_DEBUG_ROUTES) {
+    app.get("/api/debug/rooms", async (_req, res) => {
+      const rooms = await matchMaker.query({ name: ROOM_NAME });
+      res.json(
+        rooms.map((r) => {
+          const local = matchMaker.getLocalRoomById(r.roomId) as unknown as { debugSnapshot?: () => unknown };
+          return local?.debugSnapshot?.() ?? { roomId: r.roomId, remote: true };
+        }),
+      );
+    });
+  }
+
   // Errors thrown by async handlers end up here instead of crashing the process.
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     log.error({ err }, "http error");

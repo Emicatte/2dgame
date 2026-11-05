@@ -19,8 +19,6 @@ const envSchema = z.object({
   /** HMAC secret for guest identity tokens. Must be long and random in production. */
   TOKEN_SECRET: z.string().optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
-  /** Adds artificial latency (ms) to every client connection: for local netcode testing only. */
-  SIMULATED_LATENCY_MS: z.coerce.number().int().min(0).max(1000).default(0),
   /** Exposes /api/debug/* endpoints and verbose metrics. Never enable in production. */
   ENABLE_DEBUG_ROUTES: z
     .enum(["true", "false"])

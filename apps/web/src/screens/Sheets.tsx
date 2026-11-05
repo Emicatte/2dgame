@@ -358,13 +358,13 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
     <div className="screen screen--dim">
       <div className="sheet">
         <SheetHeader title="Leaderboard" onBack={onBack}>
-          <div className="seg" role="group" aria-label="Sort by">
+          <fieldset className="seg" aria-label="Sort by">
             {(["xp", "kills", "wins"] as const).map((s) => (
               <button key={s} type="button" aria-pressed={sort === s} onClick={() => setSort(s)}>
                 {s === "xp" ? "Level" : s}
               </button>
             ))}
-          </div>
+          </fieldset>
         </SheetHeader>
         <div className="sheet__body">
           <Panel title="Top 50">
@@ -473,7 +473,7 @@ export function SettingsSheet({ onBack }: { onBack: () => void }) {
             <Panel title="Graphics">
               <div className="setting-row">
                 <span>Quality</span>
-                <div className="seg" role="group" aria-label="Graphics quality">
+                <fieldset className="seg" aria-label="Graphics quality">
                   {(["low", "high"] as const).map((q) => (
                     <button
                       key={q}
@@ -484,7 +484,7 @@ export function SettingsSheet({ onBack }: { onBack: () => void }) {
                       {q}
                     </button>
                   ))}
-                </div>
+                </fieldset>
               </div>
               {slider("screenShake", "Screen shake", 1.5)}
               <div className="setting-row">
