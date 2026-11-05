@@ -320,6 +320,7 @@ function leaveReason(code: number): string {
   if (code === 4101) return "You were removed from the room by the host.";
   if (code === 4102) return "Disconnected for inactivity.";
   if (code === 4002) return "Disconnected: the server rejected a message from this client.";
+  if (code === 4001) return "The server restarted for an update. Join a new match.";
   if (code === 4003) return "Connection lost and could not be restored.";
   return `Disconnected from the server (code ${code}).`;
 }

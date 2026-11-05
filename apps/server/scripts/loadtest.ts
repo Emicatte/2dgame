@@ -79,8 +79,9 @@ async function main() {
             seq: ++b.seq,
             mx: Math.round(Math.sin(t * 1.3 + b.seq * 0.001)),
             my: Math.round(Math.cos(t * 0.9 + bots.indexOf(b))),
-            aim: (t * 2 + bots.indexOf(b)) % (Math.PI * 2) - Math.PI,
-            buttons: (Math.sin(t * 3 + bots.indexOf(b)) > 0 ? BTN.FIRE : 0) | (b.seq % 600 === 0 ? BTN.RELOAD : 0),
+            aim: ((t * 2 + bots.indexOf(b)) % (Math.PI * 2)) - Math.PI,
+            buttons:
+              (Math.sin(t * 3 + bots.indexOf(b)) > 0 ? BTN.FIRE : 0) | (b.seq % 600 === 0 ? BTN.RELOAD : 0),
             slot: -1,
             viewTick: Math.max(0, b.room.state.tick - 2),
           }),

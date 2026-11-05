@@ -15,11 +15,16 @@ services:
     numInstances: 1
     healthCheckPath: /health
     autoDeployTrigger: commit
+    # On deploys the old instance gets SIGTERM ~60 s after traffic moves to the new one, then this
+    # delay before SIGKILL. The server drains (lets running matches finish) for SHUTDOWN_DRAIN_SEC.
+    maxShutdownDelaySeconds: 300
     envVars:
       - key: NODE_ENV
         value: production
       - key: LOG_LEVEL
         value: info
+      - key: SHUTDOWN_DRAIN_SEC
+        value: "270"
       - key: TOKEN_SECRET
         generateValue: true
       - key: DATABASE_URL

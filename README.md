@@ -1,0 +1,109 @@
+# SCRAPLINE (provisional name)
+
+Top-down 2D multiplayer arena shooter for desktop browsers. Short, readable deathmatches for
+2–8 players on three original maps, five weapon classes, server-authoritative netcode with client
+prediction, persistent XP/levels/stats and private rooms you can share with a link.
+
+> The name is a working title and has not been checked for trademarks.
+
+## Status
+
+| Area | State |
+|---|---|
+| Gameplay (movement, dash, aim, 5 weapons, pickups, health, respawn) | Done, unit-tested |
+| Authoritative multiplayer (prediction, reconciliation, interpolation, lag compensation) | Done, tested over real sockets and in 2-browser E2E, also with 120 ms RTT + jitter |
+| Deathmatch flow (countdown, timer, kill limit, kill feed, scoreboard, results, rematch) | Done |
+| Maps: Industrial Arena, Neon District, Desert Outpost | Done, validated (spawns, reachability, symmetry) |
+| Lobby: quick match, room browser, private rooms with code/link, ready, host controls, kick | Done |
+| Guest identity (signed tokens), XP, levels 1–20, cosmetic unlocks, career stats, leaderboard | Done, persisted in PostgreSQL (tested against a real database) |
+| Solo practice with training targets (never recorded) | Done |
+| Deployment config: Dockerfile, Render Blueprint, Vercel config, docs | Done; **not deployed** (no credentials, and paid resources need your approval) |
+
+Details and the test record: [docs/TESTING.md](docs/TESTING.md). Open items: [docs/ROADMAP.md](docs/ROADMAP.md).
+
+## Quick start (local)
+
+Requirements: Node.js 22+, pnpm 10 (`corepack enable`). PostgreSQL is optional locally.
+
+```bash
+pnpm install
+pnpm dev            # game server on :2567 + web client on :5173
+```
+
+Open http://localhost:5173 in two browser windows (or two machines on your LAN: the client
+connects to `<same host>:2567` unless `VITE_SERVER_URL` is set), pick a callsign, create a private
+room in one window and join with the code in the other.
+
+Without `DATABASE_URL` the server keeps profiles in memory (lost on restart). With PostgreSQL:
+
+```bash
+export DATABASE_URL=postgres://scrapline:scrapline@localhost:5432/scrapline
+pnpm dev:server     # migrations run automatically at boot
+```
+
+`docker compose up` starts PostgreSQL and the production server image together.
+
+## Controls
+
+| Input | Action |
+|---|---|
+| W A S D | Move |
+| Mouse | Aim |
+| Left click | Fire (hold for automatic weapons) |
+| R | Reload |
+| Shift | Dash |
+| 1 / 2 / 3 | Primary / sidearm / picked-up weapon |
+| E | Pick up weapon |
+| Tab (hold) | Scoreboard |
+| Esc | Menu |
+
+All keys can be rebound in Settings (bindings use physical key positions, so AZERTY works).
+
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `pnpm dev` | Server (tsx watch) + client (Vite) |
+| `pnpm build` | Production builds: `apps/web/dist`, `apps/server/dist` |
+| `pnpm typecheck` | TypeScript (strict) in every package |
+| `pnpm lint` | Biome lint + format check |
+| `pnpm test` | Unit + integration tests (Vitest); set `TEST_DATABASE_URL` to include PostgreSQL |
+| `pnpm test:e2e` | Two independent Chrome instances play against a real server (Playwright) |
+| `E2E_LATENCY_MS=120 E2E_JITTER_MS=30 pnpm test:e2e` | Same, through the network-conditions proxy |
+| `pnpm --filter @scrapline/server loadtest -- --bots 8` | Headless bot load test (needs `ENABLE_DEBUG_ROUTES=true`) |
+| `pnpm db:generate` / `pnpm db:migrate` | Drizzle migrations |
+
+## Repository layout
+
+```text
+apps/
+  web/        React 19 + Vite 8 shell (menus, lobby, HUD) and the Phaser 4 game (src/game)
+  server/     Colyseus 0.18 game server, HTTP API, persistence (Drizzle + PostgreSQL)
+packages/
+  shared/     Config (weapons, maps, rules, progression), wire protocol, synchronized state,
+              deterministic simulation used by BOTH client prediction and the server
+tests/
+  e2e/        Playwright two-browser test
+  tools/      netem-proxy.mjs (latency/jitter for WebSockets)
+docker/       server.Dockerfile
+docs/         ARCHITECTURE, GAME_DESIGN, DEPLOYMENT, ROADMAP, TESTING
+render.yaml   Render Blueprint (server + PostgreSQL)
+```
+
+Why the layout differs slightly from the brief: persistence lives in `apps/server/src/persistence`
+instead of a separate `packages/database`, because the server is its only consumer; the
+synchronized state schema lives in `packages/shared` so the client decodes typed state.
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md) — stack, netcode, security, scaling
+- [Game design](docs/GAME_DESIGN.md) — weapons, maps, progression, art direction
+- [Deployment](docs/DEPLOYMENT.md) — Vercel, Render, Scaleway, DNS
+- [Testing](docs/TESTING.md) — what is tested, results, what was not run
+- [Roadmap](docs/ROADMAP.md) — phase checklist and next steps
+- [Changelog](CHANGELOG.md)
+
+## Assets and licenses
+
+All sprites, maps and sounds are generated in code at runtime (no third-party art or audio).
+Fonts: Chakra Petch and JetBrains Mono via @fontsource, both SIL Open Font License 1.1.

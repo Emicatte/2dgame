@@ -293,7 +293,9 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       phase: this.state.phase,
       tick: this.sim.tick,
       tickCostMs: {
-        avg: this.tickStats.count ? Math.round((this.tickStats.total / this.tickStats.count) * 1000) / 1000 : 0,
+        avg: this.tickStats.count
+          ? Math.round((this.tickStats.total / this.tickStats.count) * 1000) / 1000
+          : 0,
         max: Math.round(this.tickStats.max * 1000) / 1000,
         maxIntervalMs: Math.round(this.tickStats.maxInterval * 10) / 10,
       },

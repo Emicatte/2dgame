@@ -146,19 +146,21 @@ function drawDecor(ctx: CanvasRenderingContext2D, d: DecorDef, t: ThemeDef, rand
       break;
     }
     case "stain": {
-      for (let i = 0; i < 5; i++) {
-        ctx.fillStyle = hex(0x050505, 0.12 + rand() * 0.1);
-        ctx.beginPath();
-        ctx.ellipse(
-          d.x + d.w / 2 + (rand() - 0.5) * d.w * 0.4,
-          d.y + d.h / 2 + (rand() - 0.5) * d.h * 0.4,
-          (d.w / 2) * (0.5 + rand() * 0.5),
-          (d.h / 2) * (0.5 + rand() * 0.5),
-          rand() * Math.PI,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
+      // Soft, irregular oil/scorch mark: overlapping radial blobs with feathered edges.
+      for (let i = 0; i < 4; i++) {
+        const cx = d.x + d.w / 2 + (rand() - 0.5) * d.w * 0.35;
+        const cy = d.y + d.h / 2 + (rand() - 0.5) * d.h * 0.35;
+        const r = (Math.min(d.w, d.h) / 2) * (0.6 + rand() * 0.4);
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        g.addColorStop(0, hex(0x0a0806, 0.2));
+        g.addColorStop(1, hex(0x0a0806, 0));
+        ctx.fillStyle = g;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(d.w / Math.max(d.w, d.h) + 0.3, d.h / Math.max(d.w, d.h) + 0.3);
+        ctx.translate(-cx, -cy);
+        ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+        ctx.restore();
       }
       break;
     }

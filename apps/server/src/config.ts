@@ -19,6 +19,11 @@ const envSchema = z.object({
   /** HMAC secret for guest identity tokens. Must be long and random in production. */
   TOKEN_SECRET: z.string().optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  /**
+   * On SIGTERM keep running matches alive this long (until rooms are empty) before shutting down.
+   * Must be shorter than the platform's kill timeout (Render: maxShutdownDelaySeconds).
+   */
+  SHUTDOWN_DRAIN_SEC: z.coerce.number().int().min(0).max(600).default(0),
   /** Exposes /api/debug/* endpoints and verbose metrics. Never enable in production. */
   ENABLE_DEBUG_ROUTES: z
     .enum(["true", "false"])
