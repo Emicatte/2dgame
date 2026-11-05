@@ -16,6 +16,24 @@ function resolveServerUrl(): string {
 
 export const SERVER_URL = resolveServerUrl();
 
+/**
+ * "server": dedicated game server (Colyseus + PostgreSQL), "p2p": host mode, where the player who
+ * creates an arena hosts it in their browser and others connect to it directly (WebRTC).
+ * VITE_NET_MODE decides; otherwise a build that names a server uses it, a production build without
+ * one (e.g. a static deployment on Vercel) uses host mode, and development uses the local server.
+ */
+export type NetMode = "server" | "p2p";
+
+function resolveNetMode(): NetMode {
+  const env = import.meta.env.VITE_NET_MODE as string | undefined;
+  if (env === "p2p" || env === "server") return env;
+  if (import.meta.env.VITE_SERVER_URL) return "server";
+  return import.meta.env.PROD ? "p2p" : "server";
+}
+
+export const NET_MODE: NetMode = resolveNetMode();
+export const HOST_MODE = NET_MODE === "p2p";
+
 const TOKEN_KEY = "scrapline.identity.v1";
 
 export const identity = {

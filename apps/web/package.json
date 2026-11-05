@@ -1,6 +1,6 @@
 {
   "name": "@scrapline/web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,21 +8,26 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:api": "node scripts/build-api.mjs"
   },
   "dependencies": {
+    "@colyseus/schema": "^5.0.45",
     "@colyseus/sdk": "^0.18.9",
     "@fontsource/chakra-petch": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@scrapline/shared": "workspace:*",
     "phaser": "^4.2.1",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@types/node": "^22.20.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.2.1",
+    "esbuild": "^0.25.12",
     "typescript": "^7.0.2",
     "vite": "^8.3.6",
     "vitest": "^5.1.0"

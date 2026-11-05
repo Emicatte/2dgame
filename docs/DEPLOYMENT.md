@@ -1,7 +1,15 @@
 # Deployment
 
-Nothing here has been deployed yet: it needs your accounts, and some steps create paid resources.
-Every step below is something you run or approve.
+Two ways to run the game:
+
+- **Host mode on Vercel only** (current deployment): the client plus a small signaling function;
+  each arena runs in its creator's browser. Setup: Vercel project with Root Directory `apps/web`,
+  no `VITE_SERVER_URL`, and a free Upstash Redis store connected from Vercel → Storage. Details,
+  limits and TURN for restrictive networks: [HOST_MODE.md](HOST_MODE.md).
+- **Dedicated server** (below): authoritative server on Render/Scaleway with PostgreSQL; needed for
+  quick match, the room browser, the global leaderboard and server-verified XP. Not deployed yet:
+  it needs your accounts, and some steps create paid resources. Every step below is something you
+  run or approve.
 
 ```text
 game.example.com  ── Vercel ──  static client (apps/web/dist)
@@ -84,7 +92,8 @@ a room must live in exactly one container, so set min = max = 1 instance.
    `apps/web/vercel.json` sets install/build commands for the pnpm monorepo, output `dist`,
    SPA rewrites (`/?join=CODE` invite links), immutable caching for hashed assets, and security
    headers (CSP allows `connect-src https: wss:` so the API host can live elsewhere).
-2. Environment variable (Production and Preview): `VITE_SERVER_URL=https://api.example.com`.
+2. Environment variable (Production and Preview): `VITE_SERVER_URL=https://api.example.com`
+   (dedicated server). Without it, a production build runs in host mode.
 3. Deploy. Add the resulting `*.vercel.app` URL (and your domain) to the server's `ALLOWED_ORIGINS`.
 
 ## 4. Domains and DNS
@@ -162,7 +171,9 @@ starting points. Check before applying:
 
 - Render pricing for web services (`0.5c-512mb`) and PostgreSQL (`0.1c-256mb`), plus bandwidth.
   A Render workspace subscription does not by itself include unlimited compute.
-- Vercel: the client is a static site (no serverless functions), so usage is mostly bandwidth.
+- Vercel: the client is a static site plus one small function (`/api/p2p`, called only while
+  players connect in host mode); usage is mostly bandwidth. Upstash Redis free plan: 500,000
+  commands per month (about 4,000 per hour of hosting).
 - Scaleway: Instance type, Managed Database tier, egress.
 
 Bandwidth estimate per player: ~3.6 KB/s down and ~1.5 KB/s up while playing (≈ 13 MB down per

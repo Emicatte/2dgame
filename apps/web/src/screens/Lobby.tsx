@@ -3,6 +3,7 @@ import { useState } from "react";
 import { mapThumb } from "../components/mapThumbs.ts";
 import { Button, formatClock, hexColor, LevelChip, Panel } from "../components/ui.tsx";
 import { useStore } from "../lib/store.ts";
+import { HOST_MODE } from "../net/api.ts";
 import { session, sessionStore } from "../net/session.ts";
 
 const DURATIONS = [180, 300, 420, 600, 900];
@@ -48,6 +49,11 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                 {copied ? "Link copied" : "Copy invite link"}
               </Button>
             </div>
+            {HOST_MODE && isHost && (
+              <p className="field__hint" style={{ marginTop: 8 }} data-testid="host-hint">
+                This arena runs on your computer: keep this tab open and in front until everyone is done.
+              </p>
+            )}
           </Panel>
 
           <Panel title={`Players ${s.players.length}/${s.maxPlayers}`}>

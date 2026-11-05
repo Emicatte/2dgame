@@ -17,7 +17,8 @@ prediction, persistent XP/levels/stats and private rooms you can share with a li
 | Lobby: quick match, room browser, private rooms with code/link, ready, host controls, kick | Done |
 | Guest identity (signed tokens), XP, levels 1–20, cosmetic unlocks, career stats, leaderboard | Done, persisted in PostgreSQL (tested against a real database) |
 | Solo practice with training targets (never recorded) | Done |
-| Deployment config: Dockerfile, Render Blueprint, Vercel config, docs | Done; image built and run in the audit; **not deployed** (no credentials, and paid resources need your approval) |
+| Host mode: the arena creator's browser hosts the match, friends join over WebRTC; deploys on Vercel alone | Done (v0.2.0), unit + two-browser WebRTC E2E; real school networks not tested: see [docs/HOST_MODE.md](docs/HOST_MODE.md) |
+| Deployment config: Dockerfile, Render Blueprint, Vercel config, docs | Done; client deployed on Vercel by the owner; dedicated server image built and run in the audit, **not deployed** |
 | Performance | CPU cost per frame measured (small); **60 FPS on a real GPU not yet verified**: run `/bench.html` on target hardware |
 
 Details and the test record: [docs/TESTING.md](docs/TESTING.md). Open items: [docs/ROADMAP.md](docs/ROADMAP.md).

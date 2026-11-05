@@ -1,8 +1,8 @@
 {
   "name": "scrapline",
   "private": true,
-  "version": "0.1.0",
-  "description": "SCRAPLINE (provisional name) — top-down 2D multiplayer arena shooter for the browser",
+  "version": "0.2.0",
+  "description": "SCRAPLINE (provisional name) \u2014 top-down 2D multiplayer arena shooter for the browser",
   "type": "module",
   "packageManager": "pnpm@10.28.0",
   "engines": {
@@ -21,7 +21,8 @@
     "test:e2e": "playwright test -c tests/e2e/playwright.config.ts",
     "db:generate": "pnpm --filter @scrapline/server db:generate",
     "db:migrate": "pnpm --filter @scrapline/server db:migrate",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "test:e2e:p2p": "playwright test -c tests/e2e-p2p/playwright.config.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.5",

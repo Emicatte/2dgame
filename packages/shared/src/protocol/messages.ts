@@ -106,6 +106,19 @@ export interface PersonalResult {
   persisted: boolean;
   /** Solo practice against training targets: nothing is recorded. */
   practice?: boolean;
+  /**
+   * Host mode (no shared database): the match figures the receiving player's browser records in
+   * its local profile. Absent from dedicated-server results.
+   */
+  record?: {
+    kills: number;
+    deaths: number;
+    won: boolean;
+    completed: boolean;
+    shotsFired: number;
+    shotsHit: number;
+    playtimeSec: number;
+  };
 }
 
 export interface ResultsMessage {

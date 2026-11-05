@@ -1,7 +1,11 @@
 import { Client, type Room } from "@colyseus/sdk";
 import {
   C2S,
+  DEFAULT_PRIMARY,
+  DEFAULT_SKIN,
+  isWeaponId,
   type JoinOptions,
+  levelFromXp,
   type MapId,
   type MatchPhase,
   type MatchSettings,
@@ -15,7 +19,11 @@ import {
   type WeaponId,
 } from "@scrapline/shared";
 import { createStore, Emitter } from "../lib/store.ts";
-import { api, identity, SERVER_URL } from "./api.ts";
+import { hostArena, joinArena, type LocalPlayer } from "../p2p/hostMode.ts";
+import { JoinError } from "../p2p/PeerRoom.ts";
+import { CLOSE, closeReason } from "../p2p/wire.ts";
+import { localProfile } from "../state/localProfile.ts";
+import { api, HOST_MODE, identity, SERVER_URL } from "./api.ts";
 
 export type ConnectionStatus = "idle" | "connecting" | "connected" | "reconnecting" | "error";
 
@@ -115,16 +123,26 @@ class GameSession {
   }
 
   async quickMatch(loadout: Loadout): Promise<void> {
+    if (HOST_MODE)
+      throw new Error("Quick match needs a game server. Create an arena or join one with a code.");
     await this.connect(() => this.client.joinOrCreate(ROOM_NAME, this.options("quick", loadout), MatchState));
   }
 
   async createPrivate(loadout: Loadout, map: MapId, extra: Record<string, unknown> = {}): Promise<void> {
+    if (HOST_MODE) {
+      await this.connect(async () => asRoom(await hostArena(localPlayer(loadout), map)), false);
+      return;
+    }
     await this.connect(() =>
       this.client.create(ROOM_NAME, { ...this.options("private", loadout, map), ...extra }, MatchState),
     );
   }
 
   async joinByCode(code: string, loadout: Loadout): Promise<void> {
+    if (HOST_MODE) {
+      await this.connect(async () => asRoom(await joinArena(code, localPlayer(loadout))));
+      return;
+    }
     await this.connect(async () => {
       const { roomId } = await api.roomByCode(code);
       return this.client.joinById(roomId, this.options("private", loadout), MatchState);
@@ -145,6 +163,13 @@ class GameSession {
     }
     if (!token) return false;
     try {
+      if (HOST_MODE) {
+        // Host mode stores "<code>:<seat token>": rejoin the same arena and take the seat back.
+        const [code, seat] = token.split(":");
+        if (!code || !seat) throw new Error("bad token");
+        await this.connect(async () => asRoom(await joinArena(code, localPlayer(currentLoadoutOf()), seat)));
+        return true;
+      }
       await this.connect(() => this.client.reconnect(token, MatchState));
       return true;
     } catch {
@@ -154,12 +179,12 @@ class GameSession {
     }
   }
 
-  private async connect(join: () => Promise<Room<unknown, MatchState>>): Promise<void> {
+  private async connect(join: () => Promise<Room<unknown, MatchState>>, resumable = true): Promise<void> {
     if (this.room) await this.leave();
     sessionStore.set({ ...initialState, status: "connecting" });
     try {
       const room = await join();
-      this.attach(room);
+      this.attach(room, resumable);
     } catch (err) {
       const message = humanizeJoinError(err);
       sessionStore.patch({ status: "error", error: message });
@@ -177,7 +202,7 @@ class GameSession {
 
   private attach(room: Room<unknown, MatchState>, resumable = true) {
     this.room = room;
-    if (resumable) this.rememberReconnect(room.reconnectionToken);
+    if (resumable) this.rememberReconnect(resumeToken(room));
     sessionStore.patch({ status: "connected", error: null, roomId: room.roomId, selfId: room.sessionId });
 
     room.onStateChange((state) => this.project(state));
@@ -185,13 +210,16 @@ class GameSession {
       gameEvents.emit("net", { events, tick: room.state.tick + 1 });
     });
     room.onMessage(S2C.NOTICE, (msg: NoticeMessage) => gameEvents.emit("notice", msg));
-    room.onMessage(S2C.RESULTS, (msg: ResultsMessage) => {
+    room.onMessage(S2C.RESULTS, (raw: ResultsMessage) => {
+      // Host mode: this browser records its own match in the local profile.
+      const msg =
+        HOST_MODE && raw.personal ? { ...raw, personal: localProfile.applyResult(raw.personal) } : raw;
       sessionStore.patch({ results: msg });
       gameEvents.emit("results", msg);
     });
     room.onDrop(() => sessionStore.patch({ status: "reconnecting" }));
     room.onReconnect(() => {
-      if (resumable) this.rememberReconnect(room.reconnectionToken);
+      if (resumable) this.rememberReconnect(resumeToken(room));
       sessionStore.patch({ status: "connected" });
     });
     room.onLeave((code) => {
@@ -203,7 +231,7 @@ class GameSession {
       sessionStore.set({
         ...initialState,
         status: consented ? "idle" : "error",
-        error: consented ? null : leaveReason(code),
+        error: consented ? null : HOST_MODE ? closeReason(code) : leaveReason(code),
       });
     });
     room.onError((code, message) => {
@@ -314,6 +342,7 @@ class GameSession {
 }
 
 function humanizeJoinError(err: unknown): string {
+  if (err instanceof JoinError) return err.code === CLOSE.UNREACHABLE ? err.message : closeReason(err.code);
   const msg = err instanceof Error ? err.message : String(err);
   if (/invalid identity|unknown player/i.test(msg))
     return "Your profile is no longer valid. Create a new one.";
@@ -331,6 +360,35 @@ function leaveReason(code: number): string {
   if (code === 4001) return "The server restarted for an update. Join a new match.";
   if (code === 4003) return "Connection lost and could not be restored.";
   return `Disconnected from the server (code ${code}).`;
+}
+
+/** The client only uses the SDK Room API subset that the in-browser rooms implement. */
+function asRoom(room: object): Room<unknown, MatchState> {
+  return room as unknown as Room<unknown, MatchState>;
+}
+
+function resumeToken(room: Room<unknown, MatchState>): string {
+  return HOST_MODE ? `${room.roomId}:${room.reconnectionToken}` : room.reconnectionToken;
+}
+
+function localPlayer(loadout: Loadout): LocalPlayer {
+  const d = localProfile.load();
+  if (!d) throw new Error("No profile: create one first");
+  return {
+    name: d.nickname,
+    level: levelFromXp(d.xp).level,
+    skin: loadout.skin,
+    primary: loadout.primary,
+    profileId: d.id,
+  };
+}
+
+function currentLoadoutOf(): Loadout {
+  const d = localProfile.load();
+  return {
+    primary: d && isWeaponId(d.primary) ? d.primary : DEFAULT_PRIMARY,
+    skin: d?.skin ?? DEFAULT_SKIN,
+  };
 }
 
 export const session = new GameSession();

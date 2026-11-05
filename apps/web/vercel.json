@@ -4,7 +4,7 @@
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
   "buildCommand": "cd ../.. && pnpm --filter @scrapline/web build",
   "outputDirectory": "dist",
-  "rewrites": [{ "source": "/((?!assets/|favicon.svg|bench.html).*)", "destination": "/index.html" }],
+  "rewrites": [{ "source": "/((?!api/|assets/|favicon.svg|bench.html).*)", "destination": "/index.html" }],
   "headers": [
     {
       "source": "/assets/(.*)",

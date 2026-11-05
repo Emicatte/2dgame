@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.0 — 2026-11-05 (host mode)
+
+### Added
+- **Host mode**: the player who creates an arena hosts it in their browser; friends join with the
+  code over WebRTC, no game server needed. The host's tab runs the dedicated server's simulation,
+  state mirroring and scoring unchanged, and synchronizes state with the same schema encoding and
+  owner-only views. Guests reconnect within 20 s and resume after a page reload. See
+  `docs/HOST_MODE.md`.
+- Signaling endpoint `/api/p2p`: source `apps/web/src/p2p/signalServer.ts`, deployed as the
+  generated plain-JavaScript Vercel Function `apps/web/api/p2p.js` (precaution: the project's
+  TypeScript 7 has no JavaScript compiler API for a TypeScript function build to use). Upstash Redis
+  free plan; in-memory store in the Vite dev/preview server. Optional TURN relays (Cloudflare or
+  static credentials).
+- Local profile (callsign, XP, levels, stats, loadout in `localStorage`) for host mode.
+- Production builds without `VITE_SERVER_URL` default to host mode (`VITE_NET_MODE` overrides).
+  The dedicated-server mode is unchanged.
+- Tests: signaling and deployed function (14), host/guest rooms over in-memory links (8), two-browser WebRTC E2E
+  (`pnpm test:e2e:p2p`, dev server and production build).
+
+### Fixed
+- `apps/server/test/pgTls.test.ts` crashed during collection when the TLS test variables were not
+  set, failing `pnpm test` (the suite is skipped in that case, as intended).
+
 ## 0.1.1 — 2026-11-05 (technical audit)
 
 Audit of networking, performance, security and deployment; findings, evidence and before/after

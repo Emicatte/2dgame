@@ -19,31 +19,7 @@ import {
 // produces (shots, hits, kills, respawns, pickups), without a network.
 import { GameSimulation } from "../../../server/src/simulation/GameSimulation.ts";
 import { syncPlayerState } from "../../../server/src/simulation/stateSync.ts";
-
-type Listener<A extends unknown[]> = (...args: A) => void;
-type Signal<A extends unknown[]> = ((fn: Listener<A>) => () => void) & {
-  remove(fn: Listener<A>): void;
-  invoke(...args: A): void;
-  clear(): void;
-};
-
-function signal<A extends unknown[]>(): Signal<A> {
-  const fns = new Set<Listener<A>>();
-  const s = ((fn: Listener<A>) => {
-    fns.add(fn);
-    return () => {
-      fns.delete(fn);
-    };
-  }) as unknown as Signal<A>;
-  s.remove = (fn) => {
-    fns.delete(fn);
-  };
-  s.invoke = (...args) => {
-    for (const fn of [...fns]) fn(...args);
-  };
-  s.clear = () => fns.clear();
-  return s;
-}
+import { signal } from "../net/signal.ts";
 
 export interface LocalRoomOptions {
   /** Total players including the local one (1, 2 or 8 in the benchmark). */

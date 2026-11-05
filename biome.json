@@ -10,6 +10,7 @@
       "**",
       "!**/dist",
       "!**/dist-bench",
+      "!apps/web/api/p2p.js",
       "!**/node_modules",
       "!**/drizzle/meta",
       "!**/test-results",

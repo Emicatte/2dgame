@@ -44,6 +44,11 @@ Browser ──HTTPS──> Vercel (static: React shell + Phaser bundle)
 One Node.js process runs Colyseus, the HTTP API and all rooms. Each room is a lobby that hosts
 repeated matches on one map.
 
+**Host mode** (no server, [HOST_MODE.md](HOST_MODE.md)): the same room logic, simulation and state
+encoding run in the arena creator's browser (`apps/web/src/p2p/HostRoom.ts`); guests connect over
+WebRTC DataChannels after a signaling exchange through `/api/p2p` (`src/p2p/signalServer.ts`, Vercel Function +
+Upstash Redis). Profiles are local to each browser.
+
 ## Netcode
 
 Shared deterministic simulation (`packages/shared/src/sim/player.ts`) runs on both sides:
@@ -178,3 +183,4 @@ room, so one vCPU has headroom for many rooms. Watch `tickCostMs.max` and `maxIn
 | `apps/server/src/api` | HTTP routes |
 | `apps/web/src/game` | Phaser scenes, procedural art, effects, audio, netcode client |
 | `apps/web/src/screens` | Menus, lobby, HUD, results |
+| `apps/web/src/p2p`, `apps/web/api/p2p.js` (generated) | Host mode: browser-hosted room, guest room, WebRTC links, signaling |

@@ -2,6 +2,7 @@ import { GAME_TITLE, MAP_IDS, MAPS, type MapId } from "@scrapline/shared";
 import { type FormEvent, useState } from "react";
 import { Button, LevelChip } from "../components/ui.tsx";
 import { useStore } from "../lib/store.ts";
+import { HOST_MODE } from "../net/api.ts";
 import { session } from "../net/session.ts";
 import { currentLoadout, profileStore } from "../state/profile.ts";
 
@@ -71,21 +72,42 @@ export function MainMenu({
         )}
 
         <nav className="menu__nav" aria-label="Main menu">
-          <Button variant="primary" size="lg" onClick={quick} disabled={busy} data-testid="quick-match">
-            {busy ? "Finding a match…" : "Quick match"}
-            <kbd>2–8 players</kbd>
-          </Button>
-          <Button onClick={() => onNavigate("browse")} disabled={busy}>
-            Play · browse rooms
-          </Button>
-          <div className="menu__row">
-            <Button onClick={() => onNavigate("create")} disabled={busy} data-testid="create-room">
-              Create private room
-            </Button>
-            <Button onClick={() => onNavigate("join")} disabled={busy} data-testid="join-room">
-              Join with code
-            </Button>
-          </div>
+          {HOST_MODE ? (
+            <>
+              {/* Host mode: the arena runs on the creator's computer, friends join with the code. */}
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => onNavigate("create")}
+                disabled={busy}
+                data-testid="create-room"
+              >
+                Create arena
+                <kbd>you host</kbd>
+              </Button>
+              <Button onClick={() => onNavigate("join")} disabled={busy} data-testid="join-room">
+                Join with code
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="primary" size="lg" onClick={quick} disabled={busy} data-testid="quick-match">
+                {busy ? "Finding a match…" : "Quick match"}
+                <kbd>2–8 players</kbd>
+              </Button>
+              <Button onClick={() => onNavigate("browse")} disabled={busy}>
+                Play · browse rooms
+              </Button>
+              <div className="menu__row">
+                <Button onClick={() => onNavigate("create")} disabled={busy} data-testid="create-room">
+                  Create private room
+                </Button>
+                <Button onClick={() => onNavigate("join")} disabled={busy} data-testid="join-room">
+                  Join with code
+                </Button>
+              </div>
+            </>
+          )}
           <div className="divider" />
           <div className="menu__row">
             <Button variant="ghost" onClick={() => onNavigate("loadout")}>
@@ -96,9 +118,11 @@ export function MainMenu({
             </Button>
           </div>
           <div className="menu__row">
-            <Button variant="ghost" onClick={() => onNavigate("leaderboard")}>
-              Leaderboard
-            </Button>
+            {!HOST_MODE && (
+              <Button variant="ghost" onClick={() => onNavigate("leaderboard")}>
+                Leaderboard
+              </Button>
+            )}
             <Button variant="ghost" onClick={() => onNavigate("settings")}>
               Settings
             </Button>
@@ -197,11 +221,13 @@ export function CreateDialog({ onClose }: { onClose: () => void }) {
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="create-title">
       <div className="panel" style={{ width: "min(560px, 100%)" }}>
         <h3 className="panel__title" id="create-title">
-          Create a private room
+          {HOST_MODE ? "Create an arena" : "Create a private room"}
         </h3>
         <div className="stack">
           <span className="field__hint">
-            You will be the host: choose the map, length and score, then share the code.
+            {HOST_MODE
+              ? "The arena runs on this computer: keep this tab open and in front while you play. Choose the map, then share the code with your friends."
+              : "You will be the host: choose the map, length and score, then share the code."}
           </span>
           <div className="grid-3" role="radiogroup" aria-label="Map">
             {MAP_IDS.map((id) => (
@@ -226,7 +252,7 @@ export function CreateDialog({ onClose }: { onClose: () => void }) {
             </Button>
             <span className="spacer" />
             <Button variant="primary" onClick={create} disabled={busy} data-testid="create-submit">
-              {busy ? "Creating…" : "Create room"}
+              {busy ? "Creating…" : HOST_MODE ? "Create arena" : "Create room"}
             </Button>
           </div>
         </div>

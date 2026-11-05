@@ -93,7 +93,8 @@ async function tryConnect(url: string, mode: DbSslMode, ca?: string) {
 }
 
 describe.skipIf(!TLS_URL || !CA || !WRONG_CA)("PostgreSQL TLS against a real server", () => {
-  const url = TLS_URL!;
+  // The describe body is still evaluated when skipped (collection): no non-null assertion here.
+  const url = TLS_URL ?? "";
   const byIp = url.replace("localhost", "127.0.0.1");
 
   it("connects with verify-full and the right CA, over TLS 1.2+", async () => {

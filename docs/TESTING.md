@@ -75,7 +75,26 @@ node tests/perf/run-bench.mjs --url http://localhost:4173/bench.html --out bench
 On real hardware open `/bench.html` in a maximised window with the tab in front (a background tab
 is throttled) and keep the JSON shown under the table.
 
-## Results (last run: 2026-11-05, audit)
+### Host mode (`docs/HOST_MODE.md`)
+
+```bash
+pnpm --filter @scrapline/web test                 # includes signaling + host/guest room tests
+pnpm test:e2e:p2p                                 # two Chrome processes, real WebRTC, dev server
+E2E_P2P_PREVIEW=1 pnpm test:e2e:p2p               # same against the production build
+```
+
+## Results (last run: 2026-11-05, v0.2.0 host mode; audit figures below unchanged)
+
+| Suite | Count | Result |
+|---|---|---|
+| `apps/web` unit (netcode 13, signaling + deployed function 14, host mode 8) | 35 | pass |
+| `packages/shared` unit | 41 | pass |
+| `apps/server` unit + integration, without PostgreSQL/TLS variables | 59 + 8 skipped | pass |
+| E2E host mode, two Chrome, real WebRTC: dev server / production build | 1 / 1 | pass (join 6–8 s incl. ICE gathering; guest: 0 corrections, 0 stale acks, no stall) |
+| E2E dedicated server (regression after the session changes), localhost | 2 | pass |
+| Lint, typecheck | — | clean |
+
+## Results (audit run: 2026-11-05)
 
 Environment: cloud VM, 2 vCPU Intel Xeon, Ubuntu 24.04, Node 22.23, Chrome with SwiftShader
 (software WebGL; no GPU), PostgreSQL 16.
@@ -133,5 +152,6 @@ acks, prediction equal to the server position.
 | Deployment to Render/Vercel, post-deploy checks | Needs your accounts and creates billable resources (not authorised). |
 | 60 FPS on a real GPU | No GPU here. The benchmark page is ready; results from real hardware are still missing (AUDIT_REPORT.md P1). |
 | Two physically different devices over the Internet | Only localhost with simulated latency, jitter, stalls and drops. |
+| Host mode on real networks (school Wi-Fi, NAT, client isolation) and TURN relays | Needs real networks and a TURN account; the E2E runs both browsers on one machine. |
 | Firefox / Safari | Only Chrome is installed here. |
 | Packet loss | WebSockets run on TCP: loss appears as stalls, which the proxy simulates. |
