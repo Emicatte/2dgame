@@ -61,6 +61,8 @@ export interface MatchPerformance {
   bestStreak: number;
   shotsFired: number;
   shotsHit: number;
+  /** Team modes: victory is the team's, placement-based rewards do not apply. */
+  team?: { won: boolean };
 }
 
 export interface XpLine {
@@ -74,7 +76,9 @@ export function computeMatchXp(p: MatchPerformance): { total: number; lines: XpL
   const rewardedKills = Math.min(p.kills, XP_RULES.maxRewardedKills);
   if (rewardedKills > 0)
     lines.push({ reason: `${rewardedKills} eliminations`, xp: rewardedKills * XP_RULES.perKill });
-  if (p.completed && p.playerCount >= 2) {
+  if (p.completed && p.team) {
+    if (p.team.won) lines.push({ reason: "Team victory", xp: XP_RULES.win });
+  } else if (p.completed && p.playerCount >= 2) {
     if (p.placement === 1) lines.push({ reason: "Victory", xp: XP_RULES.win });
     else if (p.placement <= 3 && p.playerCount >= 4)
       lines.push({ reason: "Podium finish", xp: XP_RULES.podium });

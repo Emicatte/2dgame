@@ -1,4 +1,4 @@
-import { GAME_TITLE, MAP_IDS, MAPS, type MapId } from "@scrapline/shared";
+import { GAME_TITLE, type GameMode, MAP_IDS, MAPS, type MapId } from "@scrapline/shared";
 import { type FormEvent, useState } from "react";
 import { Button, LevelChip } from "../components/ui.tsx";
 import { useStore } from "../lib/store.ts";
@@ -28,11 +28,11 @@ export function MainMenu({
   const { profile } = useStore(profileStore);
   const [error, setError] = useState<string | null>(null);
 
-  async function quick() {
+  async function quick(mode: GameMode = "deathmatch") {
     setBusy(true);
     setError(null);
     try {
-      await session.quickMatch(currentLoadout());
+      await session.quickMatch(currentLoadout(), mode);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Matchmaking failed");
     } finally {
@@ -91,9 +91,19 @@ export function MainMenu({
             </>
           ) : (
             <>
-              <Button variant="primary" size="lg" onClick={quick} disabled={busy} data-testid="quick-match">
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => void quick()}
+                disabled={busy}
+                data-testid="quick-match"
+              >
                 {busy ? "Finding a match…" : "Quick match"}
                 <kbd>2–8 players</kbd>
+              </Button>
+              <Button onClick={() => void quick("tdm")} disabled={busy} data-testid="quick-tdm">
+                Team Deathmatch
+                <kbd>2v2</kbd>
               </Button>
               <Button onClick={() => onNavigate("browse")} disabled={busy}>
                 Play · browse rooms

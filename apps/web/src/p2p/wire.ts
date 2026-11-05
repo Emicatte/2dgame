@@ -35,6 +35,8 @@ export const helloSchema = z.object({
   profileId: z.string().min(8).max(64),
   /** Seat token from a previous connection to this room (reconnect after a network drop). */
   resume: z.string().min(16).max(64).optional(),
+  /** Team modes: preferred team (invite link); honored when it has room. */
+  team: z.union([z.literal(1), z.literal(2)]).optional(),
 });
 export type Hello = z.infer<typeof helloSchema>;
 

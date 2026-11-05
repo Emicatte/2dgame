@@ -29,6 +29,8 @@ export const PlayerState = schema(
     respawnTick: t.uint32().default(0),
     ping: t.uint16().default(0),
     joinedAt: t.uint32().default(0),
+    /** 0 = no team (free for all), 1 = Alpha, 2 = Bravo. */
+    team: t.uint8().default(0),
 
     // ----- owner-only reconciliation fields -----
     ack: t.uint32().default(0).view(),
@@ -89,6 +91,14 @@ export const MatchState = schema(
     firstBloodDone: t.boolean().default(false),
     players: t.map(PlayerState),
     pickups: t.map(PickupState),
+    /** Team modes: players per team (0 in free-for-all). */
+    teamSize: t.uint8().default(0),
+    friendlyFire: t.boolean().default(false),
+    /** Team scores (eliminations of the other team). */
+    scoreA: t.uint16().default(0),
+    scoreB: t.uint16().default(0),
+    /** Team that won the last match: 0 = none or draw. */
+    winnerTeam: t.uint8().default(0),
   },
   "MatchState",
 );

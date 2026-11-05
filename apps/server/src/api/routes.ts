@@ -158,6 +158,7 @@ export function registerRoutes(app: express.Application, services: Services): vo
           roomId: r.roomId,
           code: m?.code ?? "",
           map: m?.map ?? "",
+          mode: m?.mode ?? "deathmatch",
           phase: m?.phase ?? "lobby",
           players: r.clients,
           maxPlayers: r.maxClients,

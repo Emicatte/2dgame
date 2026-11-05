@@ -23,15 +23,25 @@ export interface ComputedResult {
  */
 export function computeResults(
   standings: readonly ServerPlayer[],
-  opts: { tickRate: number; minParticipationTicks: number; completed: boolean },
+  opts: {
+    tickRate: number;
+    minParticipationTicks: number;
+    completed: boolean;
+    /** Team modes: the winning team (0 = draw). Undefined in free-for-all. */
+    winnerTeam?: number;
+  },
 ): ComputedResult[] {
   const count = standings.length;
+  const teamMode = opts.winnerTeam !== undefined;
   return standings.map((p, i) => {
     const placement = i + 1;
     const participated = p.stats.activeTicks >= opts.minParticipationTicks;
     const completed = opts.completed && participated;
-    const won = completed && placement === 1 && count >= 2;
+    const won = teamMode
+      ? completed && (opts.winnerTeam ?? 0) > 0 && p.team === opts.winnerTeam
+      : completed && placement === 1 && count >= 2;
     const xp = computeMatchXp({
+      ...(teamMode ? { team: { won } } : {}),
       completed,
       kills: p.stats.kills,
       placement,
@@ -67,6 +77,7 @@ export function resultRows(results: readonly ComputedResult[]): ResultRow[] {
   return results.map((r) => ({
     id: r.player.id,
     name: r.player.name,
+    team: r.player.team,
     kills: r.player.stats.kills,
     deaths: r.player.stats.deaths,
     placement: r.placement,

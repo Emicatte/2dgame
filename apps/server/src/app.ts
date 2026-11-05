@@ -35,7 +35,7 @@ export function createGameServer(services: Services) {
     transport,
     gracefullyShutdown: false,
     rooms: {
-      [ROOM_NAME]: defineRoom(ArenaRoom).filterBy(["kind"]).sortBy({ clients: -1 }),
+      [ROOM_NAME]: defineRoom(ArenaRoom).filterBy(["kind", "mode"]).sortBy({ clients: -1 }),
     },
     express: (app) => registerRoutes(app, services),
   });

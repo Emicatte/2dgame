@@ -15,6 +15,8 @@ export interface LocalPlayer {
   skin: string;
   primary: WeaponId;
   profileId: string;
+  /** Preferred team when joining a team match (invite link). */
+  team?: 1 | 2;
 }
 
 /** Host polls for join requests often in the lobby, less during a match (Redis command budget). */

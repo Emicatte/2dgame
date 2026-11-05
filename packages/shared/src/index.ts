@@ -1,4 +1,5 @@
 export * from "./config/game.ts";
+export * from "./config/modes.ts";
 export * from "./config/progression.ts";
 export * from "./config/weapons.ts";
 export * from "./maps/index.ts";

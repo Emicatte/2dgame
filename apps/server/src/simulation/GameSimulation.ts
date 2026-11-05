@@ -1,6 +1,7 @@
 import {
   BTN,
   type CollisionWorld,
+  canDamage,
   clamp,
   collisionWorldFor,
   createPlayerSim,
@@ -20,6 +21,7 @@ import {
   type ShotIntent,
   type SimEvent,
   stepPlayer,
+  teamSpawns,
   tracePellet,
   WEAPONS,
   type WeaponId,
@@ -45,6 +47,8 @@ export interface ServerPlayer {
   id: string;
   playerId: string;
   name: string;
+  /** 0 = no team (free for all), 1 = Alpha, 2 = Bravo. Set by the room. */
+  team: number;
   skin: string;
   level: number;
   primary: WeaponId;
@@ -120,6 +124,7 @@ export interface NewPlayer {
   id: string;
   playerId: string;
   name: string;
+  team?: number;
   skin: string;
   level: number;
   primary: WeaponId;
@@ -142,6 +147,14 @@ export type StepMode = "frozen" | "live";
 export interface SimOptions {
   tickRate: number;
   rng?: () => number;
+}
+
+/** Combat rules the room sets from the match settings. */
+export interface CombatRules {
+  /** Team mode: spawns per team, team score. */
+  teams: boolean;
+  /** Team mode: teammates can hurt each other. */
+  friendlyFire: boolean;
 }
 
 const HEALTH_PICKUP = 50;
@@ -173,6 +186,9 @@ export class GameSimulation {
   readonly players = new Map<string, ServerPlayer>();
   readonly pickups = new Map<string, PickupRuntime>();
   firstBloodDone = false;
+  rules: CombatRules = { teams: false, friendlyFire: false };
+  /** Team scores indexed by team id (index 0 unused). */
+  readonly teamScores: [number, number, number] = [0, 0, 0];
   /** Test-only fixed spawn list (enabled exclusively with ENABLE_DEBUG_ROUTES). */
   spawnOverride: { x: number; y: number }[] | null = null;
   private events: NetEvent[] = [];
@@ -212,6 +228,7 @@ export class GameSimulation {
     const spawn = this.map.spawns[0]!;
     const p: ServerPlayer = {
       ...init,
+      team: init.team ?? 0,
       sim: createPlayerSim(spawn.x, spawn.y, init.primary),
       alive: false,
       hp: 0,
@@ -287,6 +304,8 @@ export class GameSimulation {
   /** Clears match stats and spawns everybody at distinct spawn points. */
   resetForMatch(): void {
     this.firstBloodDone = false;
+    this.teamScores[1] = 0;
+    this.teamScores[2] = 0;
     this.resetPickups();
     this.history.length = 0;
     for (const p of this.players.values()) {
@@ -416,6 +435,8 @@ export class GameSimulation {
     const targets: HitTarget[] = [];
     for (const t of this.players.values()) {
       if (t.id === shooter.id || !t.alive) continue;
+      // Without friendly fire, shots pass through teammates (they never block or absorb them).
+      if (!canDamage(shooter, t, this.rules)) continue;
       const past = seen.get(t.id);
       if (past && !past.alive) continue;
       targets.push({ id: t.id, x: past?.x ?? t.sim.x, y: past?.y ?? t.sim.y, r: PLAYER.radius });
@@ -481,6 +502,10 @@ export class GameSimulation {
     killer.stats.streak += 1;
     killer.stats.bestStreak = Math.max(killer.stats.bestStreak, killer.stats.streak);
     killer.stats.lastKillTick = this.tick;
+    // Team score: only eliminations of the other team count (a friendly-fire kill scores nothing).
+    if (this.rules.teams && (killer.team === 1 || killer.team === 2) && killer.team !== victim.team) {
+      this.teamScores[killer.team] += 1;
+    }
     const fb = !this.firstBloodDone;
     if (fb) {
       this.firstBloodDone = true;
@@ -494,12 +519,20 @@ export class GameSimulation {
    * Never spawns on top of another player.
    */
   chooseSpawn(forId: string): { x: number; y: number } {
-    const enemies = [...this.players.values()].filter((p) => p.alive && p.id !== forId);
+    const self = this.players.get(forId);
+    const team = this.rules.teams ? (self?.team ?? 0) : 0;
+    const others = [...this.players.values()].filter((p) => p.alive && p.id !== forId);
+    // In team modes only the other team counts as a threat; teammates are just obstacles.
+    const enemies = team > 0 ? others.filter((p) => p.team !== team) : others;
     const minGap = PLAYER.radius * 3;
     let best: { x: number; y: number; score: number }[] = [];
-    const spawns = this.spawnOverride ?? this.map.spawns;
+    const all = this.spawnOverride ?? this.map.spawns;
+    const spawns =
+      team > 0
+        ? teamSpawns({ spawns: all, teamSpawns: this.spawnOverride ? undefined : this.map.teamSpawns }, team)
+        : all;
     for (const s of spawns) {
-      if (enemies.some((e) => distSq(e.sim.x, e.sim.y, s.x, s.y) < minGap * minGap)) continue;
+      if (others.some((e) => distSq(e.sim.x, e.sim.y, s.x, s.y) < minGap * minGap)) continue;
       let score: number;
       if (enemies.length === 0) {
         score = this.rng() * 1000;
@@ -580,5 +613,17 @@ export class GameSimulation {
     let max = 0;
     for (const p of this.players.values()) max = Math.max(max, p.stats.kills);
     return max;
+  }
+
+  /** What the score limit is compared with: best team score in team modes, top kills otherwise. */
+  leaderScore(): number {
+    return this.rules.teams ? Math.max(this.teamScores[1], this.teamScores[2]) : this.leaderKills();
+  }
+
+  /** Team modes: 1 or 2 for the team ahead, 0 for a draw (or outside team modes). */
+  winningTeam(): number {
+    if (!this.rules.teams) return 0;
+    const [, a, b] = this.teamScores;
+    return a > b ? 1 : b > a ? 2 : 0;
   }
 }

@@ -23,11 +23,13 @@ import {
   S2C,
   SERVER_TICK_MS,
   settingsSchema,
+  teamSchema,
   type WeaponId,
 } from "@scrapline/shared";
 import { z } from "zod";
 // The dedicated server's simulation, state mirroring and scoring run unchanged in the host's tab.
 import { type ComputedResult, computeResults, resultRows } from "../../../server/src/players/results.ts";
+import { MatchRules } from "../../../server/src/rules/MatchRules.ts";
 import { GameSimulation, type ServerPlayer } from "../../../server/src/simulation/GameSimulation.ts";
 import { syncPlayerState } from "../../../server/src/simulation/stateSync.ts";
 import { signal } from "../net/signal.ts";
@@ -118,6 +120,7 @@ export class HostRoom {
 
   private readonly handlers = new Map<string, Set<(m: unknown) => void>>();
   private readonly sim: GameSimulation;
+  private readonly rules: MatchRules;
   private readonly encoder: Encoder<MatchState>;
   private readonly views = new Map<string, PlayerState>();
   private readonly seats = new Map<string, Seat>();
@@ -150,6 +153,8 @@ export class HostRoom {
       tickRate: NET.serverTickRate,
       hostId: this.sessionId,
     });
+    this.rules = new MatchRules(this.sim, this.state, (id) => this.bots.has(id));
+    this.rules.setMode("deathmatch");
     this.syncPickups(true);
     this.addPlayer(this.sessionId, opts.host);
     this.syncPracticeTargets();
@@ -211,7 +216,7 @@ export class HostRoom {
         if (tick >= this.state.phaseEndTick) this.startPlaying();
         break;
       case "playing":
-        if (this.sim.leaderKills() >= this.state.killLimit) this.endMatch();
+        if (this.sim.leaderScore() >= this.state.killLimit) this.endMatch();
         else if (tick >= this.state.phaseEndTick) this.endMatch();
         else this.kickIdle(tick);
         break;
@@ -349,7 +354,7 @@ export class HostRoom {
   private join(link: PeerLink, hello: Hello) {
     const id = randomId(6);
     const skin = isSkinUnlocked(hello.skin, hello.level) ? hello.skin : "foundry";
-    const ps = this.addPlayer(id, { ...hello, skin });
+    const ps = this.addPlayer(id, { ...hello, skin }, hello.team);
     const view = new StateView();
     view.add(ps);
     const now = performance.now();
@@ -525,6 +530,19 @@ export class HostRoom {
         if (msg) this.handleLoadout(id, msg);
         return;
       }
+      case C2S.TEAM: {
+        const msg = parse(teamSchema);
+        if (!msg || (this.state.phase !== "lobby" && this.state.phase !== "results")) return;
+        if (!this.rules.switchTeam(id, msg.team) && this.rules.teamMode)
+          this.notice("That team is full", "warn", undefined, id);
+        return;
+      }
+      case C2S.BALANCE:
+        if (id === this.sessionId && this.state.phase === "lobby" && this.rules.teamMode) {
+          this.rules.balance();
+          this.notice("Teams balanced by level", "info");
+        }
+        return;
       case C2S.KICK: {
         const msg = parse(kickSchema);
         if (msg && id === this.sessionId && msg.id !== this.sessionId)
@@ -558,6 +576,13 @@ export class HostRoom {
 
   private handleSettings(id: string, s: z.infer<typeof settingsSchema>) {
     if (id !== this.sessionId || this.state.phase !== "lobby") return;
+    // Mode first: it resets length, score limit and size to the mode's defaults.
+    if (s.mode && s.mode !== this.state.mode) this.rules.setMode(s.mode);
+    if (s.teamSize && this.rules.teamMode && s.teamSize !== this.state.teamSize) {
+      if (!this.rules.setTeamSize(s.teamSize))
+        this.notice("Too many players in the room for that team size", "warn", undefined, id);
+    }
+    if (s.friendlyFire !== undefined && this.rules.teamMode) this.rules.setFriendlyFire(s.friendlyFire);
     if (s.map && s.map !== this.state.mapId) {
       this.state.mapId = s.map;
       this.sim.setMap(MAPS[s.map]);
@@ -565,7 +590,8 @@ export class HostRoom {
     }
     if (s.durationSec) this.state.durationSec = s.durationSec;
     if (s.killLimit) this.state.killLimit = s.killLimit;
-    if (s.maxPlayers) this.state.maxPlayers = Math.max(s.maxPlayers, 1 + this.seats.size);
+    if (s.maxPlayers && !this.rules.teamMode)
+      this.state.maxPlayers = Math.max(s.maxPlayers, 1 + this.seats.size);
   }
 
   private handleStart(id: string) {
@@ -597,9 +623,11 @@ export class HostRoom {
   private startCountdown() {
     this.syncPracticeTargets();
     this.practiceMatch = this.bots.size > 0;
+    this.rules.prepareMatch();
     this.sim.resetForMatch();
     this.state.phase = "countdown";
     this.state.winnerId = "";
+    this.state.winnerTeam = 0;
     this.state.matchIndex += 1;
     this.state.phaseEndTick = this.sim.tick + this.sim.secToTicks(MATCH_DEFAULTS.countdownSec);
     for (const ps of this.state.players.values()) ps.ready = false;
@@ -618,6 +646,8 @@ export class HostRoom {
     this.state.phaseEndTick = this.sim.tick + this.sim.secToTicks(MATCH_DEFAULTS.resultsSec);
     const standings = this.sim.standings();
     this.state.winnerId = standings[0]?.id ?? "";
+    this.state.winnerTeam = this.sim.winningTeam();
+    this.rules.sync();
     this.sendResults(standings);
   }
 
@@ -655,11 +685,20 @@ export class HostRoom {
         ? Number.MAX_SAFE_INTEGER
         : this.sim.secToTicks(MATCH_DEFAULTS.minParticipationSec),
       completed: !practice,
+      ...(this.rules.teamMode ? { winnerTeam: this.state.winnerTeam } : {}),
     });
     const rows = resultRows(results);
+    const team: Pick<ResultsMessage, "winnerTeam" | "teamScores"> = this.rules.teamMode
+      ? { winnerTeam: this.state.winnerTeam, teamScores: [this.sim.teamScores[1], this.sim.teamScores[2]] }
+      : {};
     for (const r of results) {
       if (this.bots.has(r.player.id)) continue;
-      const msg: ResultsMessage = { winnerId: this.state.winnerId, rows, personal: personal(r, practice) };
+      const msg: ResultsMessage = {
+        winnerId: this.state.winnerId,
+        ...team,
+        rows,
+        personal: personal(r, practice),
+      };
       this.sendTo(r.player.id, S2C.RESULTS, msg);
     }
   }
@@ -674,6 +713,7 @@ export class HostRoom {
     if (wanted > 0 && this.bots.size === 0) {
       for (let i = 1; i <= wanted; i++) {
         const id = `bot:${i}`;
+        this.bots.add(id);
         this.addPlayer(id, {
           name: `Target ${i}`,
           skin: "ash",
@@ -683,7 +723,6 @@ export class HostRoom {
         });
         const ps = this.state.players.get(id);
         if (ps) ps.ready = true;
-        this.bots.add(id);
       }
     } else if (wanted === 0 && !keep && this.bots.size > 0) {
       for (const id of this.bots) {
@@ -717,8 +756,12 @@ export class HostRoom {
 
   // ------------------------------------------------------------------ state
 
-  private addPlayer(id: string, who: Omit<HostProfile, "profileId"> & { profileId: string }): PlayerState {
-    this.sim.addPlayer({
+  private addPlayer(
+    id: string,
+    who: Omit<HostProfile, "profileId"> & { profileId: string },
+    preferredTeam?: number,
+  ): PlayerState {
+    const p = this.sim.addPlayer({
       id,
       playerId: who.profileId,
       name: who.name,
@@ -727,6 +770,7 @@ export class HostRoom {
       primary: who.primary,
       seed: hashString(id),
     });
+    this.rules.assign(id, preferredTeam);
     const ps = new PlayerState();
     Object.assign(ps, {
       name: who.name,
@@ -735,6 +779,7 @@ export class HostRoom {
       primary: who.primary,
       connected: true,
       joinedAt: this.state.tick,
+      team: p.team,
     });
     this.state.players.set(id, ps);
     this.views.set(id, ps);
@@ -747,6 +792,7 @@ export class HostRoom {
       const ps = this.views.get(id);
       if (ps) syncPlayerState(ps, p, this.sim.tick);
     }
+    this.rules.sync();
     this.syncPickups(false);
   }
 

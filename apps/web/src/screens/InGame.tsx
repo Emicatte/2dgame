@@ -1,4 +1,4 @@
-import { type NetEvent, PLAYER, weaponByIndex } from "@scrapline/shared";
+import { isTeamMode, MODE_NAMES, type NetEvent, PLAYER, TEAMS, weaponByIndex } from "@scrapline/shared";
 import { useEffect, useRef, useState } from "react";
 import { Button, formatClock, Panel } from "../components/ui.tsx";
 import { hudStore, uiStore } from "../game/hudStore.ts";
@@ -10,6 +10,9 @@ interface FeedItem {
   id: number;
   killer: string;
   victim: string;
+  /** Team modes: team of killer and victim (0 otherwise), for the name colors. */
+  killerTeam: number;
+  victimTeam: number;
   weapon: string;
   self: boolean;
   at: number;
@@ -24,6 +27,8 @@ function KillFeed() {
       if (kills.length === 0) return;
       const s = sessionStore.get();
       const name = (id: string) => s.players.find((p) => p.id === id)?.name ?? "?";
+      const teams = isTeamMode(s.mode);
+      const team = (id: string) => (teams ? (s.players.find((p) => p.id === id)?.team ?? 0) : 0);
       const now = performance.now();
       setItems((prev) =>
         [
@@ -32,6 +37,8 @@ function KillFeed() {
             id: ++counter.current,
             killer: name(k.k),
             victim: name(k.v),
+            killerTeam: team(k.k),
+            victimTeam: team(k.v),
             weapon: weaponByIndex(k.w)?.name ?? "",
             self: k.k === s.selfId || k.v === s.selfId,
             at: now,
@@ -54,9 +61,9 @@ function KillFeed() {
     <div className="killfeed" aria-live="polite">
       {items.map((i) => (
         <div key={i.id} className={`killfeed__item ${i.self ? "is-self" : ""}`}>
-          <strong>{i.killer}</strong>
+          <strong className={i.killerTeam ? `team-tag--${i.killerTeam}` : undefined}>{i.killer}</strong>
           <span className="killfeed__weapon">{i.weapon}</span>
-          <span>{i.victim}</span>
+          <span className={i.victimTeam ? `team-tag--${i.victimTeam}` : undefined}>{i.victim}</span>
         </div>
       ))}
     </div>
@@ -65,10 +72,17 @@ function KillFeed() {
 
 export function Scoreboard() {
   const s = useStore(sessionStore);
-  const rows = [...s.players].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+  const teams = isTeamMode(s.mode);
+  const sorted = [...s.players].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+  const groups = teams
+    ? ([1, 2] as const).map((t) => ({ team: t, rows: sorted.filter((p) => p.team === t) }))
+    : [{ team: 0, rows: sorted }];
+  const title = teams
+    ? `${MODE_NAMES[s.mode]} · ${TEAMS[1].name} ${s.scoreA} – ${s.scoreB} ${TEAMS[2].name} · first to ${s.killLimit}`
+    : `Deathmatch · first to ${s.killLimit}`;
   return (
     <div className="scoreboard" role="dialog" aria-label="Scoreboard">
-      <Panel title={`Deathmatch · first to ${s.killLimit}`}>
+      <Panel title={title}>
         <table className="table">
           <thead>
             <tr>
@@ -81,18 +95,28 @@ export function Scoreboard() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((p, i) => (
-              <tr key={p.id} className={p.id === s.selfId ? "is-self" : ""}>
-                <td className="mono">{i + 1}</td>
-                <td>
-                  {p.name} {!p.connected && <span className="badge badge--warn">offline</span>}
-                </td>
-                <td className="num">{p.kills}</td>
-                <td className="num">{p.deaths}</td>
-                <td className="num">{(p.deaths ? p.kills / p.deaths : p.kills).toFixed(2)}</td>
-                <td className="num">{p.ping || "—"}</td>
-              </tr>
-            ))}
+            {groups.map((g) => [
+              g.team ? (
+                <tr key={`team-${g.team}`} className="scoreboard__team-head">
+                  <td colSpan={6} className={`team-tag--${g.team}`}>
+                    Team {TEAMS[g.team as 1 | 2].name} · {g.team === 1 ? s.scoreA : s.scoreB}
+                  </td>
+                </tr>
+              ) : null,
+              ...g.rows.map((p, i) => (
+                <tr key={p.id} className={p.id === s.selfId ? "is-self" : ""}>
+                  <td className="mono">{i + 1}</td>
+                  <td>
+                    <span className={p.team && teams ? `team-tag--${p.team}` : undefined}>{p.name}</span>{" "}
+                    {!p.connected && <span className="badge badge--warn">offline</span>}
+                  </td>
+                  <td className="num">{p.kills}</td>
+                  <td className="num">{p.deaths}</td>
+                  <td className="num">{(p.deaths ? p.kills / p.deaths : p.kills).toFixed(2)}</td>
+                  <td className="num">{p.ping || "—"}</td>
+                </tr>
+              )),
+            ])}
           </tbody>
         </table>
       </Panel>
@@ -146,6 +170,8 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
   }, []);
 
   const leader = [...s.players].sort((a, b) => b.kills - a.kills)[0];
+  const teams = isTeamMode(s.mode);
+  const myTeam = s.players.find((p) => p.id === s.selfId)?.team ?? 0;
   const hpFrac = hud.hp / PLAYER.maxHealth;
   const statusClass = s.status === "reconnecting" || hud.stalled ? "is-bad" : hud.ping > 150 ? "is-warn" : "";
   const interactKey = keyLabel(settings.bindings.interact);
@@ -183,25 +209,51 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
           </div>
         )}
 
-        <div className="hud__top">
-          <div className="hud-box hud__score">
-            <b className="mono" data-testid="hud-kills">
-              {hud.kills}
-            </b>
-            <small>Your elims</small>
+        {teams ? (
+          <div className="hud__top" data-testid="team-scores">
+            {([1, 2] as const).map((t, i) => (
+              <div
+                key={t}
+                className="hud-box hud__score"
+                style={{ order: i === 0 ? 0 : 2, borderColor: TEAMS[t].css }}
+              >
+                <b className={`mono team-tag--${t}`} data-testid={`team-score-${t}`}>
+                  {t === 1 ? s.scoreA : s.scoreB}/{s.killLimit}
+                </b>
+                <small>
+                  {TEAMS[t].name}
+                  {myTeam === t ? " · you" : ""}
+                </small>
+              </div>
+            ))}
+            <div
+              className={`hud-box hud__timer ${hud.timeLeftSec < 30 && s.phase === "playing" ? "is-low" : ""}`}
+              style={{ order: 1 }}
+            >
+              {formatClock(hud.timeLeftSec)}
+            </div>
           </div>
-          <div
-            className={`hud-box hud__timer ${hud.timeLeftSec < 30 && s.phase === "playing" ? "is-low" : ""}`}
-          >
-            {formatClock(hud.timeLeftSec)}
+        ) : (
+          <div className="hud__top">
+            <div className="hud-box hud__score">
+              <b className="mono" data-testid="hud-kills">
+                {hud.kills}
+              </b>
+              <small>Your elims</small>
+            </div>
+            <div
+              className={`hud-box hud__timer ${hud.timeLeftSec < 30 && s.phase === "playing" ? "is-low" : ""}`}
+            >
+              {formatClock(hud.timeLeftSec)}
+            </div>
+            <div className="hud-box hud__score">
+              <b className="mono">
+                {leader?.kills ?? 0}/{s.killLimit}
+              </b>
+              <small>Leader</small>
+            </div>
           </div>
-          <div className="hud-box hud__score">
-            <b className="mono">
-              {leader?.kills ?? 0}/{s.killLimit}
-            </b>
-            <small>Leader</small>
-          </div>
-        </div>
+        )}
 
         <KillFeed />
 

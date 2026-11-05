@@ -835,3 +835,58 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ------------------------------------------------------------------ teams */
+
+/* Team panels stack in the lobby's left column: side by side they leave too little room for
+   names and badges at common laptop widths. */
+.team-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+/* Without this, the shorter lobby column stretches its panels to the taller column's height. */
+.lobby > .stack {
+  align-content: start;
+}
+
+.team-panel--1 {
+  border-top: 3px solid #3da5ff;
+}
+
+.team-panel--2 {
+  border-top: 3px solid #ff8a3d;
+}
+
+.team-title {
+  display: inline-flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.team-score {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.team-tag {
+  font-weight: 700;
+}
+
+.team-tag--1 {
+  color: #3da5ff;
+}
+
+.team-tag--2 {
+  color: #ff8a3d;
+}
+
+.scoreboard__team-head td {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 12px;
+  padding-top: 12px;
+}

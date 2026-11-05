@@ -6,6 +6,7 @@ import {
   DEFAULT_MAP,
   DEFAULT_SKIN,
   decodeInput,
+  type GameMode,
   hashString,
   type InputBatch,
   inputBatchSchema,
@@ -29,12 +30,14 @@ import {
   S2C,
   SERVER_TICK_MS,
   settingsSchema,
+  teamSchema,
   type WeaponId,
 } from "@scrapline/shared";
 import { z } from "zod";
 import { uniqueRoomCode } from "../matchmaking/roomCodes.ts";
 import type { MatchPlayerResult } from "../persistence/repository.ts";
 import { type ComputedResult, computeResults, personalResult, resultRows } from "../players/results.ts";
+import { MatchRules } from "../rules/MatchRules.ts";
 import { verifyToken } from "../security/tokens.ts";
 import { getServices } from "../services.ts";
 import { GameSimulation, type ServerPlayer } from "../simulation/GameSimulation.ts";
@@ -46,11 +49,14 @@ interface AuthData {
   level: number;
   skin: string;
   primary: WeaponId;
+  /** Preferred team (invite link); honored when it has room. */
+  team?: number;
 }
 
 interface CreateOptions {
   kind?: RoomKind;
   map?: MapId;
+  mode?: GameMode;
   /** Deterministic spawns for automated end-to-end tests; ignored unless debug routes are enabled. */
   debugSpawns?: unknown;
 }
@@ -81,6 +87,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   override state = new MatchState();
 
   private sim!: GameSimulation;
+  private rules!: MatchRules;
   private kind: RoomKind = "quick";
   private code = "";
   private readonly views = new Map<string, PlayerState>();
@@ -120,6 +127,9 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       maxPlayers: MATCH_DEFAULTS.maxPlayers,
       tickRate: NET.serverTickRate,
     });
+    this.rules = new MatchRules(this.sim, this.state, (id) => this.bots.has(id));
+    this.rules.setMode(options.mode === "tdm" ? "tdm" : "deathmatch");
+    this.maxClients = this.state.maxPlayers;
     this.syncPickups(true);
 
     if (this.kind === "private") await this.setPrivate(true);
@@ -149,6 +159,8 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     this.onMessage(C2S.START, (client) => this.handleStart(client));
     this.onMessage(C2S.LOADOUT, loadoutSchema, (client, msg) => this.handleLoadout(client, msg));
     this.onMessage(C2S.KICK, kickSchema, (client, msg) => this.handleKick(client, msg.id));
+    this.onMessage(C2S.TEAM, teamSchema, (client, msg) => this.handleTeam(client, msg.team));
+    this.onMessage(C2S.BALANCE, (client) => this.handleBalance(client));
     this.onMessage("ping", pingSchema, (client, msg) => {
       const ps = this.state.players.get(client.sessionId);
       if (ps) ps.ping = msg.ms;
@@ -178,6 +190,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       level: record.level,
       skin,
       primary: parsed.data.primary,
+      ...(parsed.data.team ? { team: parsed.data.team } : {}),
     };
   }
 
@@ -185,6 +198,10 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     // Same identity twice in one room (second tab, replayed seat): refuse before any state change.
     for (const existing of this.sim.players.values()) {
       if (existing.playerId === auth.playerId) throw new ServerError(409, "already in this room");
+    }
+    if (this.rules.teamMode) {
+      const c = this.rules.counts();
+      if (c[1] + c[2] >= this.state.teamSize * 2) throw new ServerError(409, "room full");
     }
     const p = this.sim.addPlayer({
       id: client.sessionId,
@@ -195,6 +212,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       primary: auth.primary,
       seed: hashString(client.sessionId),
     });
+    this.rules.assign(client.sessionId, auth.team);
     const ps = new PlayerState();
     Object.assign(ps, {
       name: auth.nickname,
@@ -203,6 +221,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       primary: auth.primary,
       connected: true,
       joinedAt: this.state.tick,
+      team: p.team,
     });
     this.state.players.set(client.sessionId, ps);
     this.views.set(client.sessionId, ps);
@@ -292,13 +311,10 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
         "player left",
       );
     }
-    if (
-      this.state.phase === "playing" &&
-      this.kind === "quick" &&
-      this.matchStartPlayers >= 2 &&
-      this.sim.players.size < 2
-    ) {
-      this.endMatch("opponents-left");
+    if (this.state.phase === "playing" && this.kind === "quick" && this.matchStartPlayers >= 2) {
+      const c = this.rules.counts();
+      const oneSided = this.rules.teamMode && (c[1] === 0 || c[2] === 0);
+      if (this.sim.players.size < 2 || oneSided) this.endMatch("opponents-left");
     }
     this.syncPracticeTargets();
     void this.updateMetadata();
@@ -367,6 +383,16 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   private handleSettings(client: Client, s: z.infer<typeof settingsSchema>) {
     if (client.sessionId !== this.state.hostId || this.kind !== "private") return;
     if (this.state.phase !== "lobby") return;
+    // Mode first: it resets length, score limit and size to the mode's defaults.
+    if (s.mode && s.mode !== this.state.mode) {
+      this.rules.setMode(s.mode);
+      this.applyCapacity();
+    }
+    if (s.teamSize && this.rules.teamMode && s.teamSize !== this.state.teamSize) {
+      if (this.rules.setTeamSize(s.teamSize)) this.applyCapacity();
+      else this.notice("Too many players in the room for that team size", "warn", undefined, client);
+    }
+    if (s.friendlyFire !== undefined && this.rules.teamMode) this.rules.setFriendlyFire(s.friendlyFire);
     if (s.map && s.map !== this.state.mapId) {
       this.state.mapId = s.map;
       this.sim.setMap(MAPS[s.map]);
@@ -374,14 +400,35 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     }
     if (s.durationSec) this.state.durationSec = s.durationSec;
     if (s.killLimit) this.state.killLimit = s.killLimit;
-    if (s.maxPlayers) {
-      const n = Math.max(s.maxPlayers, this.clients.length);
-      this.state.maxPlayers = n;
-      this.maxClients = n;
-      void this.setMatchmaking({ maxClients: n });
+    if (s.maxPlayers && !this.rules.teamMode) {
+      this.state.maxPlayers = s.maxPlayers;
+      this.applyCapacity();
     }
     this.touchActivity();
     void this.updateMetadata();
+  }
+
+  /** Room capacity follows the settings, never below the players already present. */
+  private applyCapacity() {
+    const n = Math.max(this.state.maxPlayers, this.clients.length);
+    this.state.maxPlayers = n;
+    this.maxClients = n;
+    void this.setMatchmaking({ maxClients: n });
+  }
+
+  private handleTeam(client: Client, team: number) {
+    if (this.state.phase !== "lobby" && this.state.phase !== "results") return;
+    if (!this.rules.teamMode) return;
+    if (this.rules.switchTeam(client.sessionId, team)) this.touchActivity();
+    else this.notice("That team is full", "warn", undefined, client);
+  }
+
+  private handleBalance(client: Client) {
+    if (client.sessionId !== this.state.hostId || this.state.phase !== "lobby" || !this.rules.teamMode)
+      return;
+    this.rules.balance();
+    this.notice("Teams balanced by level", "info");
+    this.touchActivity();
   }
 
   private handleStart(client: Client) {
@@ -438,7 +485,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
         if (tick >= this.state.phaseEndTick) this.startPlaying();
         break;
       case "playing":
-        if (this.sim.leaderKills() >= this.state.killLimit) this.endMatch("kill-limit");
+        if (this.sim.leaderScore() >= this.state.killLimit) this.endMatch("score-limit");
         else if (tick >= this.state.phaseEndTick) this.endMatch("time");
         else this.kickIdle(tick);
         break;
@@ -475,7 +522,9 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   private startCountdown() {
     this.syncPracticeTargets();
     this.practiceMatch = this.bots.size > 0;
+    this.rules.prepareMatch();
     this.sim.resetForMatch();
+    this.state.winnerTeam = 0;
     this.leavers = [];
     this.state.phase = "countdown";
     this.state.winnerId = "";
@@ -501,6 +550,8 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     this.state.phaseEndTick = this.sim.tick + this.sim.secToTicks(MATCH_DEFAULTS.resultsSec);
     const standings = this.sim.standings();
     this.state.winnerId = standings[0]?.id ?? "";
+    this.state.winnerTeam = this.sim.winningTeam();
+    this.rules.sync();
     void this.updateMetadata();
     void this.persistMatch(standings, reason);
   }
@@ -551,6 +602,8 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
           primary: "rifle",
           seed: hashString(id),
         });
+        this.bots.add(id);
+        this.rules.assign(id);
         const ps = new PlayerState();
         Object.assign(ps, {
           name: `Target ${i}`,
@@ -562,7 +615,6 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
         });
         this.state.players.set(id, ps);
         this.views.set(id, ps);
-        this.bots.add(id);
       }
     } else if (wanted === 0 && !keep && this.bots.size > 0) {
       for (const id of this.bots) {
@@ -603,11 +655,13 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       completed: false,
     });
     const rows = resultRows(results);
+    const team = this.teamResult();
     for (const r of results) {
       const client = this.clients.getById(r.player.id);
       if (!client) continue;
       client.send(S2C.RESULTS, {
         winnerId: this.state.winnerId,
+        ...team,
         rows,
         personal: {
           placement: r.placement,
@@ -637,6 +691,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       tickRate: NET.serverTickRate,
       minParticipationTicks: this.sim.secToTicks(MATCH_DEFAULTS.minParticipationSec),
       completed: reason !== "abandoned",
+      ...(this.rules.teamMode ? { winnerTeam: this.state.winnerTeam } : {}),
     });
     const rows = resultRows(results);
     const winnerId = this.state.winnerId;
@@ -683,6 +738,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       if (!client) continue;
       const msg: ResultsMessage = {
         winnerId,
+        ...this.teamResult(),
         rows,
         personal: personalResult(r, before.get(r.player.playerId) ?? null, after),
       };
@@ -697,7 +753,17 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       const ps = this.views.get(id);
       if (ps) syncPlayerState(ps, p, this.sim.tick);
     }
+    this.rules.sync();
     this.syncPickups(false);
+  }
+
+  /** Team modes: winner and final scores for the results message. */
+  private teamResult(): Pick<ResultsMessage, "winnerTeam" | "teamScores"> {
+    if (!this.rules.teamMode) return {};
+    return {
+      winnerTeam: this.state.winnerTeam,
+      teamScores: [this.sim.teamScores[1], this.sim.teamScores[2]],
+    };
   }
 
   private syncPickups(rebuild: boolean) {
@@ -727,6 +793,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       await this.setMetadata({
         code: this.code,
         kind: this.kind,
+        mode: this.state.mode as GameMode,
         map: this.state.mapId as MapId,
         phase: this.state.phase as MatchPhase,
         players: this.clients.length,

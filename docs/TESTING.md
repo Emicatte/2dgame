@@ -83,7 +83,28 @@ pnpm test:e2e:p2p                                 # two Chrome processes, real W
 E2E_P2P_PREVIEW=1 pnpm test:e2e:p2p               # same against the production build
 ```
 
-## Results (last run: 2026-11-05, v0.2.0 host mode; audit figures below unchanged)
+### Team Deathmatch and SCRAPLINE 2.0 phases
+
+```bash
+pnpm --filter @scrapline/server exec vitest run test/teams.test.ts test/teams.integration.test.ts
+pnpm --filter @scrapline/web exec vitest run test/hostmode.teams.test.ts test/hostmode.netcode.test.ts
+pnpm test:e2e teams.spec                          # two browsers, TDM on the real server
+```
+
+Phase-by-phase acceptance criteria and results: `docs/v2/ROADMAP.md`.
+
+## Results (last run: 2026-11-05, v0.3.0 Team Deathmatch)
+
+| Suite | Count | Result |
+|---|---|---|
+| `packages/shared` unit | 41 | pass |
+| `apps/web` unit (netcode 13, signaling 14, host mode 8, host-mode TDM 2, host-mode netcode at 120 ms RTT 1) | 38 | pass |
+| `apps/server` unit + integration (team rules 14, TDM over real sockets 3), without PostgreSQL/TLS variables | 76 + 8 skipped | pass |
+| Netcode matrix before (Phase 0) and after Phase 1 (`docs/audit/data/netaudit-v2-phase{0,1}.json`) | 15 scenarios | 15/15 and 15/15 |
+| E2E dedicated server: duel, reload/stall/drop, Team Deathmatch | 3 | pass (the TDM spec failed once in four runs at SwiftShader frame rates: no kill within its 20 s aiming window; the window is now 35 s and the spec logs positions/health/ammo when it fails) |
+| E2E host mode (WebRTC): TDM + invite link + play + reload + host close, dev / production build | 1 / 1 | pass / pass |
+
+## Results (v0.2.0 host mode; audit figures below unchanged)
 
 | Suite | Count | Result |
 |---|---|---|

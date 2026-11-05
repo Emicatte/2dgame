@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MATCH_LIMITS, NICKNAME } from "../config/game.ts";
+import { GAME_MODES, type GameMode, TEAM_SIZE } from "../config/modes.ts";
 import { PRIMARY_WEAPONS, type WeaponId } from "../config/weapons.ts";
 import { MAP_IDS, type MapId } from "../maps/index.ts";
 import type { MatchPhase } from "../state.ts";
@@ -14,6 +15,10 @@ export const C2S = {
   START: "start",
   LOADOUT: "loadout",
   KICK: "kick",
+  /** Team modes: move to a team (lobby and results only). */
+  TEAM: "team",
+  /** Team modes, host only: rebalance teams by level. */
+  BALANCE: "balance",
 } as const;
 
 /** Server → client message types. */
@@ -27,6 +32,8 @@ export type RoomKind = "quick" | "private";
 
 const weaponIdSchema = z.enum(PRIMARY_WEAPONS as [WeaponId, ...WeaponId[]]);
 const mapIdSchema = z.enum(MAP_IDS as [MapId, ...MapId[]]);
+const modeSchema = z.enum(GAME_MODES as [GameMode, ...GameMode[]]);
+export const teamIdSchema = z.union([z.literal(1), z.literal(2)]);
 
 export const nicknameSchema = z
   .string()
@@ -41,6 +48,10 @@ export const joinOptionsSchema = z.object({
   primary: weaponIdSchema.default("rifle"),
   skin: z.string().max(32).default("foundry"),
   map: mapIdSchema.optional(),
+  /** Mode of the room to create or find (quick match). Default deathmatch. */
+  mode: modeSchema.optional(),
+  /** Preferred team (invite link to a friend's team); honored when that team has room. */
+  team: teamIdSchema.optional(),
 });
 export type JoinOptions = z.input<typeof joinOptionsSchema>;
 
@@ -56,8 +67,14 @@ export const settingsSchema = z.object({
     .optional(),
   killLimit: z.number().int().min(MATCH_LIMITS.killLimit.min).max(MATCH_LIMITS.killLimit.max).optional(),
   maxPlayers: z.number().int().min(MATCH_LIMITS.maxPlayers.min).max(MATCH_LIMITS.maxPlayers.max).optional(),
+  mode: modeSchema.optional(),
+  /** Team modes: players per team (1v1 … 4v4). */
+  teamSize: z.number().int().min(TEAM_SIZE.min).max(TEAM_SIZE.max).optional(),
+  friendlyFire: z.boolean().optional(),
 });
 export type MatchSettings = z.infer<typeof settingsSchema>;
+
+export const teamSchema = z.object({ team: teamIdSchema });
 
 export const loadoutSchema = z.object({
   primary: weaponIdSchema,
@@ -88,6 +105,8 @@ export interface NoticeMessage {
 export interface ResultRow {
   id: string;
   name: string;
+  /** 0 in free-for-all. */
+  team?: number;
   kills: number;
   deaths: number;
   placement: number;
@@ -123,6 +142,9 @@ export interface PersonalResult {
 
 export interface ResultsMessage {
   winnerId: string;
+  /** Team modes: winning team (0 = draw) and final scores [Alpha, Bravo]. */
+  winnerTeam?: number;
+  teamScores?: [number, number];
   rows: ResultRow[];
   personal: PersonalResult | null;
 }
@@ -130,6 +152,7 @@ export interface ResultsMessage {
 export interface RoomMetadata {
   code: string;
   kind: RoomKind;
+  mode?: GameMode;
   map: MapId;
   phase: MatchPhase;
   players: number;

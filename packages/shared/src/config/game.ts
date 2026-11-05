@@ -82,7 +82,4 @@ export const MATCH_LIMITS = {
   maxPlayers: { min: 2, max: 8 },
 } as const;
 
-export type GameMode = "deathmatch";
-export const GAME_MODES: readonly GameMode[] = ["deathmatch"];
-
 export const NICKNAME = { min: 2, max: 16 } as const;

@@ -33,6 +33,8 @@ export interface RoomListing {
   roomId: string;
   code: string;
   map: string;
+  /** Game mode (rooms from older servers report none: deathmatch). */
+  mode?: string;
   phase: string;
   players: number;
   maxPlayers: number;

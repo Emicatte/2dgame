@@ -143,6 +143,20 @@ incremented in SQL so concurrent matches of the same player never lose updates. 
 
 Tables: `players` (profile, XP, level, career counters, cosmetics), `matches`, `match_players`.
 
+## Modes and teams
+
+Modes are data (`packages/shared/src/config/modes.ts`): `deathmatch` (free for all) and `tdm`
+(Team Deathmatch: Alpha vs Bravo, 1v1–4v4, default 2v2 / 5 min / 15 points / no friendly fire).
+`apps/server/src/rules/MatchRules.ts` applies them for both room implementations (dedicated
+`ArenaRoom` and browser-hosted `HostRoom`): mode switch with defaults, team assignment (preferred
+team from an invite link when it has room, otherwise the smaller team), team switching, team size
+changes, snake-draft balancing by level, and an empty-side check before each match. The
+simulation owns teams and team scores (`ServerPlayer.team`, `teamScores`); `CombatRules` decide
+whether a shot may hit a player (`canDamage`: without friendly fire, shots pass through teammates,
+on the server and in the client's predicted tracer). Team spawns come from `teamSpawns(map, team)`:
+the authored half of a mirrored map for Alpha, its mirror for Bravo. Quick match rooms are
+filtered by `kind` and `mode`.
+
 ## Room lifecycle
 
 `lobby → countdown (5 s, frozen) → playing → results (14 s) → lobby`. Quick rooms auto-start
@@ -180,6 +194,7 @@ room, so one vCPU has headroom for many rooms. Watch `tickCostMs.max` and `maxIn
 | `packages/shared/src/state.ts` | Colyseus schema (synchronized state) |
 | `apps/server/src/simulation` | `GameSimulation`: inputs, rewind, combat, spawns, pickups |
 | `apps/server/src/rooms/ArenaRoom.ts` | Phases, message handling, mirroring sim → state, persistence |
+| `apps/server/src/rules/MatchRules.ts` | Modes and teams, shared by ArenaRoom and HostRoom |
 | `apps/server/src/api` | HTTP routes |
 | `apps/web/src/game` | Phaser scenes, procedural art, effects, audio, netcode client |
 | `apps/web/src/screens` | Menus, lobby, HUD, results |

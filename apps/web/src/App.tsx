@@ -1,5 +1,5 @@
 import { normalizeRoomCode } from "@scrapline/shared";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GameCanvas } from "./components/GameCanvas.tsx";
 import { Toasts } from "./components/Toasts.tsx";
 import { Button } from "./components/ui.tsx";
@@ -14,18 +14,24 @@ import { Results } from "./screens/Results.tsx";
 import { Leaderboard, Loadout, Profile, RoomBrowser, SettingsSheet } from "./screens/Sheets.tsx";
 import { currentLoadout, loadProfile, profileStore } from "./state/profile.ts";
 
-function useInviteCode(): [string | null, () => void] {
+/** `?join=CODE` invite links; `&team=1|2` asks to join a friend's team in team modes. */
+function useInviteCode(): [string | null, 1 | 2 | undefined, () => void] {
   const [code, setCode] = useState<string | null>(() => {
     const raw = new URLSearchParams(location.search).get("join");
     return raw ? normalizeRoomCode(raw) : null;
+  });
+  const [team] = useState<1 | 2 | undefined>(() => {
+    const t = new URLSearchParams(location.search).get("team");
+    return t === "1" ? 1 : t === "2" ? 2 : undefined;
   });
   const clear = useCallback(() => {
     setCode(null);
     const url = new URL(location.href);
     url.searchParams.delete("join");
+    url.searchParams.delete("team");
     history.replaceState(null, "", url.toString());
   }, []);
-  return [code, clear];
+  return [code, team, clear];
 }
 
 export function App() {
@@ -34,7 +40,7 @@ export function App() {
   const [view, setView] = useState<MenuView>("main");
   const [overlay, setOverlay] = useState<"settings" | "loadout" | null>(null);
   const [busy, setBusy] = useState(false);
-  const [invite, clearInvite] = useInviteCode();
+  const [invite, inviteTeam, clearInvite] = useInviteCode();
 
   useEffect(() => {
     void loadProfile();
@@ -43,15 +49,19 @@ export function App() {
     window.addEventListener("keydown", unlock, { once: true });
   }, []);
 
-  // Resume a match after a page reload, otherwise honour an invite link.
+  // Resume a match after a page reload, otherwise honour an invite link. Once per page load:
+  // clearing the invite re-runs this effect, and a second resume attempt would leave the room
+  // that was just joined.
+  const startupDone = useRef(false);
   useEffect(() => {
-    if (profile.status !== "ready") return;
+    if (profile.status !== "ready" || startupDone.current) return;
+    startupDone.current = true;
     void (async () => {
       const resumed = await session.tryResume();
       if (resumed || !invite) return;
       setBusy(true);
       try {
-        await session.joinByCode(invite, currentLoadout());
+        await session.joinByCode(invite, currentLoadout(), inviteTeam);
       } catch {
         setView("join");
       } finally {
@@ -59,7 +69,7 @@ export function App() {
       }
       clearInvite();
     })();
-  }, [profile.status, invite, clearInvite]);
+  }, [profile.status, invite, inviteTeam, clearInvite]);
 
   useEffect(() => {
     if (sess.status === "connected") setView("main");

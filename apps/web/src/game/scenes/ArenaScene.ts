@@ -3,6 +3,7 @@ import {
   activeWeapon,
   BTN,
   C2S,
+  canDamage,
   clamp,
   collisionWorldFor,
   currentSpreadDeg,
@@ -13,6 +14,7 @@ import {
   hashString,
   type InputFrame,
   isMapId,
+  isTeamMode,
   MAPS,
   type MapDef,
   type MatchPhase,
@@ -356,6 +358,7 @@ export class ArenaScene extends Phaser.Scene {
       const v = this.views.get(id)!;
       v.setSkin(p.skin);
       v.setName(p.name);
+      v.setTeam(isTeamMode(state.mode) ? p.team : 0);
     });
     for (const [id, v] of this.views) {
       if (!state.players.has(id)) {
@@ -693,8 +696,16 @@ export class ArenaScene extends Phaser.Scene {
     const world = collisionWorldFor(this.map);
     const renderTick = this.clock.renderTick();
     const targets: HitTarget[] = [];
+    const state = this.room?.state;
+    const teams = !!state && isTeamMode(state.mode);
+    const rules = { teams, friendlyFire: teams && !!state?.friendlyFire };
+    const selfId = this.room?.sessionId ?? "";
+    const myTeam = state?.players.get(selfId)?.team ?? 0;
     for (const [id, v] of this.views) {
       if (id === this.room?.sessionId || !v.visibleAlive) continue;
+      // Same rule as the server: without friendly fire, tracers pass through teammates.
+      const team = state?.players.get(id)?.team ?? 0;
+      if (!canDamage({ id: selfId, team: myTeam }, { id, team }, rules)) continue;
       const s = this.buffer.sample(id, renderTick);
       if (s?.alive) targets.push({ id, x: s.x, y: s.y, r: PLAYER.radius });
     }

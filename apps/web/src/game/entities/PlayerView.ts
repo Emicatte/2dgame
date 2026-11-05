@@ -1,4 +1,4 @@
-import { NO_WEAPON, PLAYER, type WeaponDef, weaponByIndex } from "@scrapline/shared";
+import { NO_WEAPON, PLAYER, TEAMS, type WeaponDef, weaponByIndex } from "@scrapline/shared";
 import Phaser from "phaser";
 import { TEX, TEX_SCALE } from "../art/textures.ts";
 
@@ -35,6 +35,7 @@ export class PlayerView {
   private lastX = 0;
   private lastY = 0;
   private hpShown = 100;
+  private team = 0;
   visibleAlive = true;
 
   constructor(
@@ -93,6 +94,22 @@ export class PlayerView {
 
   setName(name: string): void {
     if (this.nameText.text !== name) this.nameText.setText(name);
+  }
+
+  /**
+   * Team modes: ground marker and name tag take the team color (Alpha blue, Bravo orange), so
+   * allies and enemies read instantly; 0 restores the free-for-all look (you cyan, others red).
+   */
+  setTeam(team: number): void {
+    if (team === this.team) return;
+    this.team = team;
+    if (team === 1 || team === 2) {
+      this.marker.setTint(TEAMS[team].color).setAlpha(this.isLocal ? 0.6 : 0.8);
+      this.nameText.setColor(TEAMS[team].css);
+    } else {
+      this.marker.setTint(this.isLocal ? 0x4fd8ff : 0xff5a3d).setAlpha(this.isLocal ? 0.55 : 0.7);
+      this.nameText.setColor(String(NAME_STYLE.color));
+    }
   }
 
   private setWeapon(index: number): WeaponDef | undefined {

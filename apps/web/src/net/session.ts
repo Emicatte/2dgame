@@ -3,6 +3,7 @@ import {
   C2S,
   DEFAULT_PRIMARY,
   DEFAULT_SKIN,
+  type GameMode,
   isWeaponId,
   type JoinOptions,
   levelFromXp,
@@ -39,6 +40,8 @@ export interface LobbyPlayer {
   deaths: number;
   ping: number;
   alive: boolean;
+  /** 0 = no team, 1 = Alpha, 2 = Bravo. */
+  team: number;
 }
 
 export interface SessionState {
@@ -61,6 +64,12 @@ export interface SessionState {
   matchIndex: number;
   players: LobbyPlayer[];
   results: ResultsMessage | null;
+  mode: GameMode;
+  teamSize: number;
+  friendlyFire: boolean;
+  scoreA: number;
+  scoreB: number;
+  winnerTeam: number;
 }
 
 const initialState: SessionState = {
@@ -83,6 +92,12 @@ const initialState: SessionState = {
   matchIndex: 0,
   players: [],
   results: null,
+  mode: "deathmatch",
+  teamSize: 0,
+  friendlyFire: false,
+  scoreA: 0,
+  scoreB: 0,
+  winnerTeam: 0,
 };
 
 export const sessionStore = createStore<SessionState>({ ...initialState });
@@ -116,16 +131,24 @@ class GameSession {
   room: Room<unknown, MatchState> | null = null;
   private lastListUpdate = 0;
 
-  private options(kind: RoomKind, loadout: Loadout, map?: MapId): JoinOptions {
+  private options(
+    kind: RoomKind,
+    loadout: Loadout,
+    map?: MapId,
+    extra: { mode?: GameMode; team?: 1 | 2 } = {},
+  ): JoinOptions {
     const token = identity.get();
     if (!token) throw new Error("No identity: create a profile first");
-    return { token, kind, primary: loadout.primary, skin: loadout.skin, ...(map ? { map } : {}) };
+    return { token, kind, primary: loadout.primary, skin: loadout.skin, ...(map ? { map } : {}), ...extra };
   }
 
-  async quickMatch(loadout: Loadout): Promise<void> {
+  /** Quick match: joins (or opens) a public room of that mode. */
+  async quickMatch(loadout: Loadout, mode: GameMode = "deathmatch"): Promise<void> {
     if (HOST_MODE)
       throw new Error("Quick match needs a game server. Create an arena or join one with a code.");
-    await this.connect(() => this.client.joinOrCreate(ROOM_NAME, this.options("quick", loadout), MatchState));
+    await this.connect(() =>
+      this.client.joinOrCreate(ROOM_NAME, this.options("quick", loadout, undefined, { mode }), MatchState),
+    );
   }
 
   async createPrivate(loadout: Loadout, map: MapId, extra: Record<string, unknown> = {}): Promise<void> {
@@ -138,14 +161,21 @@ class GameSession {
     );
   }
 
-  async joinByCode(code: string, loadout: Loadout): Promise<void> {
+  /** `team`: preferred team from an invite link ("join my team"), honored when it has room. */
+  async joinByCode(code: string, loadout: Loadout, team?: 1 | 2): Promise<void> {
     if (HOST_MODE) {
-      await this.connect(async () => asRoom(await joinArena(code, localPlayer(loadout))));
+      await this.connect(async () =>
+        asRoom(await joinArena(code, { ...localPlayer(loadout), ...(team ? { team } : {}) })),
+      );
       return;
     }
     await this.connect(async () => {
       const { roomId } = await api.roomByCode(code);
-      return this.client.joinById(roomId, this.options("private", loadout), MatchState);
+      return this.client.joinById(
+        roomId,
+        this.options("private", loadout, undefined, team ? { team } : {}),
+        MatchState,
+      );
     });
   }
 
@@ -155,6 +185,8 @@ class GameSession {
 
   /** Resumes a match after a page reload, if the server still holds our seat. */
   async tryResume(): Promise<boolean> {
+    // Already in a room: nothing to resume (resuming would leave it first).
+    if (this.room) return true;
     let token: string | null = null;
     try {
       token = sessionStorage.getItem(RECONNECT_KEY);
@@ -263,6 +295,7 @@ class GameSession {
           deaths: p.deaths,
           ping: p.ping,
           alive: p.alive,
+          team: p.team,
         });
       });
     }
@@ -282,6 +315,12 @@ class GameSession {
       matchIndex: state.matchIndex,
       players,
       results: phase === "results" ? s.results : null,
+      mode: (state.mode as GameMode) || "deathmatch",
+      teamSize: state.teamSize,
+      friendlyFire: state.friendlyFire,
+      scoreA: state.scoreA,
+      scoreB: state.scoreB,
+      winnerTeam: state.winnerTeam,
     });
   }
 
@@ -307,6 +346,16 @@ class GameSession {
 
   kick(id: string) {
     this.send(C2S.KICK, { id });
+  }
+
+  /** Team modes: move to a team (lobby and results). */
+  setTeam(team: 1 | 2) {
+    this.send(C2S.TEAM, { team });
+  }
+
+  /** Team modes, host only: rebalance by level. */
+  balanceTeams() {
+    this.send(C2S.BALANCE, {});
   }
 
   async leave(): Promise<void> {

@@ -1,3 +1,4 @@
+import { isTeamMode, TEAMS } from "@scrapline/shared";
 import { useEffect } from "react";
 import { Button, formatClock, Panel } from "../components/ui.tsx";
 import { useStore } from "../lib/store.ts";
@@ -7,8 +8,13 @@ import { refreshProfile } from "../state/profile.ts";
 export function Results() {
   const s = useStore(sessionStore);
   const r = s.results;
-  const win = s.winnerId === s.selfId;
   const self = s.players.find((p) => p.id === s.selfId);
+  const teams = isTeamMode(s.mode);
+  const winnerTeam = r?.winnerTeam ?? s.winnerTeam;
+  const scores = r?.teamScores ?? [s.scoreA, s.scoreB];
+  const myTeam = self?.team ?? 0;
+  const win = teams ? winnerTeam > 0 && winnerTeam === myTeam : s.winnerId === s.selfId;
+  const draw = teams && winnerTeam === 0;
   const backIn = s.phaseEndTick > 0 ? (s.phaseEndTick - s.tick) / (s.tickRate || 20) : 0;
   const rows =
     r?.rows ??
@@ -17,6 +23,7 @@ export function Results() {
       .map((p, i) => ({
         id: p.id,
         name: p.name,
+        team: p.team,
         kills: p.kills,
         deaths: p.deaths,
         placement: i + 1,
@@ -32,7 +39,20 @@ export function Results() {
       <div className="results" data-testid="results">
         <div>
           <span className="stencil">Match over</span>
-          <h1 className={`results__title ${win ? "is-win" : ""}`}>{win ? "Victory" : "Defeat"}</h1>
+          <h1 className={`results__title ${win ? "is-win" : ""}`} data-testid="results-title">
+            {draw ? "Draw" : win ? "Victory" : "Defeat"}
+          </h1>
+          {teams && (
+            <p className="team-score mono" data-testid="results-teams">
+              <span className="team-tag team-tag--1">
+                {TEAMS[1].name} {scores[0]}
+              </span>
+              <span>–</span>
+              <span className="team-tag team-tag--2">
+                {scores[1]} {TEAMS[2].name}
+              </span>
+            </p>
+          )}
         </div>
         <div className="grid-2" style={{ gridTemplateColumns: "1.5fr 1fr" }}>
           <Panel title="Final standings">
@@ -50,7 +70,7 @@ export function Results() {
                 {rows.map((row) => (
                   <tr key={row.id} className={row.id === s.selfId ? "is-self" : ""}>
                     <td className="mono">{row.placement}</td>
-                    <td>{row.name}</td>
+                    <td className={teams && row.team ? `team-tag--${row.team}` : undefined}>{row.name}</td>
                     <td className="num">{row.kills}</td>
                     <td className="num">{row.deaths}</td>
                     <td className="num">

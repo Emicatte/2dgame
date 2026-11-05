@@ -5,6 +5,7 @@ import {
   type LeaderboardEntry,
   MAPS,
   MAX_LEVEL,
+  MODE_NAMES,
   PRIMARY_WEAPONS,
   type RoomListing,
   SKINS,
@@ -86,6 +87,7 @@ export function RoomBrowser({ onBack }: { onBack: () => void }) {
                 <thead>
                   <tr>
                     <th>Map</th>
+                    <th>Mode</th>
                     <th>Status</th>
                     <th className="num">Players</th>
                     <th />
@@ -95,6 +97,7 @@ export function RoomBrowser({ onBack }: { onBack: () => void }) {
                   {rooms.map((r) => (
                     <tr key={r.roomId}>
                       <td>{isMapId(r.map) ? MAPS[r.map].name : r.map}</td>
+                      <td>{r.mode === "tdm" ? MODE_NAMES.tdm : MODE_NAMES.deathmatch}</td>
                       <td>
                         <span className={`badge ${r.phase === "playing" ? "badge--accent" : "badge--good"}`}>
                           {r.phase === "playing" ? "In match" : r.phase}

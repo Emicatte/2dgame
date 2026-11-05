@@ -57,7 +57,7 @@ test.afterEach(async () => {
   browsers = [];
 });
 
-test("host mode: create, join by code, play, reload and resume, host closes", async () => {
+test("host mode: create, Team Deathmatch invite link, play, reload and resume, host closes", async () => {
   browsers = await Promise.all(
     [0, 1].map(() => chromium.launch({ executablePath: CHROME, headless: true, args: ARGS })),
   );
@@ -75,16 +75,21 @@ test("host mode: create, join by code, play, reload and resume, host closes", as
   const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
   expect(code).toMatch(/^[A-Z0-9]{5}$/);
 
-  // B joins with the code over WebRTC.
+  // Team Deathmatch, and B joins through A's "invite to my team" link over WebRTC.
+  await a.getByTestId("mode-tdm").click();
+  await expect(a.getByTestId("match-rules")).toContainText("Team Deathmatch");
+  const hostTeam = ((await a.getByTestId("team-1").textContent()) ?? "").includes("Alpha") ? 1 : 2;
+  const otherTeam = hostTeam === 1 ? 2 : 1;
   const t0 = Date.now();
-  await b.getByTestId("join-room").click();
-  await b.getByTestId("room-code-input").fill(code);
-  await b.getByTestId("join-submit").click();
+  await b.goto(`/?join=${code}&team=${hostTeam}`);
   await expect(b.getByTestId("room-code")).toHaveText(code, { timeout: 45_000 });
   console.log(`[hostmode] join took ${Date.now() - t0} ms`);
-  await expect(a.getByTestId("lobby-players")).toContainText("Bravo");
-  await expect(b.getByTestId("lobby-players")).toContainText("Alpha");
+  await expect(a.getByTestId(`team-${hostTeam}`)).toContainText("Bravo");
+  await expect(b.getByTestId(`team-${hostTeam}`)).toContainText("Alpha");
   await expect(b.getByTestId("host-hint")).toHaveCount(0);
+  // The guest moves to the other team (validated by the host).
+  await b.getByTestId(`join-team-${otherTeam}`).click();
+  await expect(a.getByTestId(`team-${otherTeam}`)).toContainText("Bravo");
 
   await b.getByTestId("ready-toggle").click();
   await expect(a.getByTestId("start-match")).toBeEnabled();

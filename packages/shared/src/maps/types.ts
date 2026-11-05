@@ -85,6 +85,11 @@ export interface MapDef {
   decor: readonly DecorDef[];
   lights: readonly LightDef[];
   spawns: readonly Vec2[];
+  /**
+   * Team modes: spawn points per team. Optional: maps authored as a mirrored half use the authored
+   * spawns for Alpha and their mirror images for Bravo (see teamSpawns), balanced by construction.
+   */
+  teamSpawns?: { 1: readonly Vec2[]; 2: readonly Vec2[] };
   pickups: readonly PickupDef[];
 }
 
@@ -118,4 +123,15 @@ export function withMirrorPoints<T extends Vec2>(
 
 export function withMirrorPickups(items: readonly PickupDef[], width: number, height: number): PickupDef[] {
   return withMirrorPoints(items, width, height, (p) => ({ ...p, id: `${p.id}-m` }));
+}
+
+/**
+ * Spawn points of a team. Without explicit `teamSpawns`, the first half of `spawns` (the authored
+ * half of a mirrored map) belongs to Alpha and the mirrored half to Bravo.
+ */
+export function teamSpawns(map: Pick<MapDef, "spawns" | "teamSpawns">, team: number): readonly Vec2[] {
+  if (team !== 1 && team !== 2) return map.spawns;
+  if (map.teamSpawns) return map.teamSpawns[team];
+  const half = Math.floor(map.spawns.length / 2);
+  return team === 1 ? map.spawns.slice(0, half) : map.spawns.slice(half);
 }

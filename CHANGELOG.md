@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.0 — 2026-11-05 (SCRAPLINE 2.0, phases 0–1: verification and Team Deathmatch)
+
+Plan, feasibility and acceptance criteria for 2.0: `docs/v2/ROADMAP.md`.
+
+### Added
+- **Team Deathmatch**: Alpha vs Bravo, default 2v2 / 5 min / 15 points / no friendly fire;
+  configurable 1v1–4v4, length, score limit, friendly fire. Team spawns on each team's half,
+  team score and end by score or time (draws possible), Team victory XP for the winning team,
+  same teams for the rematch. Shots pass through teammates when friendly fire is off.
+- Lobby: mode selector, team columns with join buttons, team size and friendly fire settings,
+  "Balance teams by level" (host), "Invite to <team>" links (`?join=CODE&team=N`).
+- Quick match per mode on the dedicated server (Team Deathmatch 2v2 button).
+- In game: team colors on player markers and name tags, team scores at the top, kill feed and
+  scoreboard by team; results show the team result.
+- `apps/server/src/rules/MatchRules.ts`: mode/team rules shared by the dedicated room and the
+  host-mode room.
+- Tests: team rules (14), TDM over real sockets (3), host-mode TDM (2), host-mode netcode at
+  120 ms RTT (1), two-browser TDM E2E; host-mode E2E extended to TDM and invite links.
+
+### Fixed
+- Invite links (`?join=CODE`) put the player back in the menu right after joining (server mode)
+  or with an expired seat (host mode): clearing the invite re-ran the startup effect, which
+  "resumed" the room just joined by leaving it first. Present since v0.1.0.
+
 ## 0.2.0 — 2026-11-05 (host mode)
 
 ### Added

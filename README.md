@@ -13,6 +13,8 @@ prediction, persistent XP/levels/stats and private rooms you can share with a li
 | Gameplay (movement, dash, aim, 5 weapons, pickups, health, respawn) | Done, unit-tested |
 | Authoritative multiplayer (prediction, reconciliation, interpolation, lag compensation) | Done; audited under 0–250 ms RTT, jitter, stalls, drops and page reloads (netcode matrix + 2-browser E2E) |
 | Deathmatch flow (countdown, timer, kill limit, kill feed, scoreboard, results, rematch) | Done |
+| Team Deathmatch (Alpha/Bravo, 1v1–4v4, default 2v2), team lobby, invite to team, balance | Done (v0.3.0), unit + integration + two-browser E2E on both transports |
+| SCRAPLINE 2.0 (vehicles, helicopters, new maps and modes, level 50) | Planned: [docs/v2/ROADMAP.md](docs/v2/ROADMAP.md) (phases 0–1 done) |
 | Maps: Industrial Arena, Neon District, Desert Outpost | Done, validated (spawns, reachability, symmetry) |
 | Lobby: quick match, room browser, private rooms with code/link, ready, host controls, kick | Done |
 | Guest identity (signed tokens), XP, levels 1–20, cosmetic unlocks, career stats, leaderboard | Done, persisted in PostgreSQL (tested against a real database) |
