@@ -1,3 +1,4 @@
+import type { CareerStats } from "../config/career.ts";
 /** Shapes returned by the HTTP API (apps/server/src/api). */
 
 export interface PublicProfile {
@@ -22,6 +23,8 @@ export interface PlayerStats {
   shotsFired: number;
   shotsHit: number;
   playtimeSec: number;
+  /** Per-mode stats, objective counters and daily challenges (absent on old records). */
+  career?: CareerStats;
 }
 
 export interface GuestSessionResponse {

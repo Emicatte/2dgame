@@ -1,14 +1,19 @@
 import {
   accuracy,
+  challengeViews,
+  emptyCareer,
+  GAME_MODES,
   isMapId,
   kdRatio,
   type LeaderboardEntry,
   MAPS,
   MAX_LEVEL,
   MODE_NAMES,
+  type PlayerStats,
   PRIMARY_WEAPONS,
   type RoomListing,
   SKINS,
+  titleForLevel,
   WEAPONS,
   type WeaponId,
 } from "@scrapline/shared";
@@ -293,6 +298,9 @@ export function Profile({ onBack }: { onBack: () => void }) {
             <div className="row" style={{ flexWrap: "wrap", gap: 16 }}>
               <LevelChip level={profile.level} />
               <strong style={{ fontSize: 24 }}>{profile.nickname}</strong>
+              <span className="badge" data-testid="rank-title">
+                {titleForLevel(profile.level)}
+              </span>
               <span className="spacer" />
               <span className="mono">
                 {profile.level >= MAX_LEVEL
@@ -321,6 +329,42 @@ export function Profile({ onBack }: { onBack: () => void }) {
               ))}
             </div>
           </Panel>
+          <Panel title="Daily challenges">
+            <ChallengeList career={s.career} />
+          </Panel>
+          {s.career && Object.keys(s.career.modes).length > 0 && (
+            <Panel title="By mode">
+              <table className="mode-stats">
+                <thead>
+                  <tr>
+                    <th scope="col">Mode</th>
+                    <th scope="col">Played</th>
+                    <th scope="col">Wins</th>
+                    <th scope="col">Elims</th>
+                    <th scope="col">K/D</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {GAME_MODES.filter((m) => s.career?.modes[m]).map((m) => {
+                    const ms = s.career!.modes[m]!;
+                    return (
+                      <tr key={m}>
+                        <th scope="row">{MODE_NAMES[m]}</th>
+                        <td className="mono">{ms.played}</td>
+                        <td className="mono">{ms.wins}</td>
+                        <td className="mono">{ms.kills}</td>
+                        <td className="mono">{kdRatio(ms.kills, ms.deaths).toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <p className="field__hint">
+                Points captured {s.career.captures} · Flags captured {s.career.flagCaptures} · Flags returned{" "}
+                {s.career.flagReturns} · Vehicles wrecked {s.career.vehicleKills}
+              </p>
+            </Panel>
+          )}
           <Panel title="Callsign">
             <div className="row">
               <input
@@ -338,6 +382,44 @@ export function Profile({ onBack }: { onBack: () => void }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Today's three challenges with progress (they change every day at 00:00 UTC). */
+export function ChallengeList({
+  career,
+  compact = false,
+}: {
+  career: PlayerStats["career"];
+  compact?: boolean;
+}) {
+  const list = challengeViews(career ?? emptyCareer(), new Date());
+  return (
+    <ul className={`challenges ${compact ? "challenges--compact" : ""}`} data-testid="challenges">
+      {list.map((c) => (
+        <li key={c.id} className={c.done ? "is-done" : ""}>
+          <div className="challenges__row">
+            <span>
+              {c.done && <span aria-hidden="true">✓ </span>}
+              {c.text}
+            </span>
+            <span className="mono">
+              {c.done ? "Done" : `${c.progress}/${c.target}`} · +{c.xp} XP
+            </span>
+          </div>
+          <div
+            className="progress"
+            role="progressbar"
+            aria-label={c.text}
+            aria-valuemin={0}
+            aria-valuemax={c.target}
+            aria-valuenow={c.progress}
+          >
+            <span className="progress__fill" style={{ width: `${(c.progress / c.target) * 100}%` }} />
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 

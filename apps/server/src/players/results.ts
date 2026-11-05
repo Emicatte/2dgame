@@ -3,7 +3,8 @@ import {
   levelFromXp,
   type PersonalResult,
   type ResultRow,
-  rewardsForLevel,
+  unlocksForLevel,
+  type XpLine,
 } from "@scrapline/shared";
 import type { MatchPlayerResult } from "../persistence/repository.ts";
 import type { ServerPlayer } from "../simulation/GameSimulation.ts";
@@ -50,6 +51,10 @@ export function computeResults(
       bestStreak: p.stats.bestStreak,
       shotsFired: p.stats.shotsFired,
       shotsHit: p.stats.shotsHit,
+      captures: p.stats.captures,
+      flagCaptures: p.stats.flagCaptures,
+      flagReturns: p.stats.returns,
+      vehicleKills: p.stats.vehicleKills,
     });
     return {
       player: p,
@@ -68,6 +73,10 @@ export function computeResults(
         shotsFired: p.stats.shotsFired,
         shotsHit: p.stats.shotsHit,
         playtimeSec: Math.round(p.stats.activeTicks / opts.tickRate),
+        captures: p.stats.captures,
+        flagCaptures: p.stats.flagCaptures,
+        flagReturns: p.stats.returns,
+        vehicleKills: p.stats.vehicleKills,
       },
     };
   });
@@ -88,19 +97,19 @@ export function resultRows(results: readonly ComputedResult[]): ResultRow[] {
 export function personalResult(
   r: ComputedResult,
   before: { xp: number } | null,
-  after: { xp: number; level: number } | null,
+  after: { xp: number; level: number; challengeRewards?: XpLine[] } | null,
 ): PersonalResult {
   const levelBefore = before ? levelFromXp(before.xp).level : null;
   const leveledUp = !!(after && levelBefore !== null && after.level > levelBefore);
   const unlocked: string[] = [];
   if (after && levelBefore !== null) {
-    for (let l = levelBefore + 1; l <= after.level; l++)
-      unlocked.push(...rewardsForLevel(l).map((s) => s.name));
+    for (let l = levelBefore + 1; l <= after.level; l++) unlocked.push(...unlocksForLevel(l));
   }
+  const challenges = after?.challengeRewards ?? [];
   return {
     placement: r.placement,
-    xpGained: r.xp.total,
-    xpLines: r.xp.lines,
+    xpGained: r.xp.total + challenges.reduce((sum, l) => sum + l.xp, 0),
+    xpLines: [...r.xp.lines, ...challenges],
     totalXp: after?.xp ?? null,
     level: after?.level ?? null,
     leveledUp,

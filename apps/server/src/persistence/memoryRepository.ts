@@ -1,8 +1,15 @@
-import { kdRatio, type LeaderboardEntry, levelFromXp } from "@scrapline/shared";
+import {
+  applyMatchToCareer,
+  kdRatio,
+  type LeaderboardEntry,
+  levelFromXp,
+  normalizeCareer,
+} from "@scrapline/shared";
 import {
   emptyStats,
   type LeaderboardSort,
   type MatchRecord,
+  matchFacts,
   type PlayerRecord,
   type Repository,
 } from "./repository.ts";
@@ -56,7 +63,13 @@ export class MemoryRepository implements Repository {
     for (const r of match.players) {
       const p = this.players.get(r.playerId);
       if (!p) continue;
-      p.xp += r.xpGained;
+      const { career, rewards } = applyMatchToCareer(
+        normalizeCareer(p.stats.career),
+        matchFacts(r, match.mode),
+        match.endedAt,
+      );
+      p.stats.career = career;
+      p.xp += r.xpGained + rewards.reduce((sum, l) => sum + l.xp, 0);
       p.level = levelFromXp(p.xp).level;
       p.stats.matchesPlayed += 1;
       if (r.won) p.stats.wins += 1;
@@ -66,7 +79,7 @@ export class MemoryRepository implements Repository {
       p.stats.shotsFired += r.shotsFired;
       p.stats.shotsHit += r.shotsHit;
       p.stats.playtimeSec += r.playtimeSec;
-      out.set(p.id, structuredClone(p));
+      out.set(p.id, { ...structuredClone(p), challengeRewards: rewards });
     }
     return out;
   }

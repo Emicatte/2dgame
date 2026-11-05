@@ -36,6 +36,7 @@ import {
   VEHICLE_KINDS,
   type VehicleKind,
   type WeaponId,
+  type XpLine,
 } from "@scrapline/shared";
 import { z } from "zod";
 import { uniqueRoomCode } from "../matchmaking/roomCodes.ts";
@@ -743,7 +744,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       ...this.leavers.map((l) => l.persist),
     ];
     const before = new Map<string, { xp: number }>();
-    let updated = new Map<string, { xp: number; level: number }>();
+    let updated = new Map<string, { xp: number; level: number; challengeRewards?: XpLine[] }>();
     try {
       for (const r of results) {
         const rec = await repo.getPlayer(r.player.playerId);

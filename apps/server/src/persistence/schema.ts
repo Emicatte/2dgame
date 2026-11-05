@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -27,6 +28,8 @@ export const players = pgTable(
     playtimeSec: integer("playtime_sec").notNull().default(0),
     skin: varchar("skin", { length: 32 }).notNull().default("foundry"),
     primaryWeapon: varchar("primary_weapon", { length: 16 }).notNull().default("rifle"),
+    /** Per-mode stats, objective counters and daily challenges (CareerStats, validated on read). */
+    career: jsonb("career").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
   },

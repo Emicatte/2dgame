@@ -1,0 +1,1 @@
+ALTER TABLE "players" ADD COLUMN "career" jsonb DEFAULT '{}'::jsonb NOT NULL;

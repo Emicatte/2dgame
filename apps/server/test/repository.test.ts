@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { dailyChallenges, utcDay } from "@scrapline/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MemoryRepository } from "../src/persistence/memoryRepository.ts";
 import { runMigrations } from "../src/persistence/migrate.ts";
 import { PgRepository } from "../src/persistence/pgRepository.ts";
 import { pgConnectionOptions } from "../src/persistence/pgSsl.ts";
-import type { MatchPlayerResult, Repository } from "../src/persistence/repository.ts";
+import { type MatchPlayerResult, matchFacts, type Repository } from "../src/persistence/repository.ts";
 
 /**
  * The same contract runs against the in-memory store and, when TEST_DATABASE_URL is set,
@@ -24,6 +25,10 @@ function result(playerId: string, partial: Partial<MatchPlayerResult>): MatchPla
     shotsFired: 0,
     shotsHit: 0,
     playtimeSec: 0,
+    captures: 0,
+    flagCaptures: 0,
+    flagReturns: 0,
+    vehicleKills: 0,
     ...partial,
   };
 }
@@ -113,6 +118,57 @@ function contract(name: string, make: () => Promise<Repository>, cleanup: (r: Re
       expect(w?.xp).toBe(500);
       const l = await repo.getPlayer(loser);
       expect(l?.stats).toMatchObject({ matchesPlayed: 2, wins: 1, losses: 1, kills: 4, deaths: 7 });
+    });
+
+    it("keeps per-mode career stats and pays daily challenges once", async () => {
+      const id = randomUUID();
+      await repo.createPlayer(id, "Career");
+      const day = new Date("2026-11-05T12:00:00Z");
+      const active = dailyChallenges(utcDay(day));
+      const match = (mode: string) => ({
+        id: randomUUID(),
+        roomId: "room",
+        mapId: "urban",
+        mode,
+        roomKind: "private",
+        startedAt: new Date(day.getTime() - 300_000),
+        endedAt: day,
+        winnerPlayerId: id,
+        endReason: "score",
+        players: [
+          result(id, {
+            kills: 50,
+            deaths: 2,
+            xpGained: 500,
+            won: true,
+            captures: 10,
+            flagCaptures: 5,
+            flagReturns: 5,
+            vehicleKills: 5,
+          }),
+        ],
+      });
+      const first = (await repo.recordMatch(match("mayhem"))).get(id)!;
+      const paid = first.challengeRewards ?? [];
+      const oneMatch = active.filter(
+        (c) => c.count(matchFacts(match("mayhem").players[0]!, "mayhem")) >= c.target,
+      );
+      expect(paid.map((l) => l.reason)).toEqual(oneMatch.map((c) => `Challenge: ${c.text}`));
+      expect(first.xp).toBe(500 + paid.reduce((sum, l) => sum + l.xp, 0));
+      expect(first.stats.career?.modes.mayhem).toEqual({ played: 1, wins: 1, kills: 50, deaths: 2 });
+      expect(first.stats.career).toMatchObject({
+        captures: 10,
+        flagCaptures: 5,
+        flagReturns: 5,
+        vehicleKills: 5,
+      });
+      // Same day again: completed challenges are not paid twice.
+      const second = (await repo.recordMatch(match("dom"))).get(id)!;
+      for (const l of second.challengeRewards ?? [])
+        expect(paid.map((p) => p.reason)).not.toContain(l.reason);
+      const stored = await repo.getPlayer(id);
+      expect(stored?.stats.career?.modes.dom?.played).toBe(1);
+      expect(stored?.stats.career?.challenges.day).toBe("2026-11-05");
     });
 
     it("ranks the leaderboard", async () => {

@@ -730,7 +730,7 @@ export class HostRoom {
         winnerId: this.state.winnerId,
         ...team,
         rows,
-        personal: personal(r, practice),
+        personal: personal(r, practice, this.state.mode),
       };
       this.sendTo(r.player.id, S2C.RESULTS, msg);
     }
@@ -905,7 +905,7 @@ export class HostRoom {
   }
 }
 
-function personal(r: ComputedResult, practice: boolean): PersonalResult {
+function personal(r: ComputedResult, practice: boolean, mode: string): PersonalResult {
   return {
     placement: r.placement,
     xpGained: practice ? 0 : r.xp.total,
@@ -926,6 +926,11 @@ function personal(r: ComputedResult, practice: boolean): PersonalResult {
             shotsFired: r.persist.shotsFired,
             shotsHit: r.persist.shotsHit,
             playtimeSec: r.persist.playtimeSec,
+            mode,
+            captures: r.persist.captures,
+            flagCaptures: r.persist.flagCaptures,
+            flagReturns: r.persist.flagReturns,
+            vehicleKills: r.persist.vehicleKills,
           },
         }),
   };

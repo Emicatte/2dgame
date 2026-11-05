@@ -158,6 +158,12 @@ export interface PersonalResult {
     shotsFired: number;
     shotsHit: number;
     playtimeSec: number;
+    /** Mode and objective counters (career stats, daily challenges). */
+    mode?: string;
+    captures?: number;
+    flagCaptures?: number;
+    flagReturns?: number;
+    vehicleKills?: number;
   };
 }
 

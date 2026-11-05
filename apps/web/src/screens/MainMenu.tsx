@@ -1,4 +1,4 @@
-import { GAME_TITLE, type GameMode, MAP_IDS, MAPS, type MapId } from "@scrapline/shared";
+import { GAME_TITLE, type GameMode, MAP_IDS, MAPS, type MapId, titleForLevel } from "@scrapline/shared";
 import { type FormEvent, useState } from "react";
 import { Button, LevelChip } from "../components/ui.tsx";
 import { useStore } from "../lib/store.ts";
@@ -57,6 +57,7 @@ export function MainMenu({
           <button type="button" className="profile-strip" onClick={() => onNavigate("profile")}>
             <LevelChip level={profile.level} />
             <span className="profile-strip__name">{profile.nickname}</span>
+            <span className="profile-strip__rank">{titleForLevel(profile.level)}</span>
             <span className="spacer" />
             <span
               className="progress"
@@ -144,7 +145,7 @@ export function MainMenu({
           </p>
         )}
         <footer className="menu__footer">
-          <span>WASD move · Mouse aim · Click fire · Shift dash</span>
+          <span>WASD move · Mouse aim · Click fire · Shift dash · E vehicle · F seat</span>
         </footer>
       </div>
     </div>

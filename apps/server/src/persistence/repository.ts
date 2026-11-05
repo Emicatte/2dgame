@@ -1,4 +1,4 @@
-import type { LeaderboardEntry, PlayerStats } from "@scrapline/shared";
+import type { LeaderboardEntry, MatchFacts, PlayerStats, XpLine } from "@scrapline/shared";
 
 export interface PlayerRecord {
   id: string;
@@ -9,6 +9,8 @@ export interface PlayerRecord {
   skin: string;
   primary: string;
   createdAt: Date;
+  /** Set by recordMatch: daily challenges this match completed (their XP is already in `xp`). */
+  challengeRewards?: XpLine[];
 }
 
 /** Everything one player contributes to one finished (or abandoned) match. */
@@ -23,6 +25,26 @@ export interface MatchPlayerResult {
   shotsFired: number;
   shotsHit: number;
   playtimeSec: number;
+  /** Objective play and vehicles (career stats and challenges). */
+  captures: number;
+  flagCaptures: number;
+  flagReturns: number;
+  vehicleKills: number;
+}
+
+/** The facts the career and the daily challenges are computed from. */
+export function matchFacts(r: MatchPlayerResult, mode: string): MatchFacts {
+  return {
+    mode,
+    completed: r.completed,
+    won: r.won,
+    kills: r.kills,
+    deaths: r.deaths,
+    captures: r.captures,
+    flagCaptures: r.flagCaptures,
+    flagReturns: r.flagReturns,
+    vehicleKills: r.vehicleKills,
+  };
 }
 
 export interface MatchRecord {

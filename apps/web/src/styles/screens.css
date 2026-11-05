@@ -1185,3 +1185,64 @@
   font-weight: 600;
   font-size: 14px;
 }
+
+/* ---------------------------------------------------------------- career */
+
+.challenges {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.challenges__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.challenges__row .mono {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.challenges li.is-done .challenges__row span:first-child {
+  color: var(--good);
+}
+
+.challenges--compact .challenges__row {
+  font-size: 13px;
+}
+
+.mode-stats {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.mode-stats th,
+.mode-stats td {
+  padding: 6px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+}
+
+.mode-stats th[scope="row"],
+.mode-stats thead th:first-child {
+  text-align: left;
+}
+
+.mode-stats td {
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-strip__rank {
+  color: var(--text-2);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}

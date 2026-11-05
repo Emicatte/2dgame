@@ -34,6 +34,16 @@ export interface Hooks {
   }[];
   mount(): { vehicle: string; seat: number } | null;
   enterTarget(): string | null;
+  objectives(): {
+    id: string;
+    kind: string;
+    team: number;
+    x: number;
+    y: number;
+    carrier: string;
+    home: boolean;
+  }[];
+  flagStand(team: 1 | 2): { x: number; y: number };
   renderedVehicle(id: string): { x: number; y: number; angle: number; alt: number } | null;
 }
 

@@ -3,14 +3,17 @@
  * browser's localStorage. Same shapes as the server profile, so the menus render it unchanged.
  */
 import {
+  applyMatchToCareer,
+  type CareerStats,
   DEFAULT_PRIMARY,
   DEFAULT_SKIN,
   isWeaponId,
   levelFromXp,
+  normalizeCareer,
   type PersonalResult,
   type PlayerStats,
   type PublicProfile,
-  rewardsForLevel,
+  unlocksForLevel,
 } from "@scrapline/shared";
 
 const KEY = "scrapline.localProfile.v1";
@@ -24,6 +27,7 @@ export interface LocalProfileData {
   primary: string;
   createdAt: string;
   stats: PlayerStats;
+  career?: CareerStats;
 }
 
 const emptyStats = (): PlayerStats => ({
@@ -55,6 +59,7 @@ function read(): LocalProfileData | null {
       primary: typeof d.primary === "string" && isWeaponId(d.primary) ? d.primary : DEFAULT_PRIMARY,
       createdAt: typeof d.createdAt === "string" ? d.createdAt : new Date().toISOString(),
       stats: { ...emptyStats(), ...(d.stats ?? {}) },
+      career: normalizeCareer(d.career),
     };
   } catch {
     return memoryCopy;
@@ -85,7 +90,7 @@ export function toPublic(d: LocalProfileData): PublicProfile {
     xp: d.xp,
     xpIntoLevel: lp.xpIntoLevel,
     xpForNext: lp.xpForNext,
-    stats: { ...d.stats },
+    stats: { ...d.stats, career: normalizeCareer(d.career) },
     skin: d.skin,
     primary: d.primary,
     createdAt: d.createdAt,
@@ -129,7 +134,23 @@ export const localProfile = {
     const rec = personal.record;
     if (!d || !rec || personal.practice) return personal;
     const before = levelFromXp(d.xp).level;
-    const xp = d.xp + Math.max(0, Math.floor(personal.xpGained));
+    const { career, rewards } = applyMatchToCareer(
+      normalizeCareer(d.career),
+      {
+        mode: rec.mode ?? "deathmatch",
+        completed: rec.completed,
+        won: rec.won,
+        kills: rec.kills,
+        deaths: rec.deaths,
+        captures: rec.captures ?? 0,
+        flagCaptures: rec.flagCaptures ?? 0,
+        flagReturns: rec.flagReturns ?? 0,
+        vehicleKills: rec.vehicleKills ?? 0,
+      },
+      new Date(),
+    );
+    const bonus = rewards.reduce((sum, l) => sum + l.xp, 0);
+    const xp = d.xp + Math.max(0, Math.floor(personal.xpGained)) + bonus;
     const s = d.stats;
     const stats: PlayerStats = {
       matchesPlayed: s.matchesPlayed + (rec.completed ? 1 : 0),
@@ -141,10 +162,19 @@ export const localProfile = {
       shotsHit: s.shotsHit + rec.shotsHit,
       playtimeSec: s.playtimeSec + rec.playtimeSec,
     };
-    write({ ...d, xp, stats });
+    write({ ...d, xp, stats, career });
     const after = levelFromXp(xp).level;
     const unlocked: string[] = [];
-    for (let l = before + 1; l <= after; l++) unlocked.push(...rewardsForLevel(l).map((r) => r.name));
-    return { ...personal, totalXp: xp, level: after, leveledUp: after > before, unlocked, persisted: true };
+    for (let l = before + 1; l <= after; l++) unlocked.push(...unlocksForLevel(l));
+    return {
+      ...personal,
+      xpGained: personal.xpGained + bonus,
+      xpLines: [...personal.xpLines, ...rewards],
+      totalXp: xp,
+      level: after,
+      leveledUp: after > before,
+      unlocked,
+      persisted: true,
+    };
   },
 };

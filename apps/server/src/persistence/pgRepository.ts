@@ -1,9 +1,21 @@
-import { kdRatio, type LeaderboardEntry, levelFromXp } from "@scrapline/shared";
+import {
+  applyMatchToCareer,
+  kdRatio,
+  type LeaderboardEntry,
+  levelFromXp,
+  normalizeCareer,
+} from "@scrapline/shared";
 import { desc, eq, gt, sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import type { PgConnectionOptions } from "./pgSsl.ts";
-import type { LeaderboardSort, MatchRecord, PlayerRecord, Repository } from "./repository.ts";
+import {
+  type LeaderboardSort,
+  type MatchRecord,
+  matchFacts,
+  type PlayerRecord,
+  type Repository,
+} from "./repository.ts";
 import * as schema from "./schema.ts";
 import { matches, matchPlayers, players } from "./schema.ts";
 
@@ -27,6 +39,7 @@ function toRecord(r: Row): PlayerRecord {
       shotsFired: r.shotsFired,
       shotsHit: r.shotsHit,
       playtimeSec: r.playtimeSec,
+      career: normalizeCareer(r.career),
     },
   };
 }
@@ -133,12 +146,23 @@ export class PgRepository implements Repository {
           .where(eq(players.id, r.playerId))
           .returning();
         if (!row) continue;
+        // The UPDATE above holds the row lock until commit: this read-modify-write of the career
+        // cannot interleave with another match of the same player.
+        const { career, rewards } = applyMatchToCareer(
+          normalizeCareer(row.career),
+          matchFacts(r, match.mode),
+          match.endedAt,
+        );
+        const bonus = rewards.reduce((sum, l) => sum + l.xp, 0);
+        row.xp += bonus;
+        row.career = career;
         const level = levelFromXp(row.xp).level;
-        if (level !== row.level) {
-          await tx.update(players).set({ level }).where(eq(players.id, r.playerId));
-          row.level = level;
-        }
-        updated.set(row.id, toRecord(row));
+        await tx
+          .update(players)
+          .set({ career, level, xp: sql`${players.xp} + ${bonus}` })
+          .where(eq(players.id, r.playerId));
+        row.level = level;
+        updated.set(row.id, { ...toRecord(row), challengeRewards: rewards });
       }
       return updated;
     });

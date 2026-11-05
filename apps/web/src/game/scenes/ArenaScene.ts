@@ -270,6 +270,22 @@ export class ArenaScene extends Phaser.Scene {
         return me ? { vehicle: me.vehicle, seat: me.seat } : null;
       },
       enterTarget: () => this.enterTarget?.id ?? null,
+      objectives: () => {
+        const out: {
+          id: string;
+          kind: string;
+          team: number;
+          x: number;
+          y: number;
+          carrier: string;
+          home: boolean;
+        }[] = [];
+        this.room?.state?.objectives.forEach((o, id) => {
+          out.push({ id, kind: o.kind, team: o.team, x: o.x, y: o.y, carrier: o.carrier, home: o.home });
+        });
+        return out;
+      },
+      flagStand: (team: 1 | 2) => objectivesFor(this.map).flags[team],
       renderedVehicle: (id: string) => {
         const p = this.vehiclePoses.get(id);
         return p ? { x: p.x, y: p.y, angle: p.angle, alt: p.alt } : null;
@@ -1526,7 +1542,7 @@ export class ArenaScene extends Phaser.Scene {
     }
     const weapon = this.predictor.mount ? null : this.nearbyWeaponPickup();
     const interact = this.enterTarget
-      ? `Enter ${this.enterTarget.def.name} · ${this.enterTarget.def.seats[this.enterTarget.seat]!.role}`
+      ? `Enter ${this.enterTarget.def.name} as ${this.enterTarget.def.seats[this.enterTarget.seat]!.role}`
       : (this.enterBlocked ?? (weapon ? `Take ${weapon}` : null));
     const killerName = this.killedBy ? (state.players.get(this.killedBy)?.name ?? "someone") : null;
     const keySlots = ["1", "2", "3"];
