@@ -45,6 +45,11 @@
   letter-spacing: 0;
 }
 
+.menu__nav .btn--primary kbd {
+  color: var(--accent-ink);
+  opacity: 0.75;
+}
+
 .menu__row {
   display: grid;
   grid-template-columns: 1fr 1fr;
