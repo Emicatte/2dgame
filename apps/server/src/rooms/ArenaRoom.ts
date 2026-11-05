@@ -90,6 +90,8 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   private matchStartPlayers = 0;
   private lastActivityTick = 0;
   private persisting = false;
+  /** Tick cost and interval statistics (ms), exposed on /api/debug/rooms. */
+  private tickStats = { count: 0, total: 0, max: 0, maxInterval: 0 };
   /** Training targets present while a private room has a single human (solo practice). */
   private readonly bots = new Set<string>();
   private practiceMatch = false;
@@ -131,6 +133,11 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       const elapsed = now - last;
       last = now;
       this.onTick(elapsed);
+      const cost = performance.now() - now;
+      this.tickStats.count += 1;
+      this.tickStats.total += cost;
+      this.tickStats.max = Math.max(this.tickStats.max, cost);
+      this.tickStats.maxInterval = Math.max(this.tickStats.maxInterval, elapsed);
     }, SERVER_TICK_MS);
 
     this.onMessage(C2S.INPUT, inputBatchSchema, (client, msg) => this.handleInput(client, msg));
@@ -285,6 +292,11 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       code: this.code,
       phase: this.state.phase,
       tick: this.sim.tick,
+      tickCostMs: {
+        avg: this.tickStats.count ? Math.round((this.tickStats.total / this.tickStats.count) * 1000) / 1000 : 0,
+        max: Math.round(this.tickStats.max * 1000) / 1000,
+        maxIntervalMs: Math.round(this.tickStats.maxInterval * 10) / 10,
+      },
       players: [...this.sim.players.values()].map((p) => ({
         id: p.id,
         name: p.name,

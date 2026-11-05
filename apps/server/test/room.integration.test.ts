@@ -99,6 +99,27 @@ describe("HTTP security", () => {
   });
 });
 
+describe("Quick match", () => {
+  it("puts players in the same public room and auto-starts when everybody is ready", async () => {
+    const g1 = await guest("Quick1");
+    const g2 = await guest("Quick2");
+    const r1 = await new Client(URL).joinOrCreate(ROOM_NAME, { token: g1.token, kind: "quick" }, MatchState);
+    const r2 = await new Client(URL).joinOrCreate(ROOM_NAME, { token: g2.token, kind: "quick" }, MatchState);
+    expect(r2.roomId).toBe(r1.roomId);
+    // Public quick rooms are listed for the room browser.
+    const list = (await (await fetch(`${URL}/api/rooms`)).json()) as { roomId: string; players: number }[];
+    expect(list.find((r) => r.roomId === r1.roomId)?.players).toBe(2);
+    await until(() => r1.state.phaseEndTick > 0, 3000, "auto-start scheduled");
+    r1.send(C2S.READY, { ready: true });
+    r2.send(C2S.READY, { ready: true });
+    await until(() => r1.state.phase === "countdown", 6000, "countdown");
+    // No practice targets in public rooms.
+    expect(r1.state.players.size).toBe(2);
+    await r1.leave();
+    await r2.leave();
+  });
+});
+
 describe("ArenaRoom over real sockets", () => {
   let alpha: GuestSessionResponse;
   let bravo: GuestSessionResponse;

@@ -96,6 +96,26 @@ describe("GameSimulation", () => {
     expect(a.lastProcessedSeq).toBe(3);
   });
 
+  it("does not let a client bank idle time to move faster later", () => {
+    const a = addPlayer(sim, "a");
+    place(a, 1300, ARENA_Y);
+    // Ten seconds without inputs, then a burst of 60.
+    for (let i = 0; i < 200; i++) sim.step(SERVER_TICK_MS, "live");
+    sim.enqueue("a", frames("a", 60, { mx: 1 }));
+    sim.step(SERVER_TICK_MS, "live");
+    // Only the capped bank (0.25 s) plus this tick's 50 ms worth may be consumed.
+    expect(a.lastProcessedSeq).toBeLessThanOrEqual(NET.maxInputCreditSeconds * NET.inputRate + 3);
+  });
+
+  it("catches up after a server stall instead of building a permanent backlog", () => {
+    const a = addPlayer(sim, "a");
+    place(a, 1300, ARENA_Y);
+    sim.enqueue("a", frames("a", 50, { mx: 1 }));
+    // One delayed tick of 800 ms: all 48 inputs that real time allows are processed.
+    sim.step(800, "live");
+    expect(a.lastProcessedSeq).toBe(48);
+  });
+
   it("applies damage on the server and kills, then respawns with protection", () => {
     const a = addPlayer(sim, "a", "sniper");
     const b = addPlayer(sim, "b");
