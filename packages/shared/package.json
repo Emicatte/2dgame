@@ -1,0 +1,23 @@
+{
+  "name": "@scrapline/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Code shared by client and server: config, protocol, deterministic simulation, maps, progression",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "build": "echo \"shared is consumed as TypeScript source and bundled by web and server\""
+  },
+  "dependencies": {
+    "zod": "^4.6.7",
+    "@colyseus/schema": "^5.0.45"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
