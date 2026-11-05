@@ -157,6 +157,30 @@ on the server and in the client's predicted tracer). Team spawns come from `team
 the authored half of a mirrored map for Alpha, its mirror for Bravo. Quick match rooms are
 filtered by `kind` and `mode`.
 
+Objective modes (`dom`, `ctf`) and `mayhem` (2.0) use the same path: the simulation keeps
+Domination points and CTF flags (`points`, `flags`, derived positions from `objectivesFor(map)`),
+`syncObjectives` mirrors them into `MatchState.objectives`, and `MatchRules.mapForMode` keeps
+Vehicle Mayhem on vehicle maps. Rules and numbers: `docs/v2/SYSTEMS.md`.
+
+## Vehicles (2.0)
+
+Vehicles are a second kind of simulated entity in the same tick and the same input pipeline:
+
+- **Model**: `packages/shared/src/sim/vehicle.ts`, stepped once per 60 Hz input frame of the
+  driver (or with neutral input at real-time rate when nobody drives). Vehicles collide as circles
+  on their axis with the existing circle-vs-rectangle resolver; helicopters in the air use a
+  second collision world of tall solids (`airWorldFor`). Bullets use a third view of the map
+  (`shotWorldFor`: water and fences stop movement, not bullets).
+- **Sync**: `MatchState.vehicles` (pose, velocities, rotor/lift state, health, status, occupant
+  per seat), `PlayerState.vehicle/seat`. The driver's prediction (`Predictor.vehicle`) is reset
+  from the vehicle state and replays the pending inputs: the vehicle only advances on the driver's
+  inputs, so its state is exactly the state after the acknowledged input.
+- **Authority**: entering, seat changes, exits, sector checks, damage, run-overs, destruction and
+  respawn are decided by `GameSimulation` only. Shots from seats use the vehicle pose the shooter
+  saw (rewind history includes vehicles). `syncVehicles` is shared by both room implementations.
+- **Client**: `VehicleBuffer` (interpolation), `VehicleView` (procedural sprites, rotor, shadow,
+  smoke), seated players drawn on the rendered hull, vehicle HUD panel.
+
 ## Room lifecycle
 
 `lobby → countdown (5 s, frozen) → playing → results (14 s) → lobby`. Quick rooms auto-start
