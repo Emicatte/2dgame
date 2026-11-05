@@ -145,7 +145,8 @@ export function normalizeCareer(raw: unknown): CareerStats {
       }
     }
     if (Array.isArray(ch.done)) {
-      c.challenges.done = ch.done.filter((id): id is string => CHALLENGE_POOL.some((d) => d.id === id));
+      // Known ids only, each once (a stored list can never grow beyond the pool).
+      c.challenges.done = CHALLENGE_POOL.map((d) => d.id).filter((id) => (ch.done as unknown[]).includes(id));
     }
   }
   return c;

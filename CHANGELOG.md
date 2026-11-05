@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.4.0 — 2026-11-05 (SCRAPLINE 2.0, phases 2–7: vehicles, helicopters, modes, maps, progression)
+
+Systems reference: `docs/v2/SYSTEMS.md`. Phase results and measurements: `docs/v2/ROADMAP.md`.
+
+### Added
+- **Vehicles**: Hatch (car), Rover (off-road), Bulwark APC (light armored, MG turret) and
+  Kestrel (helicopter, chin gun). Shared deterministic model (grip and handbrake drift,
+  speed-dependent steering, multi-circle hull collisions); the driver predicts and reconciles,
+  everybody else interpolates. Health, armor, wall and vehicle-vs-vehicle crashes, destruction
+  with blast damage and credit, burning wrecks, respawn on a clear spot.
+- **Seats**: driver/pilot, gunner, passengers with fire arcs and exposure; E enter/exit, F change
+  seat; atomic seat claims; passengers shoot from moving vehicles (lag-compensated from the seat
+  as they saw it); mounted guns; disconnected occupants leave at once.
+- **Run-overs and collisions**: damage from closing speed along the contact normal, mass and
+  ramming factor; knockback; per-contact cooldown; spawn protection and team rules respected;
+  credit to the driver ("Roadkill" in the kill feed).
+- **Helicopter**: take-off/landing on Shift, rotor spin-up, altitude with shadow, flight over low
+  cover, landing only on a clear footprint, auto-landing without a pilot; ground/air shot layers.
+- **Modes**: Domination, Capture the Flag, Vehicle Mayhem (besides Deathmatch and Team
+  Deathmatch); lobby mode picker with rules, per-mode score limits; objective HUD and markers.
+- **Maps** (9 total): Urban Warfare, Military Airbase, Harbor Conflict, Downtown, Mountain
+  Outpost, Tactical Facility; the three original arenas are unchanged. Water and fences stop
+  movement but not bullets. Large maps render as tiles.
+- **Progression**: level cap 50 (levels 1–20 unchanged), ten new skins and rank titles (cosmetic
+  only), XP for objective play and wrecked vehicles, per-mode career stats, three daily
+  challenges. PostgreSQL migration `0001_career` (one jsonb column).
+- Vehicle HUD panel, entry prompts, engine/rotor sound, explosion/crash/dust effects, camera lead
+  and gentle zoom in vehicles.
+- Tests: vehicle model, vehicles and modes in the simulation, career/progression, repository
+  contract on PostgreSQL 16, host-mode vehicle netcode (120 ms RTT), host load (8 players,
+  6 vehicles), simulated 10-minute soaks, two-browser E2E for car, helicopter, CTF and
+  Domination (server) and car (WebRTC host mode).
+
+### Changed
+- Map textures are registered as plain images (no full pixel read-back) and baked one frame
+  after joining, so the lobby appears before the map is ready.
+
 ## 0.3.0 — 2026-11-05 (SCRAPLINE 2.0, phases 0–1: verification and Team Deathmatch)
 
 Plan, feasibility and acceptance criteria for 2.0: `docs/v2/ROADMAP.md`.

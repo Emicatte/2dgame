@@ -1,0 +1,1915 @@
+[
+  {
+    "scenario": {
+      "name": "rtt0-60fps",
+      "latency": 0,
+      "jitter": 0,
+      "fps": 60,
+      "seconds": 12
+    },
+    "pendingBound": 10,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 785,
+          "sent": 785,
+          "messages": 784,
+          "acked": 788,
+          "pending": 0,
+          "pendingP50": 0,
+          "pendingP95": 1,
+          "pendingMax": 1,
+          "pendingMaxEver": 1,
+          "ackAgeMs": 4,
+          "ackAgeMaxMs": 51,
+          "patches": 262,
+          "patchGapP95Ms": 51,
+          "patchGapMaxMs": 55,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 785,
+          "accepted": 785,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 788,
+          "queueP95": 3,
+          "queueMax": 3,
+          "queueAfterRecovery": 2
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 21,
+          "server": 21
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 785,
+          "sent": 785,
+          "messages": 785,
+          "acked": 787,
+          "pending": 0,
+          "pendingP50": 0,
+          "pendingP95": 1,
+          "pendingMax": 1,
+          "pendingMaxEver": 1,
+          "ackAgeMs": 4,
+          "ackAgeMaxMs": 56,
+          "patches": 262,
+          "patchGapP95Ms": 51,
+          "patchGapMaxMs": 55,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 785,
+          "accepted": 785,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 787,
+          "queueP95": 3,
+          "queueMax": 3,
+          "queueAfterRecovery": 1
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 21,
+          "server": 21
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scenario": {
+      "name": "rtt40-j10-60fps",
+      "latency": 40,
+      "jitter": 10,
+      "fps": 60,
+      "seconds": 12
+    },
+    "pendingBound": 14,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 782,
+          "sent": 782,
+          "messages": 781,
+          "acked": 787,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 4,
+          "pendingMax": 4,
+          "pendingMaxEver": 4,
+          "ackAgeMs": 10,
+          "ackAgeMaxMs": 58,
+          "patches": 262,
+          "patchGapP95Ms": 57,
+          "patchGapMaxMs": 64,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 783,
+          "accepted": 783,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 784,
+          "queueP95": 3,
+          "queueMax": 3,
+          "queueAfterRecovery": 1
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 18,
+          "server": 18
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 782,
+          "sent": 782,
+          "messages": 782,
+          "acked": 787,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 4,
+          "pendingMax": 4,
+          "pendingMaxEver": 4,
+          "ackAgeMs": 8,
+          "ackAgeMaxMs": 59,
+          "patches": 262,
+          "patchGapP95Ms": 56,
+          "patchGapMaxMs": 60,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 784,
+          "accepted": 784,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 784,
+          "queueP95": 3,
+          "queueMax": 3,
+          "queueAfterRecovery": 1
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 18,
+          "server": 18
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scenario": {
+      "name": "rtt120-j30-spikes-60fps",
+      "latency": 120,
+      "jitter": 30,
+      "spikeRate": 0.01,
+      "spike": 150,
+      "fps": 60,
+      "seconds": 15
+    },
+    "pendingBound": 21,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 962,
+          "sent": 962,
+          "messages": 961,
+          "acked": 972,
+          "pending": 0,
+          "pendingP50": 9,
+          "pendingP95": 13,
+          "pendingMax": 19,
+          "pendingMaxEver": 19,
+          "ackAgeMs": 11,
+          "ackAgeMaxMs": 195,
+          "patches": 326,
+          "patchGapP95Ms": 70,
+          "patchGapMaxMs": 195,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 966,
+          "accepted": 966,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 968,
+          "queueP95": 3,
+          "queueMax": 4,
+          "queueAfterRecovery": 0
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 24,
+          "server": 24
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 961,
+          "sent": 961,
+          "messages": 959,
+          "acked": 971,
+          "pending": 0,
+          "pendingP50": 9,
+          "pendingP95": 16,
+          "pendingMax": 19,
+          "pendingMaxEver": 19,
+          "ackAgeMs": 117,
+          "ackAgeMaxMs": 208,
+          "patches": 326,
+          "patchGapP95Ms": 73,
+          "patchGapMaxMs": 205,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 966,
+          "accepted": 966,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 968,
+          "queueP95": 5,
+          "queueMax": 11,
+          "queueAfterRecovery": 0
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 24,
+          "server": 24
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scenario": {
+      "name": "rtt250-j50-60fps",
+      "latency": 250,
+      "jitter": 50,
+      "fps": 60,
+      "seconds": 15
+    },
+    "pendingBound": 31,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 961,
+          "sent": 961,
+          "messages": 959,
+          "acked": 982,
+          "pending": 0,
+          "pendingP50": 18,
+          "pendingP95": 20,
+          "pendingMax": 21,
+          "pendingMaxEver": 21,
+          "ackAgeMs": 39,
+          "ackAgeMaxMs": 90,
+          "patches": 326,
+          "patchGapP95Ms": 85,
+          "patchGapMaxMs": 99,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 968,
+          "accepted": 968,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 974,
+          "queueP95": 4,
+          "queueMax": 6,
+          "queueAfterRecovery": 1
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 24,
+          "server": 24
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 962,
+          "sent": 962,
+          "messages": 962,
+          "acked": 984,
+          "pending": 0,
+          "pendingP50": 18,
+          "pendingP95": 20,
+          "pendingMax": 21,
+          "pendingMaxEver": 21,
+          "ackAgeMs": 2,
+          "ackAgeMaxMs": 92,
+          "patches": 327,
+          "patchGapP95Ms": 82,
+          "patchGapMaxMs": 92,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 972,
+          "accepted": 972,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 974,
+          "queueP95": 3,
+          "queueMax": 4,
+          "queueAfterRecovery": 2
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 24,
+          "server": 24
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scenario": {
+      "name": "rtt0-13fps",
+      "latency": 0,
+      "jitter": 0,
+      "fps": 13,
+      "seconds": 12
+    },
+    "pendingBound": 18,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 786,
+          "sent": 786,
+          "messages": 172,
+          "acked": 790,
+          "pending": 0,
+          "pendingP50": 0,
+          "pendingP95": 0,
+          "pendingMax": 5,
+          "pendingMaxEver": 5,
+          "ackAgeMs": 6,
+          "ackAgeMaxMs": 74,
+          "patches": 262,
+          "patchGapP95Ms": 51,
+          "patchGapMaxMs": 52,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 786,
+          "accepted": 786,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 790,
+          "queueP95": 5,
+          "queueMax": 5,
+          "queueAfterRecovery": 0
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 21,
+          "server": 21
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 786,
+          "sent": 786,
+          "messages": 172,
+          "acked": 790,
+          "pending": 0,
+          "pendingP50": 0,
+          "pendingP95": 0,
+          "pendingMax": 5,
+          "pendingMaxEver": 5,
+          "ackAgeMs": 6,
+          "ackAgeMaxMs": 74,
+          "patches": 262,
+          "patchGapP95Ms": 51,
+          "patchGapMaxMs": 52,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 786,
+          "accepted": 786,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 790,
+          "queueP95": 5,
+          "queueMax": 5,
+          "queueAfterRecovery": 0
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 21,
+          "server": 21
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scenario": {
+      "name": "rtt120-j30-13fps",
+      "latency": 120,
+      "jitter": 30,
+      "fps": 13,
+      "seconds": 15
+    },
+    "pendingBound": 29,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 965,
+          "sent": 965,
+          "messages": 211,
+          "acked": 974,
+          "pending": 0,
+          "pendingP50": 9,
+          "pendingP95": 10,
+          "pendingMax": 14,
+          "pendingMaxEver": 14,
+          "ackAgeMs": 15,
+          "ackAgeMaxMs": 95,
+          "patches": 324,
+          "patchGapP95Ms": 72,
+          "patchGapMaxMs": 77,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 969,
+          "accepted": 969,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 969,
+          "queueP95": 5,
+          "queueMax": 5,
+          "queueAfterRecovery": 0
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 23,
+          "server": 23
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 965,
+          "sent": 965,
+          "messages": 211,
+          "acked": 974,
+          "pending": 0,
+          "pendingP50": 9,
+          "pendingP95": 10,
+          "pendingMax": 14,
+          "pendingMaxEver": 14,
+          "ackAgeMs": 32,
+          "ackAgeMaxMs": 94,
+          "patches": 324,
+          "patchGapP95Ms": 70,
+          "patchGapMaxMs": 79,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 969,
+          "accepted": 969,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 969,
+          "queueP95": 5,
+          "queueMax": 5,
+          "queueAfterRecovery": 0
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 23,
+          "server": 23
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scenario": {
+      "name": "rtt250-j50-13fps",
+      "latency": 250,
+      "jitter": 50,
+      "fps": 13,
+      "seconds": 15
+    },
+    "pendingBound": 39,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 965,
+          "sent": 965,
+          "messages": 211,
+          "acked": 983,
+          "pending": 0,
+          "pendingP50": 18,
+          "pendingP95": 23,
+          "pendingMax": 23,
+          "pendingMaxEver": 23,
+          "ackAgeMs": 15,
+          "ackAgeMaxMs": 183,
+          "patches": 326,
+          "patchGapP95Ms": 85,
+          "patchGapMaxMs": 95,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 974,
+          "accepted": 974,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 974,
+          "queueP95": 5,
+          "queueMax": 5,
+          "queueAfterRecovery": 4
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 18,
+          "server": 18
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 964,
+          "sent": 964,
+          "messages": 211,
+          "acked": 983,
+          "pending": 0,
+          "pendingP50": 18,
+          "pendingP95": 23,
+          "pendingMax": 23,
+          "pendingMaxEver": 23,
+          "ackAgeMs": 14,
+          "ackAgeMaxMs": 166,
+          "patches": 327,
+          "patchGapP95Ms": 84,
+          "patchGapMaxMs": 96,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 974,
+          "accepted": 974,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 974,
+          "queueP95": 5,
+          "queueMax": 5,
+          "queueAfterRecovery": 0
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 18,
+          "server": 18
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scenario": {
+      "name": "stall-up-400ms",
+      "latency": 40,
+      "jitter": 10,
+      "fps": 60,
+      "seconds": 12,
+      "stall": {
+        "atSec": 4,
+        "ms": 400,
+        "dir": "up"
+      }
+    },
+    "pendingBound": 14,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 784,
+          "sent": 784,
+          "messages": 783,
+          "acked": 787,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 6,
+          "pendingMax": 24,
+          "pendingMaxEver": 24,
+          "ackAgeMs": 3,
+          "ackAgeMaxMs": 399,
+          "patches": 262,
+          "patchGapP95Ms": 57,
+          "patchGapMaxMs": 60,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 786,
+          "accepted": 786,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 787,
+          "queueP95": 3,
+          "queueMax": 20,
+          "queueAfterRecovery": 2
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 7,
+          "server": 7
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 160,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 783,
+          "sent": 783,
+          "messages": 782,
+          "acked": 787,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 7,
+          "pendingMax": 24,
+          "pendingMaxEver": 24,
+          "ackAgeMs": 2,
+          "ackAgeMaxMs": 399,
+          "patches": 262,
+          "patchGapP95Ms": 57,
+          "patchGapMaxMs": 60,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 785,
+          "accepted": 785,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 787,
+          "queueP95": 3,
+          "queueMax": 20,
+          "queueAfterRecovery": 2
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 7,
+          "server": 7
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 160,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scenario": {
+      "name": "stall-up-1000ms",
+      "latency": 40,
+      "jitter": 10,
+      "fps": 60,
+      "seconds": 14,
+      "stall": {
+        "atSec": 4,
+        "ms": 1000,
+        "dir": "up"
+      }
+    },
+    "pendingBound": 14,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 887,
+          "sent": 887,
+          "messages": 887,
+          "acked": 891,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 4,
+          "pendingMax": 34,
+          "pendingMaxEver": 48,
+          "ackAgeMs": 3,
+          "ackAgeMaxMs": 992,
+          "patches": 302,
+          "patchGapP95Ms": 58,
+          "patchGapMaxMs": 63,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 1,
+          "stallMs": 257,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 889,
+          "accepted": 889,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 891,
+          "queueP95": 3,
+          "queueMax": 19,
+          "queueAfterRecovery": 0
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 7,
+          "server": 7
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 465,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 887,
+          "sent": 887,
+          "messages": 887,
+          "acked": 890,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 4,
+          "pendingMax": 34,
+          "pendingMaxEver": 47,
+          "ackAgeMs": 10,
+          "ackAgeMaxMs": 992,
+          "patches": 302,
+          "patchGapP95Ms": 57,
+          "patchGapMaxMs": 60,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 1,
+          "stallMs": 257,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 889,
+          "accepted": 889,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 890,
+          "queueP95": 3,
+          "queueMax": 17,
+          "queueAfterRecovery": 1
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 7,
+          "server": 7
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 465,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scenario": {
+      "name": "stall-down-1000ms",
+      "latency": 40,
+      "jitter": 10,
+      "fps": 60,
+      "seconds": 12,
+      "stall": {
+        "atSec": 4,
+        "ms": 1000,
+        "dir": "down"
+      }
+    },
+    "pendingBound": 14,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 766,
+          "sent": 766,
+          "messages": 766,
+          "acked": 770,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 15,
+          "pendingMax": 45,
+          "pendingMaxEver": 45,
+          "ackAgeMs": 12,
+          "ackAgeMaxMs": 996,
+          "patches": 262,
+          "patchGapP95Ms": 56,
+          "patchGapMaxMs": 1005,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 1,
+          "stallMs": 258,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 768,
+          "accepted": 768,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 770,
+          "queueP95": 3,
+          "queueMax": 3,
+          "queueAfterRecovery": 1
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 7,
+          "server": 7
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 0,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 767,
+          "sent": 767,
+          "messages": 767,
+          "acked": 771,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 16,
+          "pendingMax": 47,
+          "pendingMaxEver": 47,
+          "ackAgeMs": 15,
+          "ackAgeMaxMs": 990,
+          "patches": 262,
+          "patchGapP95Ms": 57,
+          "patchGapMaxMs": 999,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 1,
+          "stallMs": 241,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 769,
+          "accepted": 769,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 771,
+          "queueP95": 3,
+          "queueMax": 4,
+          "queueAfterRecovery": 2
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 7,
+          "server": 7
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 0,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scenario": {
+      "name": "drop-reconnect",
+      "latency": 40,
+      "jitter": 10,
+      "fps": 60,
+      "seconds": 16,
+      "drop": {
+        "atSec": 4
+      }
+    },
+    "pendingBound": 14,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 1010,
+          "sent": 1010,
+          "messages": 1009,
+          "acked": 1009,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 4,
+          "pendingMax": 4,
+          "pendingMaxEver": 4,
+          "ackAgeMs": 16,
+          "ackAgeMaxMs": 234,
+          "patches": 339,
+          "patchGapP95Ms": 57,
+          "patchGapMaxMs": 64,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 1
+        },
+        "server": {
+          "received": 1010,
+          "accepted": 1010,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 1011,
+          "queueP95": 3,
+          "queueMax": 3,
+          "queueAfterRecovery": 3
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 8,
+          "server": 8
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 0,
+        "drops": 1,
+        "reconnects": 1,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 1009,
+          "sent": 1009,
+          "messages": 1009,
+          "acked": 1008,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 4,
+          "pendingMax": 4,
+          "pendingMaxEver": 4,
+          "ackAgeMs": 17,
+          "ackAgeMaxMs": 230,
+          "patches": 339,
+          "patchGapP95Ms": 57,
+          "patchGapMaxMs": 60,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 1
+        },
+        "server": {
+          "received": 1009,
+          "accepted": 1009,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 1010,
+          "queueP95": 3,
+          "queueMax": 3,
+          "queueAfterRecovery": 2
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 8,
+          "server": 8
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 0,
+        "drops": 1,
+        "reconnects": 1,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scenario": {
+      "name": "reload-reconnect",
+      "latency": 40,
+      "jitter": 10,
+      "fps": 60,
+      "seconds": 16,
+      "reload": {
+        "atSec": 4
+      }
+    },
+    "pendingBound": 14,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 1020,
+          "sent": 1020,
+          "messages": 1018,
+          "acked": 1024,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 4,
+          "pendingMax": 4,
+          "pendingMaxEver": 4,
+          "ackAgeMs": 19,
+          "ackAgeMaxMs": 58,
+          "patches": 341,
+          "patchGapP95Ms": 57,
+          "patchGapMaxMs": 62,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 1022,
+          "accepted": 1022,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 1024,
+          "queueP95": 3,
+          "queueMax": 3,
+          "queueAfterRecovery": 1
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 8,
+          "server": 8
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 0,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 754,
+          "sent": 754,
+          "messages": 750,
+          "acked": 754,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 4,
+          "pendingMax": 4,
+          "pendingMaxEver": 4,
+          "ackAgeMs": 20,
+          "ackAgeMaxMs": 98,
+          "patches": 253,
+          "patchGapP95Ms": 57,
+          "patchGapMaxMs": 60,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 0,
+          "stallMs": 0,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 1
+        },
+        "server": {
+          "received": 996,
+          "accepted": 996,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 999,
+          "queueP95": 3,
+          "queueMax": 3,
+          "queueAfterRecovery": 0
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 8,
+          "server": 8
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 0,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scenario": {
+      "name": "stall-up-1500ms-rtt250",
+      "latency": 250,
+      "jitter": 50,
+      "fps": 60,
+      "seconds": 16,
+      "stall": {
+        "atSec": 4,
+        "ms": 1500,
+        "dir": "up"
+      }
+    },
+    "pendingBound": 31,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 987,
+          "sent": 987,
+          "messages": 985,
+          "acked": 1008,
+          "pending": 0,
+          "pendingP50": 18,
+          "pendingP95": 20,
+          "pendingMax": 22,
+          "pendingMaxEver": 64,
+          "ackAgeMs": 37,
+          "ackAgeMaxMs": 1350,
+          "patches": 348,
+          "patchGapP95Ms": 84,
+          "patchGapMaxMs": 95,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 1,
+          "stallMs": 611,
+          "corrections": 1,
+          "snaps": 0,
+          "correctionP95": 0.02,
+          "correctionMax": 0.02,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 996,
+          "accepted": 996,
+          "duplicate": 0,
+          "overflow": 4,
+          "trimmed": 0,
+          "processed": 995,
+          "queueP95": 4,
+          "queueMax": 27,
+          "queueAfterRecovery": 0
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 8,
+          "server": 8
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 470,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 985,
+          "sent": 985,
+          "messages": 983,
+          "acked": 1003,
+          "pending": 0,
+          "pendingP50": 18,
+          "pendingP95": 20,
+          "pendingMax": 21,
+          "pendingMaxEver": 63,
+          "ackAgeMs": 4,
+          "ackAgeMaxMs": 1384,
+          "patches": 347,
+          "patchGapP95Ms": 82,
+          "patchGapMaxMs": 96,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 1,
+          "stallMs": 643,
+          "corrections": 1,
+          "snaps": 0,
+          "correctionP95": 3.79,
+          "correctionMax": 3.79,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 995,
+          "accepted": 995,
+          "duplicate": 0,
+          "overflow": 3,
+          "trimmed": 0,
+          "processed": 993,
+          "queueP95": 4,
+          "queueMax": 27,
+          "queueAfterRecovery": 1
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 9,
+          "server": 9
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 470,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scenario": {
+      "name": "stall-both-1500ms",
+      "latency": 40,
+      "jitter": 10,
+      "fps": 60,
+      "seconds": 14,
+      "stall": {
+        "atSec": 4,
+        "ms": 1500,
+        "dir": "both"
+      }
+    },
+    "pendingBound": 14,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 858,
+          "sent": 858,
+          "messages": 857,
+          "acked": 863,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 36,
+          "pendingMax": 47,
+          "pendingMaxEver": 47,
+          "ackAgeMs": 13,
+          "ackAgeMaxMs": 1474,
+          "patches": 303,
+          "patchGapP95Ms": 57,
+          "patchGapMaxMs": 60,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 1,
+          "stallMs": 740,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 859,
+          "accepted": 859,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 860,
+          "queueP95": 3,
+          "queueMax": 20,
+          "queueAfterRecovery": 0
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 6,
+          "server": 6
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 560,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 859,
+          "sent": 859,
+          "messages": 859,
+          "acked": 864,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 37,
+          "pendingMax": 47,
+          "pendingMaxEver": 47,
+          "ackAgeMs": 10,
+          "ackAgeMaxMs": 1469,
+          "patches": 303,
+          "patchGapP95Ms": 56,
+          "patchGapMaxMs": 59,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 1,
+          "stallMs": 722,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 860,
+          "accepted": 860,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 861,
+          "queueP95": 3,
+          "queueMax": 22,
+          "queueAfterRecovery": 2
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 7,
+          "server": 7
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 661,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  },
+  {
+    "scenario": {
+      "name": "stall-up-2500ms",
+      "latency": 40,
+      "jitter": 10,
+      "fps": 60,
+      "seconds": 16,
+      "stall": {
+        "atSec": 4,
+        "ms": 2500,
+        "dir": "up"
+      }
+    },
+    "pendingBound": 14,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 917,
+          "sent": 917,
+          "messages": 916,
+          "acked": 921,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 4,
+          "pendingMax": 4,
+          "pendingMaxEver": 50,
+          "ackAgeMs": 22,
+          "ackAgeMaxMs": 2444,
+          "patches": 341,
+          "patchGapP95Ms": 57,
+          "patchGapMaxMs": 60,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 1,
+          "stallMs": 1704,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 919,
+          "accepted": 919,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 921,
+          "queueP95": 3,
+          "queueMax": 30,
+          "queueAfterRecovery": 1
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 8,
+          "server": 8
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 498,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 918,
+          "sent": 918,
+          "messages": 916,
+          "acked": 923,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 4,
+          "pendingMax": 4,
+          "pendingMaxEver": 50,
+          "ackAgeMs": 21,
+          "ackAgeMaxMs": 2437,
+          "patches": 341,
+          "patchGapP95Ms": 57,
+          "patchGapMaxMs": 60,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "stallEvents": 1,
+          "stallMs": 1690,
+          "corrections": 0,
+          "snaps": 0,
+          "correctionP95": 0,
+          "correctionMax": 0,
+          "staleAcks": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 920,
+          "accepted": 920,
+          "duplicate": 0,
+          "overflow": 0,
+          "trimmed": 0,
+          "processed": 923,
+          "queueP95": 3,
+          "queueMax": 31,
+          "queueAfterRecovery": 1
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 7,
+          "server": 7
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 498,
+        "drops": 0,
+        "reconnects": 0,
+        "leftCode": null,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  }
+]

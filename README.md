@@ -1,8 +1,10 @@
 # SCRAPLINE (provisional name)
 
-Top-down 2D multiplayer arena shooter for desktop browsers. Short, readable deathmatches for
-2–8 players on three original maps, five weapon classes, server-authoritative netcode with client
-prediction, persistent XP/levels/stats and private rooms you can share with a link.
+Top-down 2D multiplayer shooter for desktop browsers. 2–8 players on nine original maps, five
+weapon classes, cars, off-roaders, an APC and a helicopter with seats you can shoot from, five
+modes (Deathmatch, Team Deathmatch, Domination, Capture the Flag, Vehicle Mayhem),
+server-authoritative netcode with client prediction, persistent XP to level 50 with cosmetic
+unlocks and daily challenges, and private rooms you can share with a link.
 
 > The name is a working title and has not been checked for trademarks.
 
@@ -14,10 +16,12 @@ prediction, persistent XP/levels/stats and private rooms you can share with a li
 | Authoritative multiplayer (prediction, reconciliation, interpolation, lag compensation) | Done; audited under 0–250 ms RTT, jitter, stalls, drops and page reloads (netcode matrix + 2-browser E2E) |
 | Deathmatch flow (countdown, timer, kill limit, kill feed, scoreboard, results, rematch) | Done |
 | Team Deathmatch (Alpha/Bravo, 1v1–4v4, default 2v2), team lobby, invite to team, balance | Done (v0.3.0), unit + integration + two-browser E2E on both transports |
-| SCRAPLINE 2.0 (vehicles, helicopters, new maps and modes, level 50) | Planned: [docs/v2/ROADMAP.md](docs/v2/ROADMAP.md) (phases 0–1 done) |
-| Maps: Industrial Arena, Neon District, Desert Outpost | Done, validated (spawns, reachability, symmetry) |
+| Vehicles (car, off-road, APC, helicopter), seats, shooting from vehicles, run-overs, destruction | Done (v0.4.0), unit + simulation + host-mode netcode + two-browser E2E (server and WebRTC): [docs/v2/SYSTEMS.md](docs/v2/SYSTEMS.md) |
+| Modes: Domination, Capture the Flag, Vehicle Mayhem | Done (v0.4.0), rule tests + two-browser E2E (CTF, Domination) |
+| Maps: Industrial Arena, Neon District, Desert Outpost + Urban Warfare, Military Airbase, Harbor Conflict, Downtown, Mountain Outpost, Tactical Facility | Done, validated (spawns, vehicles, reachability, symmetry) |
+| SCRAPLINE 2.0 roadmap and results | [docs/v2/ROADMAP.md](docs/v2/ROADMAP.md) (phases 0–7 done, phase 8 = release on your devices) |
 | Lobby: quick match, room browser, private rooms with code/link, ready, host controls, kick | Done |
-| Guest identity (signed tokens), XP, levels 1–20, cosmetic unlocks, career stats, leaderboard | Done, persisted in PostgreSQL (tested against a real database) |
+| Guest identity (signed tokens), XP, levels 1–50, ranks, cosmetic unlocks, career stats per mode, daily challenges, leaderboard | Done, persisted in PostgreSQL (tested against a real database) and in the browser in host mode |
 | Solo practice with training targets (never recorded) | Done |
 | Host mode: the arena creator's browser hosts the match, friends join over WebRTC; deploys on Vercel alone | Done (v0.2.0), unit + two-browser WebRTC E2E; real school networks not tested: see [docs/HOST_MODE.md](docs/HOST_MODE.md) |
 | Deployment config: Dockerfile, Render Blueprint, Vercel config, docs | Done; client deployed on Vercel by the owner; dedicated server image built and run in the audit, **not deployed** |
@@ -59,7 +63,10 @@ pnpm dev:server     # migrations run automatically at boot
 | R | Reload |
 | Shift | Dash |
 | 1 / 2 / 3 | Primary / sidearm / picked-up weapon |
-| E | Pick up weapon |
+| E | Pick up weapon · enter / leave a vehicle |
+| F | Change seat in a vehicle |
+| W / S, A / D (driving) | Throttle / brake-reverse, steer; Shift = handbrake |
+| W A S D, mouse (flying) | Move, nose follows the mouse; Shift = take off / land |
 | Tab (hold) | Scoreboard |
 | Esc | Menu |
 

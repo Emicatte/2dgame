@@ -1,7 +1,8 @@
 # SCRAPLINE 2.0: feasibility and roadmap
 
-Status on 2026-11-05: **Phase 0 and Phase 1 done** (verified, see the bottom of this file).
-Phases 2–8 are planned below with acceptance criteria; nothing of them is implemented yet.
+Status on 2026-11-05: **Phases 0–7 done** on branch `scrapline-2` (results at the bottom of this
+file; systems reference in `SYSTEMS.md`). **Phase 8** (release) needs your devices and your go:
+nothing of 2.0 is on the public deployment yet.
 
 ## 1. Feasibility: what is reused, what is extended
 
@@ -50,12 +51,12 @@ processes.
 |---|---|---|
 | **0** ✅ | Verify the existing multiplayer | All unit/integration suites pass; netcode matrix 15/15 (0–250 ms RTT, jitter, 13 FPS, stalls up to 2.5 s, drop, reload); E2E duel + reload/stall/drop on the server; host-mode E2E (WebRTC) dev + production build; host-mode netcode at 120 ms RTT within the same bounds. |
 | **1** ✅ | Team Deathmatch (2v2 default, 1v1–4v4), lobby, scores | See "Phase 1 results" below. |
-| 2 | Vehicle core: car, off-road, light armored; seats (driver + passengers, gunner on armored); enter/exit/seat change; driving; collisions with world and between vehicles; vehicle health and destruction; respawn of vehicles | Deterministic vehicle sim unit tests (same inputs → same state; no tunnelling at max speed through 16 px walls); seat claim race (two clients press E on the same seat in the same tick: exactly one wins); exit always to a free, reachable spot; driver prediction converges ≤ 1 px after release at 0/120/250 ms RTT; driver disconnect: vehicle brakes to a stop, seat held 20 s; E2E: A drives, B rides as passenger, B shoots while moving, both see the same vehicle and occupants, B exits and fights on foot. Host tick cost with 4 players + 6 vehicles measured and reported. |
-| 3 | Urban Warfare map (first vehicle map): roads, buildings, alleys, vehicle spawns, larger bounds, culling | Map validation tests (spawns free and reachable on foot, vehicle spawns on roads, team spawns balanced); FPS benchmark on the bench page vs the existing maps; interest management keeps per-client bandwidth within budget (target set after measuring Phase 2). |
-| 4 | Run-overs and collision damage; knockback; impact FX; spawn-kill and no-vehicle-zone protections | Unit tests for the damage formula (speed, mass, angle, protection), per-pair cooldown (resting contact deals damage once), no damage under spawn protection, kill credit to the driver; integration test over sockets; E2E run-over with two browsers. |
-| 5 | Helicopter (pilot + gunner + 2 passengers) on a dedicated test map: altitude states, take-off/landing, mounted gun, counter-play from the ground | Unit tests: what blocks flight and fire at each altitude; take-off/landing state machine; destruction consequences for occupants. E2E: A pilots, B is gunner and fires while flying; both see rotors/shadow/altitude consistently; server records the damage. |
-| 6 | Modes (Domination, Vehicle Mayhem, CTF), remaining maps (Airbase, Harbor, Downtown, Mountain, Tactical Facility), progression to level 50 with documented curve, per-mode stats, periodic challenges (cosmetic rewards only) | Per-mode rule tests on both rooms; map validation; XP curve table in docs and tests; migration tested on PostgreSQL. |
-| 7 | Balance, performance, hardening | Bench and netcode matrix extended to vehicles; soak test (30 min, 8 players, bots); security negative paths for every new message. |
+| **2** ✅ | Vehicle core: car, off-road, light armored; seats (driver + passengers, gunner on armored); enter/exit/seat change; driving; collisions with world and between vehicles; vehicle health and destruction; respawn of vehicles | Deterministic vehicle sim unit tests (same inputs → same state; no tunnelling at max speed through 16 px walls); seat claim race (two clients press E on the same seat in the same tick: exactly one wins); exit always to a free, reachable spot; driver prediction converges ≤ 1 px after release at 0/120/250 ms RTT; driver disconnect: vehicle brakes to a stop, seat held 20 s; E2E: A drives, B rides as passenger, B shoots while moving, both see the same vehicle and occupants, B exits and fights on foot. Host tick cost with 4 players + 6 vehicles measured and reported. |
+| **3** ✅ | Urban Warfare map (first vehicle map): roads, buildings, alleys, vehicle spawns, larger bounds, culling | Map validation tests (spawns free and reachable on foot, vehicle spawns on roads, team spawns balanced); FPS benchmark on the bench page vs the existing maps; interest management keeps per-client bandwidth within budget (target set after measuring Phase 2). |
+| **4** ✅ | Run-overs and collision damage; knockback; impact FX; spawn-kill and no-vehicle-zone protections | Unit tests for the damage formula (speed, mass, angle, protection), per-pair cooldown (resting contact deals damage once), no damage under spawn protection, kill credit to the driver; integration test over sockets; E2E run-over with two browsers. |
+| **5** ✅ | Helicopter (pilot + gunner + 2 passengers) on a dedicated test map: altitude states, take-off/landing, mounted gun, counter-play from the ground | Unit tests: what blocks flight and fire at each altitude; take-off/landing state machine; destruction consequences for occupants. E2E: A pilots, B is gunner and fires while flying; both see rotors/shadow/altitude consistently; server records the damage. |
+| **6** ✅ | Modes (Domination, Vehicle Mayhem, CTF), remaining maps (Airbase, Harbor, Downtown, Mountain, Tactical Facility), progression to level 50 with documented curve, per-mode stats, periodic challenges (cosmetic rewards only) | Per-mode rule tests on both rooms; map validation; XP curve table in docs and tests; migration tested on PostgreSQL. |
+| **7** ✅ | Balance, performance, hardening | Bench and netcode matrix extended to vehicles; soak test (30 min, 8 players, bots); security negative paths for every new message. |
 | 8 | Release preparation | Changelog, docs, real-device test on the target networks, then a validated public deploy. |
 
 ## 3. Phase 0 results (2026-11-05)
@@ -99,3 +100,40 @@ Bug found by the new E2E and fixed (present since v0.1.0): after joining through
 the startup effect ran a second time (clearing the invite re-triggered it) and the page "resumed"
 the room it had just joined, leaving it first, so the player ended up back in the menu (server
 mode) or with an expired seat (host mode).
+
+## 5. Phases 2–7 results (2026-11-05)
+
+Delivered (details in `SYSTEMS.md`): car, off-road, light armored and helicopter with seats
+(driver/pilot, gunner, passengers), shooting from moving vehicles, run-overs and collisions,
+destruction, helicopter flight with two heights; Urban Warfare, Military Airbase, Harbor Conflict,
+Downtown, Mountain Outpost, Tactical Facility (9 maps); Domination, Capture the Flag, Vehicle
+Mayhem; level 50, ranks, ten new skins, per-mode career stats, daily challenges.
+
+| Acceptance criterion | Evidence | Result |
+|---|---|---|
+| Deterministic vehicle model, no tunnelling at top speed | `vehicle.test.ts`: identical state after 300 mixed inputs on two copies; full speed into a wall stays outside it | pass |
+| Seat race: two E presses in the same tick | `vehicles.test.ts` | exactly one driver, one passenger |
+| Exit to a free spot; refused when fast or airborne | `vehicles.test.ts`, E2E helicopter | pass |
+| Driver prediction converges | host-mode vehicle netcode, 120 ms RTT, scripted course with drifts and a crash: **0 corrections, exact convergence**; two-browser WebRTC at 6 FPS (SwiftShader): 1 correction (72 px), converged | pass |
+| Driver disconnect | ejected at once, the car coasts to a stop (`vehicles.test.ts`); the seat is not held (a frozen driver must not block the car; the player keeps their match seat for 20 s as before) | pass (criterion changed on purpose) |
+| E2E: A drives, B rides and shoots while moving, both see the same vehicle and seats, server records the damage, B fights on foot | `tests/e2e/vehicles.spec.ts` (server), `tests/e2e-p2p/vehicles.spec.ts` (WebRTC, roles swapped: guest drives) | pass |
+| Run-over formula, cooldown, protection, credit | `vehicles.test.ts` (closing speed, contact cooldown, spawn protection, teammates, Roadkill credit), vehicle-vs-vehicle mass scaling | pass |
+| Helicopter: what blocks flight and fire, take-off/landing, destruction consequences, ground counter-play | `vehicle.test.ts`, `vehicles.test.ts`; E2E pilot + gunner hitting a ground target, landing, exit | pass |
+| Map validation (free, reachable spawns, pickups and vehicle spawns; symmetry) | `maps.test.ts` for all 9 maps | pass |
+| Mode rules on both rooms | `modes.test.ts` (simulation, shared by both rooms); two-browser E2E for CTF and Domination | pass |
+| XP curve documented and tested; migration on PostgreSQL | `SYSTEMS.md` §4, `career.test.ts`; `repository.test.ts` on PostgreSQL 16 with `0001_career` | pass |
+| Netcode matrix still green | 15/15 (`netaudit-v2-phase7.json`) | pass |
+| Soak | 10 simulated minutes each of 4v4 Vehicle Mayhem (142 kills, 2 wrecks, 3,273 seated player-ticks) and 4v4 CTF: every seat/vehicle/flag invariant checked after every tick; step avg 0.036 ms, max 7 ms | pass |
+| Host cost with vehicles | host-mode load test, 8 players (5 seated, 4 vehicles moving), 20 s real time: host tick avg 0.28 ms, p99 0.83 ms, max 2.7 ms (Node on this container); download per guest 6.2 KB/s | pass |
+| Security negative paths for new messages | `security.v2.test.ts`: unknown button bits, modes, score limits, maps, teams; stored career data bounded and validated; debug placement only with debug routes / dev and E2E builds | pass |
+
+Balance changes made in Phase 7: car health 320 → 420 and rover 400 → 520 (one rifle magazine
+destroyed a car in under 2 s); vehicle-vs-vehicle damage scaled by √(mass ratio) instead of the
+mass ratio (a car hitting the APC lost 57 % of its health at 320 px/s).
+
+Measured but not a blocker: joining a room on a large map takes 5–7 s **in the SwiftShader test
+browser** (software rendering of the map bake); the lobby now appears first and the bake runs on
+the next frame. On real GPUs this needs measuring on your devices (Phase 8).
+
+Not verifiable here (Phase 8): two physical devices on your networks, real GPUs (FPS with
+vehicles on the large maps), school networks for WebRTC.

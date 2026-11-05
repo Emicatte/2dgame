@@ -93,7 +93,31 @@ pnpm test:e2e teams.spec                          # two browsers, TDM on the rea
 
 Phase-by-phase acceptance criteria and results: `docs/v2/ROADMAP.md`.
 
-## Results (last run: 2026-11-05, v0.3.0 Team Deathmatch)
+### Vehicles, modes, progression (0.4.0)
+
+```bash
+pnpm --filter @scrapline/shared exec vitest run test/vehicle.test.ts test/career.test.ts
+pnpm --filter @scrapline/server exec vitest run test/vehicles.test.ts test/modes.test.ts test/soak.test.ts test/security.v2.test.ts
+pnpm --filter @scrapline/web exec vitest run test/hostmode.vehicles.test.ts test/hostmode.load.test.ts
+pnpm test:e2e vehicles.spec modes.spec             # two browsers on the real server
+pnpm test:e2e:p2p vehicles.spec                    # two browsers over WebRTC (host mode)
+# PostgreSQL contract incl. the career migration (any throwaway database):
+TEST_DATABASE_URL=postgres://postgres@localhost:55432/scrapline_test pnpm --filter @scrapline/server exec vitest run test/repository.test.ts
+```
+
+## Results (last run: 2026-11-05, v0.4.0 vehicles, modes, maps, progression)
+
+| Suite | Count | Result |
+|---|---|---|
+| `packages/shared` unit (vehicle model 19, career/progression 6, maps for 9 maps, …) | 90 | pass |
+| `apps/web` unit (+ host-mode vehicle netcode at 120 ms RTT, host load 8 players / 6 vehicles) | 40 | pass |
+| `apps/server` unit + integration with PostgreSQL 16 (vehicles 19, modes 9, soak 2, protocol 3, repository contract on memory and PostgreSQL) | 115 + 7 skipped (TLS variables) | pass |
+| Netcode matrix after phases 2–7 (`docs/audit/data/netaudit-v2-phase7.json`) | 15 scenarios | 15/15 |
+| E2E dedicated server: duel, reload/stall/drop, TDM, car (driver + shooting passenger, fight on foot), helicopter (pilot + gunner), CTF, Domination | 7 | pass |
+| E2E host mode (WebRTC): TDM + invite + reload + host close; car with the guest driving and the host shooting from the window | 2 | pass (the vehicle spec once found the guest's ready click lost while its lobby was still settling; the spec now retries it) |
+| Production build | — | pass |
+
+## Results (v0.3.0 Team Deathmatch)
 
 | Suite | Count | Result |
 |---|---|---|

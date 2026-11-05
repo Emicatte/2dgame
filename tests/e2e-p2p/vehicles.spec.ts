@@ -107,8 +107,12 @@ test("host mode: the guest drives, the host rides and shoots while moving, then 
   const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
   await b.goto(`/?join=${code}`);
   await expect(b.getByTestId("room-code")).toHaveText(code, { timeout: 45_000 });
-  await b.getByTestId("ready-toggle").click();
-  await expect(a.getByTestId("start-match")).toBeEnabled();
+  // The ready toggle can be clicked while the guest's lobby is still settling over WebRTC: retry
+  // until the host sees it.
+  await expect(async () => {
+    if (!(await a.getByTestId("start-match").isEnabled())) await b.getByTestId("ready-toggle").click();
+    await expect(a.getByTestId("start-match")).toBeEnabled({ timeout: 3000 });
+  }).toPass({ timeout: 20_000 });
   await a.getByTestId("start-match").click();
   for (const p of [a, b]) {
     await p.waitForFunction(
