@@ -91,11 +91,21 @@ export type NetEvent =
   | { t: "shot"; p: string; w: number; x: number; y: number; a: number[]; d: number[]; s: number }
   /** Damage dealt. `k` = lethal. */
   | { t: "hit"; p: string; v: string; dmg: number; x: number; y: number; k: boolean }
+  /** `k` is "" when nobody gets the credit (a crash, a driverless vehicle). */
   | { t: "kill"; k: string; v: string; w: number; fb: boolean; st: number }
   | { t: "spawn"; p: string; x: number; y: number }
   | { t: "pickup"; p: string; id: string; kind: string; w?: number }
   | { t: "reload"; p: string; w: number }
-  | { t: "dash"; p: string };
+  | { t: "dash"; p: string }
+  /** Vehicles: entered / left / changed seat (`s` = seat index, -1 when leaving). */
+  | { t: "seat"; p: string; v: string; s: number }
+  /** Shot damage to a vehicle hull. */
+  | { t: "vhit"; p: string; v: string; dmg: number; x: number; y: number }
+  /** Vehicle destroyed (explosion at x, y). `p` = credited attacker or "". */
+  | { t: "wreck"; v: string; p: string; x: number; y: number }
+  /** Hard contact: run-over, vehicle collision or crash (`v` = vehicle, `o` = other party or ""). */
+  | { t: "crash"; v: string; o: string; x: number; y: number; f: number }
+  | { t: "vspawn"; v: string };
 
 export interface NoticeMessage {
   text: string;

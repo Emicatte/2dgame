@@ -3,7 +3,7 @@
  * Signaling is used only while connecting; game traffic flows directly between the browsers.
  */
 import type { MapId, WeaponId } from "@scrapline/shared";
-import { HostRoom } from "./HostRoom.ts";
+import { type HostDebugOptions, HostRoom } from "./HostRoom.ts";
 import { PeerRoom } from "./PeerRoom.ts";
 import { answerGuest, connectToHost } from "./rtc.ts";
 import { iceServers, type Registration, SignalError, signaling } from "./signalClient.ts";
@@ -24,10 +24,10 @@ const POLL_LOBBY_MS = 1500;
 const POLL_MATCH_MS = 4000;
 const POLL_ERROR_MS = 5000;
 
-export async function hostArena(me: LocalPlayer, map: MapId): Promise<HostRoom> {
+export async function hostArena(me: LocalPlayer, map: MapId, debug?: HostDebugOptions): Promise<HostRoom> {
   const reg = await signaling.create();
   const ice = await iceServers();
-  const room = new HostRoom({ code: reg.code, map, host: me });
+  const room = new HostRoom({ code: reg.code, map, host: me, ...(debug ? { debug } : {}) });
   const poller = new OfferPoller(reg, room, ice);
   room.onDispose(() => {
     poller.stop();

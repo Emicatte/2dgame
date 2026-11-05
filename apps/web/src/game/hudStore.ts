@@ -9,6 +9,35 @@ export interface HudSlot {
   active: boolean;
 }
 
+/** Vehicle panel: shown while the local player sits in a vehicle. */
+export interface HudVehicle {
+  name: string;
+  kind: string;
+  /** Role of the local player's seat: driver, pilot, gunner, passenger. */
+  role: string;
+  seat: number;
+  hp: number;
+  maxHp: number;
+  /** km/h shown to drivers and pilots. */
+  speedKmh: number;
+  /** Helicopter: altitude in % and whether take-off is engaged. */
+  altitude: number | null;
+  lift: boolean;
+  /** Cannot touch down here (hovering over an obstacle). */
+  landBlocked: boolean;
+  occupants: { seat: number; role: string; name: string; you: boolean }[];
+  /** Role of every seat (driver/pilot, gunner, passenger), by seat index. */
+  seatRoles: string[];
+  freeSeats: number;
+  seats: number;
+  /** The seat can fire (and whether the aim is inside its sector right now). */
+  canFire: boolean;
+  inSector: boolean;
+  /** Seat weapon is a mounted gun. */
+  mounted: boolean;
+  canExit: boolean;
+}
+
 export interface HudState {
   ready: boolean;
   alive: boolean;
@@ -31,6 +60,7 @@ export interface HudState {
   respawnInSec: number | null;
   killedBy: string | null;
   interactPrompt: string | null;
+  vehicle: HudVehicle | null;
   protected: boolean;
   ping: number;
   fps: number;
@@ -81,6 +111,7 @@ export const hudStore = createStore<HudState>({
   respawnInSec: null,
   killedBy: null,
   interactPrompt: null,
+  vehicle: null,
   protected: false,
   ping: 0,
   fps: 0,

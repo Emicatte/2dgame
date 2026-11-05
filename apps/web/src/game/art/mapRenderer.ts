@@ -17,6 +17,9 @@ export function renderMap(map: MapDef, scale = 1): HTMLCanvasElement {
   ctx.scale(scale, scale);
   const rand = mulberry32(hashString(map.id));
   detail = scale >= 0.5;
+  // Large maps tile their grain from small pre-rendered patterns (a few fills instead of tens of
+  // thousands of rectangles); the original arenas keep their exact look.
+  patterned = !!map.large;
   drawFloor(ctx, map, rand);
   for (const d of map.decor) drawDecor(ctx, d, map.theme, rand);
   drawShadows(ctx, map);
@@ -27,6 +30,36 @@ export function renderMap(map: MapDef, scale = 1): HTMLCanvasElement {
 
 /** Fine grain (noise speckle) only matters at full resolution; thumbnails skip it. */
 let detail = true;
+let patterned = false;
+
+const PATTERN = 256;
+
+/** Speckle as a repeating pattern tile (deterministic: drawn from the map's seeded random). */
+function grain(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  density: number,
+  rand: () => number,
+  color: number,
+  alpha: number,
+  size: number,
+) {
+  if (!patterned) {
+    speckle(ctx, x, y, w, h, density, rand, color, alpha, size);
+    return;
+  }
+  const [tile, tctx] = makeCanvas(PATTERN, PATTERN);
+  speckle(tctx, 0, 0, PATTERN, PATTERN, density, rand, color, alpha, size);
+  const pattern = ctx.createPattern(tile, "repeat");
+  if (!pattern) return;
+  ctx.save();
+  ctx.fillStyle = pattern;
+  ctx.fillRect(x, y, w, h);
+  ctx.restore();
+}
 
 function drawFloor(ctx: CanvasRenderingContext2D, map: MapDef, rand: () => number) {
   const t = map.theme;
@@ -42,6 +75,25 @@ function drawFloor(ctx: CanvasRenderingContext2D, map: MapDef, rand: () => numbe
         ctx.fillRect(x, y, tile, tile);
       }
     }
+  }
+  if (map.large) {
+    // Open ground of the large maps: poured concrete slabs with expansion joints (roads, verges
+    // and pads are decor drawn on top).
+    ctx.strokeStyle = hex(t.grid, 0.55);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = 0; x <= map.width; x += 256) {
+      ctx.moveTo(x + 0.5, 0);
+      ctx.lineTo(x + 0.5, map.height);
+    }
+    for (let y = 0; y <= map.height; y += 256) {
+      ctx.moveTo(0, y + 0.5);
+      ctx.lineTo(map.width, y + 0.5);
+    }
+    ctx.stroke();
+    if (detail) grain(ctx, 0, 0, map.width, map.height, 0.004, rand, 0x000000, 0.16, 2.5);
+    if (detail) grain(ctx, 0, 0, map.width, map.height, 0.0015, rand, 0xffffff, 0.05, 1.5);
+    return;
   }
   if (map.id === "desert") {
     // Dunes: soft wide strokes instead of slabs
@@ -214,6 +266,58 @@ function drawDecor(ctx: CanvasRenderingContext2D, d: DecorDef, t: ThemeDef, rand
       ctx.beginPath();
       ctx.ellipse(d.x + d.w / 2 - 6, d.y + d.h / 2 - 4, d.w / 3, d.h / 4, 0, Math.PI * 1.1, Math.PI * 1.7);
       ctx.stroke();
+      break;
+    }
+    case "road": {
+      // Asphalt with worn kerb lines on the long sides.
+      ctx.fillStyle = hex(0x1d1f22, 0.92);
+      ctx.fillRect(d.x, d.y, d.w, d.h);
+      if (detail) grain(ctx, d.x, d.y, d.w, d.h, 0.01, rand, 0x3a3d42, 0.5, 2);
+      ctx.fillStyle = hex(0xb9b4aa, 0.35);
+      if (d.w >= d.h) {
+        ctx.fillRect(d.x, d.y + 3, d.w, 3);
+        ctx.fillRect(d.x, d.y + d.h - 6, d.w, 3);
+      } else {
+        ctx.fillRect(d.x + 3, d.y, 3, d.h);
+        ctx.fillRect(d.x + d.w - 6, d.y, 3, d.h);
+      }
+      break;
+    }
+    case "lane": {
+      ctx.fillStyle = hex(0xe8d27a, 0.55);
+      const along = d.w >= d.h;
+      const len = along ? d.w : d.h;
+      for (let i = 0; i < len; i += 64) {
+        if (along) ctx.fillRect(d.x + i, d.y + d.h / 2 - 2, 34, 4);
+        else ctx.fillRect(d.x + d.w / 2 - 2, d.y + i, 4, 34);
+      }
+      break;
+    }
+    case "helipad": {
+      const cx = d.x + d.w / 2;
+      const cy = d.y + d.h / 2;
+      const r = Math.min(d.w, d.h) / 2;
+      ctx.fillStyle = hex(0x22252a, 0.95);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = hex(0xe8d27a, 0.7);
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r - 10, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = hex(0xe8e4dc, 0.75);
+      const hw = r * 0.42;
+      const hh = r * 0.55;
+      ctx.fillRect(cx - hw, cy - hh, 12, hh * 2);
+      ctx.fillRect(cx + hw - 12, cy - hh, 12, hh * 2);
+      ctx.fillRect(cx - hw, cy - 6, hw * 2, 12);
+      break;
+    }
+    case "verge": {
+      ctx.fillStyle = hex(0x2f3a28, 0.45);
+      ctx.fillRect(d.x, d.y, d.w, d.h);
+      if (detail) grain(ctx, d.x, d.y, d.w, d.h, 0.006, rand, 0x55663f, 0.4, 3);
       break;
     }
     case "crosswalk": {

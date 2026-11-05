@@ -200,7 +200,10 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                     title={MAPS[id].tagline}
                   >
                     <img className="map-card__preview" src={mapThumb(id)} alt="" />
-                    <span className="map-card__label">{MAPS[id].name}</span>
+                    <span className="map-card__label">
+                      {MAPS[id].name}
+                      {MAPS[id].vehicleSpawns && <span className="map-card__tag">Vehicles</span>}
+                    </span>
                   </button>
                 ))}
               </div>

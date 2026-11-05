@@ -6,6 +6,7 @@ import {
   type InputBatch,
   inputBatchSchema,
   isSkinUnlocked,
+  isVehicleKind,
   kickSchema,
   loadoutSchema,
   MAPS,
@@ -24,6 +25,7 @@ import {
   SERVER_TICK_MS,
   settingsSchema,
   teamSchema,
+  type VehicleKind,
   type WeaponId,
 } from "@scrapline/shared";
 import { z } from "zod";
@@ -31,7 +33,7 @@ import { z } from "zod";
 import { type ComputedResult, computeResults, resultRows } from "../../../server/src/players/results.ts";
 import { MatchRules } from "../../../server/src/rules/MatchRules.ts";
 import { GameSimulation, type ServerPlayer } from "../../../server/src/simulation/GameSimulation.ts";
-import { syncPlayerState } from "../../../server/src/simulation/stateSync.ts";
+import { syncPlayerState, syncVehicles } from "../../../server/src/simulation/stateSync.ts";
 import { signal } from "../net/signal.ts";
 import type { PeerLink, WireData } from "./link.ts";
 import {
@@ -71,6 +73,13 @@ export interface HostRoomOptions {
   host: HostProfile;
   /** Runs the tick loop from timers only (tests); the game also pumps from animation frames. */
   headless?: boolean;
+  /** Test-only fixed spawns / vehicle placement (honored in dev and E2E builds only). */
+  debug?: HostDebugOptions;
+}
+
+export interface HostDebugOptions {
+  spawns?: { x: number; y: number }[];
+  vehicles?: { kind: string; x: number; y: number; angle: number }[];
 }
 
 interface Seat {
@@ -141,6 +150,18 @@ export class HostRoom {
     this.sessionId = `h${randomId(6)}`;
     const mapId: MapId = opts.map in MAPS ? opts.map : "industrial";
     this.sim = new GameSimulation(MAPS[mapId], { tickRate: NET.serverTickRate });
+    // Deterministic spawns and vehicles for automated tests: dev and E2E builds only (the same
+    // gate as the dedicated server's ENABLE_DEBUG_ROUTES).
+    if (opts.debug && (import.meta.env.DEV || import.meta.env.VITE_E2E === "true")) {
+      if (opts.debug.spawns) this.sim.spawnOverride = opts.debug.spawns;
+      if (opts.debug.vehicles) {
+        this.sim.setVehicleOverride(
+          opts.debug.vehicles
+            .filter((v) => isVehicleKind(v.kind))
+            .map((v, i) => ({ ...v, kind: v.kind as VehicleKind, id: `dbg-${i}` })),
+        );
+      }
+    }
     Object.assign(this.state, {
       phase: "lobby",
       mode: "deathmatch",
@@ -794,6 +815,7 @@ export class HostRoom {
     }
     this.rules.sync();
     this.syncPickups(false);
+    syncVehicles(this.state, this.sim);
   }
 
   private syncPickups(rebuild: boolean) {

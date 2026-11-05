@@ -31,6 +31,8 @@ import {
   SERVER_TICK_MS,
   settingsSchema,
   teamSchema,
+  VEHICLE_KINDS,
+  type VehicleKind,
   type WeaponId,
 } from "@scrapline/shared";
 import { z } from "zod";
@@ -41,7 +43,7 @@ import { MatchRules } from "../rules/MatchRules.ts";
 import { verifyToken } from "../security/tokens.ts";
 import { getServices } from "../services.ts";
 import { GameSimulation, type ServerPlayer } from "../simulation/GameSimulation.ts";
-import { syncPlayerState } from "../simulation/stateSync.ts";
+import { syncPlayerState, syncVehicles } from "../simulation/stateSync.ts";
 
 interface AuthData {
   playerId: string;
@@ -59,12 +61,26 @@ interface CreateOptions {
   mode?: GameMode;
   /** Deterministic spawns for automated end-to-end tests; ignored unless debug routes are enabled. */
   debugSpawns?: unknown;
+  /** Deterministic vehicle placement for end-to-end tests (same gate as debugSpawns). */
+  debugVehicles?: unknown;
 }
 
 const debugSpawnsSchema = z
   .array(z.object({ x: z.number().min(0).max(10_000), y: z.number().min(0).max(10_000) }))
   .min(2)
   .max(16);
+
+const debugVehiclesSchema = z
+  .array(
+    z.object({
+      kind: z.enum(VEHICLE_KINDS as [VehicleKind, ...VehicleKind[]]),
+      x: z.number().min(0).max(10_000),
+      y: z.number().min(0).max(10_000),
+      angle: z.number().min(-7).max(7),
+    }),
+  )
+  .min(1)
+  .max(12);
 
 const pingSchema = z.object({ ms: z.number().int().min(0).max(5000) });
 
@@ -115,6 +131,10 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     if (cfg.ENABLE_DEBUG_ROUTES && options.debugSpawns) {
       const parsed = debugSpawnsSchema.safeParse(options.debugSpawns);
       if (parsed.success) this.sim.spawnOverride = parsed.data;
+    }
+    if (cfg.ENABLE_DEBUG_ROUTES && options.debugVehicles) {
+      const parsed = debugVehiclesSchema.safeParse(options.debugVehicles);
+      if (parsed.success) this.sim.setVehicleOverride(parsed.data.map((v, i) => ({ ...v, id: `dbg-${i}` })));
     }
     Object.assign(this.state, {
       phase: "lobby",
@@ -755,6 +775,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     }
     this.rules.sync();
     this.syncPickups(false);
+    syncVehicles(this.state, this.sim);
   }
 
   /** Team modes: winner and final scores for the results message. */

@@ -354,7 +354,21 @@
   display: block;
   width: 100%;
   aspect-ratio: 2560 / 1664;
+  object-fit: cover;
   background: var(--bg);
+}
+
+.map-card__tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--signal);
+  color: var(--signal);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: 1px;
 }
 
 .map-card__label {
@@ -889,4 +903,157 @@
   text-transform: uppercase;
   font-size: 12px;
   padding-top: 12px;
+}
+
+/* ---------------------------------------------------------------- vehicles */
+
+.vehicle-panel {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  width: min(380px, 44vw);
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(14, 15, 17, 0.86);
+  border: 1px solid var(--line-2);
+  border-top: 2px solid var(--signal);
+  font-size: 13px;
+}
+
+.vehicle-panel__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.vehicle-panel__name {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vehicle-panel__role {
+  color: var(--signal);
+  font-weight: 600;
+}
+
+.vehicle-panel__hp {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+}
+
+.vehicle-panel__max {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.vehicle-panel__bar {
+  height: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.vehicle-panel__bar > span {
+  display: block;
+  height: 100%;
+  background: var(--text);
+  transform-origin: left center;
+  transition: transform var(--t-med) var(--ease-out);
+}
+
+.vehicle-panel__bar.is-low > span {
+  background: var(--danger);
+}
+
+.vehicle-panel__gauges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+}
+
+.vehicle-panel__gauges small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.vehicle-panel__gauges .is-on {
+  color: var(--good);
+}
+
+.vehicle-panel__gauges .is-warn,
+.vehicle-panel__fire.is-warn {
+  color: var(--warn);
+}
+
+.vehicle-panel__seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 12px;
+}
+
+.vehicle-panel__seats li {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.vehicle-panel__seats li.is-taken {
+  color: var(--text-2);
+}
+
+.vehicle-panel__seats li.is-you {
+  color: var(--signal);
+  font-weight: 600;
+}
+
+.vehicle-panel__seat-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vehicle-panel__fire {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.vehicle-panel__keys {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--text-2);
+}
+
+.vehicle-panel__keys kbd {
+  font-family: var(--font-mono);
+  padding: 0 5px;
+  margin-right: 5px;
+  border: 1px solid var(--line-2);
+  color: var(--text);
+}
+
+@media (max-width: 760px) {
+  .vehicle-panel {
+    width: min(92vw, 380px);
+    bottom: 120px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vehicle-panel__bar > span {
+    transition: none;
+  }
 }

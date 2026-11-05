@@ -1,10 +1,14 @@
 import { PLAYER } from "../config/game.ts";
+import { VEHICLES } from "../config/vehicles.ts";
 import { buildCollisionWorld, type CollisionWorld, circleIntersectsRect } from "../sim/collision.ts";
 import type { Vec2 } from "../sim/math.ts";
+import { bodyFits } from "../sim/vehicle.ts";
+import { MILITARY_AIRBASE } from "./airbase.ts";
 import { DESERT_OUTPOST } from "./desert.ts";
 import { INDUSTRIAL_ARENA } from "./industrial.ts";
 import { NEON_DISTRICT } from "./neon.ts";
-import type { MapDef, MapId } from "./types.ts";
+import { type MapDef, type MapId, TALL_SOLIDS } from "./types.ts";
+import { URBAN_WARFARE } from "./urban.ts";
 
 export * from "./types.ts";
 
@@ -12,6 +16,8 @@ export const MAPS: Record<MapId, MapDef> = {
   industrial: INDUSTRIAL_ARENA,
   neon: NEON_DISTRICT,
   desert: DESERT_OUTPOST,
+  urban: URBAN_WARFARE,
+  airbase: MILITARY_AIRBASE,
 };
 
 export const MAP_IDS = Object.keys(MAPS) as MapId[];
@@ -22,6 +28,21 @@ export function isMapId(v: unknown): v is MapId {
 }
 
 const worldCache = new Map<MapId, CollisionWorld>();
+const airWorldCache = new Map<MapId, CollisionWorld>();
+
+/** Collision world of the tall solids only: what flying helicopters and air shots meet. */
+export function airWorldFor(map: MapDef): CollisionWorld {
+  let w = airWorldCache.get(map.id);
+  if (!w) {
+    w = buildCollisionWorld(
+      map.width,
+      map.height,
+      map.solids.filter((s) => TALL_SOLIDS.has(s.kind)),
+    );
+    airWorldCache.set(map.id, w);
+  }
+  return w;
+}
 
 export function collisionWorldFor(map: MapDef): CollisionWorld {
   let w = worldCache.get(map.id);
@@ -64,6 +85,12 @@ export function validateMap(map: MapDef): MapIssue[] {
     ids.add(p.id);
   }
   if (map.spawns.length < 8) issues.push({ map: map.id, problem: "fewer than 8 spawns" });
+  for (const v of map.vehicleSpawns ?? []) {
+    if (ids.has(v.id)) issues.push({ map: map.id, problem: `duplicate id ${v.id}` });
+    ids.add(v.id);
+    if (!bodyFits(world, v, VEHICLES[v.kind]))
+      issues.push({ map: map.id, problem: `vehicle ${v.id} at ${v.x},${v.y} is blocked` });
+  }
 
   // Flood fill on a coarse grid of positions where a player fits.
   const step = 16;
@@ -119,5 +146,8 @@ export function validateMap(map: MapDef): MapIssue[] {
   map.pickups.forEach((p) => {
     if (!reachable(p)) issues.push({ map: map.id, problem: `pickup ${p.id} unreachable` });
   });
+  for (const v of map.vehicleSpawns ?? []) {
+    if (!reachable(v)) issues.push({ map: map.id, problem: `vehicle ${v.id} unreachable on foot` });
+  }
   return issues;
 }

@@ -1,11 +1,23 @@
 import {
+  BTN,
+  type Circle,
   type CollisionWorld,
   createPlayerSim,
+  createVehicleSim,
   type InputFrame,
+  isVehicleKind,
   type PlayerSim,
   type PlayerState,
+  type SeatDef,
   type SimEvent,
+  seatWorld,
   stepPlayer,
+  stepVehicle,
+  VEHICLE_STATUS,
+  VEHICLES,
+  type VehicleDef,
+  type VehicleSim,
+  type VehicleState,
 } from "@scrapline/shared";
 import { RollingStats } from "./metrics.ts";
 
@@ -17,8 +29,45 @@ import { RollingStats } from "./metrics.ts";
  * server's state for N and re-applies inputs N+1… With the shared deterministic simulation the
  * result normally equals the prediction exactly; any residual error is blended out visually.
  */
+/** Where the local player sits, as last confirmed by the server. */
+export interface Mount {
+  vehicleId: string;
+  seat: number;
+  def: VehicleDef;
+  seatDef: SeatDef;
+}
+
+/**
+ * Per-frame environment of the prediction: vehicles as obstacles (interpolated), and the pose of
+ * the vehicle a passenger rides (interpolated, i.e. the same timeline the server rewinds to).
+ */
+export interface PredictEnv {
+  obstacles: readonly Circle[];
+  /** Obstacles for the driven vehicle (every other ground vehicle). */
+  vehicleObstacles: readonly Circle[];
+  /** Passenger: pose of the vehicle as currently rendered. */
+  ridePose: { x: number; y: number; angle: number } | null;
+}
+
+const NO_ENV: PredictEnv = { obstacles: [], vehicleObstacles: [], ridePose: null };
+
+/** Frame as a seated player applies it: no own movement, fire only where the client allowed it. */
+export function mountedFrame(frame: InputFrame, seat: SeatDef): InputFrame {
+  return {
+    ...frame,
+    mx: 0,
+    my: 0,
+    buttons: frame.buttons & (BTN.FIRE | BTN.RELOAD),
+    slot: seat.mounted ? -1 : frame.slot,
+  };
+}
+
 export class Predictor {
   sim: PlayerSim;
+  /** Predicted vehicle while the local player drives (null otherwise). */
+  vehicle: VehicleSim | null = null;
+  mount: Mount | null = null;
+  private airWorld: CollisionWorld;
   private pending: InputFrame[] = [];
   private seq = 0;
   private lastAck = -1;
@@ -38,12 +87,54 @@ export class Predictor {
   constructor(
     private world: CollisionWorld,
     private readonly seed: number,
+    airWorld?: CollisionWorld,
   ) {
     this.sim = createPlayerSim(0, 0, "rifle");
+    this.airWorld = airWorld ?? world;
   }
 
-  setWorld(world: CollisionWorld): void {
+  setWorld(world: CollisionWorld, airWorld?: CollisionWorld): void {
     this.world = world;
+    this.airWorld = airWorld ?? world;
+  }
+
+  get driving(): boolean {
+    return this.mount?.seat === 0 && this.vehicle !== null;
+  }
+
+  /** One fixed step of the local player (and of the vehicle they drive). */
+  private stepOnce(frame: InputFrame, alive: boolean, env: PredictEnv, emit?: (e: SimEvent) => void): void {
+    const m = this.mount;
+    if (!m) {
+      stepPlayer(this.sim, frame, {
+        world: this.world,
+        seed: this.seed,
+        alive,
+        emit,
+        obstacles: env.obstacles,
+      });
+      return;
+    }
+    if (m.seat === 0 && this.vehicle && alive) {
+      stepVehicle(this.vehicle, m.def, frame, {
+        world: this.world,
+        airWorld: this.airWorld,
+        obstacles: env.vehicleObstacles,
+      });
+    }
+    const pose = m.seat === 0 && this.vehicle ? this.vehicle : env.ridePose;
+    if (pose) {
+      const at = seatWorld(pose, m.seatDef);
+      this.sim.x = at.x;
+      this.sim.y = at.y;
+    }
+    stepPlayer(this.sim, mountedFrame(frame, m.seatDef), {
+      world: this.world,
+      seed: this.seed,
+      alive,
+      emit,
+      mounted: true,
+    });
   }
 
   nextSeq(): number {
@@ -60,8 +151,8 @@ export class Predictor {
     return this.pending.length;
   }
 
-  predict(frame: InputFrame, alive: boolean, emit: (e: SimEvent) => void): void {
-    stepPlayer(this.sim, frame, { world: this.world, seed: this.seed, alive, emit });
+  predict(frame: InputFrame, alive: boolean, emit: (e: SimEvent) => void, env: PredictEnv = NO_ENV): void {
+    this.stepOnce(frame, alive, env, emit);
     // Never discard unacknowledged inputs: replaying from the ack with a gap would guarantee a
     // misprediction. The pending list is bounded by the stall guard in the scene instead
     // (NET.inputStallMs without an ack stops input generation).
@@ -91,8 +182,13 @@ export class Predictor {
     this.correctionSizes.clear();
   }
 
-  /** Applies an authoritative snapshot of the local player (owner-only fields included). */
-  reconcile(ps: PlayerState, alive: boolean): void {
+  /**
+   * Applies an authoritative snapshot of the local player (owner-only fields included) and, while
+   * the local player drives, of their vehicle: the vehicle only advances on the driver's inputs, so
+   * its synchronized state is the state after the acknowledged input, and the same replay of the
+   * pending inputs rebuilds the prediction.
+   */
+  reconcile(ps: PlayerState, alive: boolean, vs?: VehicleState, env: PredictEnv = NO_ENV): void {
     const ack = ps.ack;
     if (ack < this.lastAck) {
       this.staleAcks++;
@@ -106,7 +202,15 @@ export class Predictor {
       this.acked++;
     }
 
-    const before = { x: this.sim.x, y: this.sim.y };
+    // Entering, leaving or changing seat is a server decision: a teleport, not a misprediction.
+    const prevMount = this.mount;
+    this.mount = this.mountFrom(ps, vs);
+    const mountChanged =
+      (prevMount?.vehicleId ?? "") !== (this.mount?.vehicleId ?? "") || prevMount?.seat !== this.mount?.seat;
+    const drivingNow = this.mount?.seat === 0 && !!vs;
+    const tracked = drivingNow ? this.vehicle : this.mount ? null : this.sim;
+    const before = tracked ? { x: tracked.x, y: tracked.y } : null;
+
     const s = this.sim;
     s.x = ps.x;
     s.y = ps.y;
@@ -128,10 +232,35 @@ export class Predictor {
     s.bloom = ps.bloom;
     s.trigger = ps.trigger;
 
-    for (const f of this.pending) stepPlayer(s, f, { world: this.world, seed: this.seed, alive });
+    if (drivingNow && vs) {
+      const v = this.vehicle ?? createVehicleSim(vs.x, vs.y, vs.angle);
+      v.x = vs.x;
+      v.y = vs.y;
+      v.angle = vs.angle;
+      v.vx = vs.vx;
+      v.vy = vs.vy;
+      v.av = vs.av;
+      v.alt = vs.alt;
+      v.rotor = vs.rotor;
+      v.lift = vs.lift;
+      v.liftHeld = vs.liftHeld;
+      this.vehicle = v;
+    } else {
+      this.vehicle = null;
+    }
 
-    const dx = before.x - s.x;
-    const dy = before.y - s.y;
+    for (const f of this.pending) this.stepOnce(f, alive, env);
+
+    const after = drivingNow ? this.vehicle : this.mount ? null : this.sim;
+    if (!before || !after || mountChanged) {
+      this.lastCorrection = 0;
+      if (firstOfStream) this.resyncs++;
+      this.offsetX = 0;
+      this.offsetY = 0;
+      return;
+    }
+    const dx = before.x - after.x;
+    const dy = before.y - after.y;
     const err = Math.hypot(dx, dy);
     this.lastCorrection = err;
     if (firstOfStream) {
@@ -143,13 +272,23 @@ export class Predictor {
     }
     if (err > 96) {
       if (!firstOfStream) this.snaps++;
-      // Teleport-sized difference (respawn, large desync): snap.
+      // Teleport-sized difference (respawn, large desync, entering a vehicle): snap.
       this.offsetX = 0;
       this.offsetY = 0;
     } else {
       this.offsetX += dx;
       this.offsetY += dy;
     }
+  }
+
+  private mountFrom(ps: PlayerState, vs?: VehicleState): Mount | null {
+    if (!ps.vehicle || ps.seat < 0 || !vs || vs.status !== VEHICLE_STATUS.READY || !isVehicleKind(vs.kind)) {
+      return null;
+    }
+    const def = VEHICLES[vs.kind];
+    const seatDef = def.seats[ps.seat];
+    if (!seatDef) return null;
+    return { vehicleId: ps.vehicle, seat: ps.seat, def, seatDef };
   }
 
   /** Decays the visual correction; call once per rendered frame. */
@@ -164,5 +303,7 @@ export class Predictor {
   resetStream(): void {
     this.pending = [];
     this.lastAck = -1;
+    this.vehicle = null;
+    this.mount = null;
   }
 }

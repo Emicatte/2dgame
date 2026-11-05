@@ -1,7 +1,16 @@
-import { isTeamMode, MODE_NAMES, type NetEvent, PLAYER, TEAMS, weaponByIndex } from "@scrapline/shared";
+import {
+  isTeamMode,
+  KILL_BY_EXPLOSION,
+  KILL_BY_VEHICLE,
+  MODE_NAMES,
+  type NetEvent,
+  PLAYER,
+  TEAMS,
+  weaponByIndex,
+} from "@scrapline/shared";
 import { useEffect, useRef, useState } from "react";
 import { Button, formatClock, Panel } from "../components/ui.tsx";
-import { hudStore, uiStore } from "../game/hudStore.ts";
+import { type HudVehicle, hudStore, uiStore } from "../game/hudStore.ts";
 import { keyLabel, settingsStore } from "../lib/settings.ts";
 import { useStore } from "../lib/store.ts";
 import { gameEvents, session, sessionStore } from "../net/session.ts";
@@ -16,6 +25,121 @@ interface FeedItem {
   weapon: string;
   self: boolean;
   at: number;
+}
+
+function killCause(w: number): string {
+  if (w === KILL_BY_VEHICLE) return "Roadkill";
+  if (w === KILL_BY_EXPLOSION) return "Explosion";
+  return weaponByIndex(w)?.name ?? "";
+}
+
+const ROLE_LABEL: Record<string, string> = {
+  driver: "Driver",
+  pilot: "Pilot",
+  gunner: "Gunner",
+  passenger: "Passenger",
+};
+
+/** Vehicle panel: what you are in, your seat, health, occupants and the controls that apply. */
+function VehiclePanel({
+  v,
+  keys,
+}: {
+  v: HudVehicle;
+  keys: { interact: string; seat: string; dash: string };
+}) {
+  const hpFrac = Math.max(0, v.hp / v.maxHp);
+  const driving = v.role === "driver" || v.role === "pilot";
+  return (
+    <section
+      className="vehicle-panel"
+      aria-label={`${v.name}, ${ROLE_LABEL[v.role] ?? v.role}`}
+      data-testid="vehicle-panel"
+    >
+      <header className="vehicle-panel__head">
+        <span className="vehicle-panel__name">{v.name}</span>
+        <span className="vehicle-panel__role" data-testid="vehicle-role">
+          {ROLE_LABEL[v.role] ?? v.role}
+        </span>
+        <span className="vehicle-panel__hp mono" data-testid="vehicle-hp">
+          {Math.ceil(v.hp)}
+          <span className="vehicle-panel__max">/{v.maxHp}</span>
+        </span>
+      </header>
+      <div className={`vehicle-panel__bar ${hpFrac < 0.3 ? "is-low" : ""}`} aria-hidden="true">
+        <span style={{ transform: `scaleX(${hpFrac})` }} />
+      </div>
+      {driving && (
+        <div className="vehicle-panel__gauges mono">
+          <span data-testid="vehicle-speed">
+            {v.speedKmh}
+            <small> km/h</small>
+          </span>
+          {v.altitude !== null && (
+            <span data-testid="vehicle-alt">
+              ALT {v.altitude}
+              <small>%</small>
+            </span>
+          )}
+          {v.altitude !== null && (
+            <span className={v.lift ? "is-on" : ""}>{v.lift ? "Lift on" : "Landing"}</span>
+          )}
+          {v.landBlocked && <span className="is-warn">Cannot land here</span>}
+        </div>
+      )}
+      <ul className="vehicle-panel__seats" aria-label={`Seats: ${v.seats - v.freeSeats} of ${v.seats} taken`}>
+        {Array.from({ length: v.seats }, (_, i) => ({
+          seat: i,
+          o: v.occupants.find((x) => x.seat === i),
+        })).map(({ seat: i, o }) => {
+          return (
+            <li key={`seat-${i}`} className={`${o ? "is-taken" : ""} ${o?.you ? "is-you" : ""}`}>
+              <span className="vehicle-panel__dot" aria-hidden="true">
+                {o ? "●" : "○"}
+              </span>
+              <span className="vehicle-panel__seat-role">
+                {ROLE_LABEL[v.seatRoles[i] ?? ""] ?? `Seat ${i + 1}`}
+              </span>
+              <span className="vehicle-panel__seat-name">{o ? (o.you ? "You" : o.name) : "free"}</span>
+            </li>
+          );
+        })}
+      </ul>
+      {!driving && (
+        <p className={`vehicle-panel__fire ${v.canFire && !v.inSector ? "is-warn" : ""}`}>
+          {!v.canFire
+            ? "This seat cannot fire"
+            : v.mounted
+              ? "Mounted gun"
+              : v.inSector
+                ? "Firing arc clear"
+                : "Aim through your window to fire"}
+        </p>
+      )}
+      <p className="vehicle-panel__keys">
+        <span>
+          <kbd>{keys.interact}</kbd>
+          {v.canExit ? "Exit" : "Exit (slow down first)"}
+        </span>
+        {v.freeSeats > 0 && (
+          <span>
+            <kbd>{keys.seat}</kbd>Change seat
+          </span>
+        )}
+        {v.role === "driver" && (
+          <span>
+            <kbd>{keys.dash}</kbd>Handbrake
+          </span>
+        )}
+        {v.role === "pilot" && (
+          <span>
+            <kbd>{keys.dash}</kbd>
+            {v.lift ? "Land" : "Take off"}
+          </span>
+        )}
+      </p>
+    </section>
+  );
 }
 
 function KillFeed() {
@@ -35,11 +159,11 @@ function KillFeed() {
           ...prev,
           ...kills.map((k) => ({
             id: ++counter.current,
-            killer: name(k.k),
+            killer: k.k ? name(k.k) : "",
             victim: name(k.v),
             killerTeam: team(k.k),
             victimTeam: team(k.v),
-            weapon: weaponByIndex(k.w)?.name ?? "",
+            weapon: killCause(k.w),
             self: k.k === s.selfId || k.v === s.selfId,
             at: now,
           })),
@@ -61,7 +185,9 @@ function KillFeed() {
     <div className="killfeed" aria-live="polite">
       {items.map((i) => (
         <div key={i.id} className={`killfeed__item ${i.self ? "is-self" : ""}`}>
-          <strong className={i.killerTeam ? `team-tag--${i.killerTeam}` : undefined}>{i.killer}</strong>
+          {i.killer && (
+            <strong className={i.killerTeam ? `team-tag--${i.killerTeam}` : undefined}>{i.killer}</strong>
+          )}
           <span className="killfeed__weapon">{i.weapon}</span>
           <span className={i.victimTeam ? `team-tag--${i.victimTeam}` : undefined}>{i.victim}</span>
         </div>
@@ -309,10 +435,22 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
           </>
         )}
 
-        {hud.interactPrompt && hud.alive && (
-          <div className="interact">
-            <kbd>{interactKey}</kbd>Take {hud.interactPrompt}
+        {hud.interactPrompt && hud.alive && !hud.vehicle && (
+          <div className="interact" data-testid="interact-prompt">
+            <kbd>{interactKey}</kbd>
+            {hud.interactPrompt}
           </div>
+        )}
+
+        {hud.vehicle && hud.alive && (
+          <VehiclePanel
+            v={hud.vehicle}
+            keys={{
+              interact: interactKey,
+              seat: keyLabel(settings.bindings.seat),
+              dash: keyLabel(settings.bindings.dash),
+            }}
+          />
         )}
 
         {hud.alive && hpFrac < 0.3 && <div className="low-hp" />}

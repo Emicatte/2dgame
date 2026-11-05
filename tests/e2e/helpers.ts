@@ -15,8 +15,26 @@ export interface Hooks {
   }[];
   rendered(id: string): { x: number; y: number; visible: boolean } | null;
   toScreen(x: number, y: number): { x: number; y: number };
-  createDebugRoom(spawns: { x: number; y: number }[]): Promise<void>;
+  createDebugRoom(
+    spawns: { x: number; y: number }[],
+    map?: string,
+    vehicles?: { kind: string; x: number; y: number; angle: number }[],
+  ): Promise<void>;
   net(): NetSnapshot;
+  vehicles(): {
+    id: string;
+    kind: string;
+    x: number;
+    y: number;
+    angle: number;
+    alt: number;
+    hp: number;
+    status: number;
+    seats: string[];
+  }[];
+  mount(): { vehicle: string; seat: number } | null;
+  enterTarget(): string | null;
+  renderedVehicle(id: string): { x: number; y: number; angle: number; alt: number } | null;
 }
 
 export interface NetSnapshot {

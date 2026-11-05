@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import { collisionWorldFor, isFreeSpot, MAP_IDS, MAPS, validateMap } from "../src/maps/index.ts";
 
 describe("maps", () => {
-  it("ships three playable maps", () => {
-    expect(MAP_IDS).toEqual(["industrial", "neon", "desert"]);
+  it("ships the three arena maps unchanged, plus the vehicle maps", () => {
+    expect(MAP_IDS).toEqual(["industrial", "neon", "desert", "urban", "airbase"]);
+    for (const id of ["industrial", "neon", "desert"] as const)
+      expect(MAPS[id].vehicleSpawns).toBeUndefined();
+    for (const id of ["urban", "airbase"] as const)
+      expect(MAPS[id].vehicleSpawns?.length).toBeGreaterThanOrEqual(6);
   });
 
   for (const id of MAP_IDS) {

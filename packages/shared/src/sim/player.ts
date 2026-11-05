@@ -4,6 +4,7 @@ import { BTN, type InputFrame } from "../protocol/input.ts";
 import { type CollisionWorld, resolveCircle } from "./collision.ts";
 import { approach2, DEG } from "./math.ts";
 import { rand01 } from "./rng.ts";
+import { type Circle, pushOutOfCircles } from "./vehicle.ts";
 
 /**
  * Deterministic per-player simulation shared by client prediction and the authoritative server.
@@ -87,6 +88,13 @@ export interface StepContext {
   alive: boolean;
   /** Optional sink for gameplay events (sounds, tracers). Omitted during reconciliation replays. */
   emit?: (e: SimEvent) => void;
+  /**
+   * The player sits in a vehicle: no own movement or dash (the position is the seat's, set by the
+   * caller); weapons work as usual.
+   */
+  mounted?: boolean;
+  /** Bodies a walking player cannot pass through (vehicles). */
+  obstacles?: readonly Circle[];
 }
 
 export function emptySlot(): WeaponSlotState {
@@ -151,6 +159,14 @@ function stepMovement(s: PlayerSim, input: InputFrame, ctx: StepContext, dt: num
     my /= len;
   }
   const dashPressed = (input.buttons & BTN.DASH) !== 0;
+  if (ctx.mounted) {
+    s.vx = 0;
+    s.vy = 0;
+    s.dash = 0;
+    s.dashHeld = dashPressed;
+    if (s.dashCd > 0) s.dashCd -= 1;
+    return;
+  }
   if (ctx.alive && dashPressed && !s.dashHeld && s.dashCd === 0 && s.dash === 0) {
     if (len > 0) {
       s.dashDx = mx;
@@ -187,6 +203,23 @@ function stepMovement(s: PlayerSim, input: InputFrame, ctx: StepContext, dt: num
     s.y = r.y;
     if (r.hitX) s.vx = 0;
     if (r.hitY) s.vy = 0;
+  }
+  if (ctx.obstacles && ctx.obstacles.length > 0) {
+    const out = pushOutOfCircles(s.x, s.y, PLAYER.radius, ctx.obstacles);
+    if (out.x !== s.x || out.y !== s.y) {
+      // Slide along the body: drop the velocity component pointing into it.
+      const nx = out.x - s.x;
+      const ny = out.y - s.y;
+      const len = Math.hypot(nx, ny);
+      const vn = (s.vx * nx + s.vy * ny) / len;
+      if (vn < 0) {
+        s.vx -= (nx / len) * vn;
+        s.vy -= (ny / len) * vn;
+      }
+      const r = resolveCircle(ctx.world, out.x, out.y, PLAYER.radius);
+      s.x = r.x;
+      s.y = r.y;
+    }
   }
 }
 

@@ -1,6 +1,7 @@
 import { SKINS, type SkinDef, WEAPON_LIST, type WeaponDef } from "@scrapline/shared";
 import type Phaser from "phaser";
 import { hex, makeCanvas, radialGlow, roundRect, shade } from "./canvas.ts";
+import { generateVehicleTextures } from "./vehicleArt.ts";
 
 /**
  * All sprites are drawn procedurally at boot: original art, no external assets to license,
@@ -117,6 +118,8 @@ function drawWeapon(w: WeaponDef): HTMLCanvasElement {
     smg: { len: 24, h: 7 },
     shotgun: { len: 32, h: 8 },
     sniper: { len: 46, h: 7 },
+    mg: { len: 40, h: 9 },
+    doorgun: { len: 32, h: 8 },
   };
   const sh = shapes[w.id] ?? { len: 24, h: 7 };
   const [c, ctx] = makeCanvas((sh.len + 4) * S, (sh.h + 10) * S);
@@ -334,4 +337,5 @@ export function generateTextures(scene: Phaser.Scene): void {
   add(scene, TEX.pickupHealth, drawPickup("health"));
   add(scene, TEX.pickupAmmo, drawPickup("ammo"));
   add(scene, TEX.pickupBase, drawPickup("base"));
+  generateVehicleTextures(scene);
 }

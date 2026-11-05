@@ -153,7 +153,16 @@ class GameSession {
 
   async createPrivate(loadout: Loadout, map: MapId, extra: Record<string, unknown> = {}): Promise<void> {
     if (HOST_MODE) {
-      await this.connect(async () => asRoom(await hostArena(localPlayer(loadout), map)), false);
+      const debug =
+        extra.debugSpawns || extra.debugVehicles
+          ? {
+              spawns: extra.debugSpawns as { x: number; y: number }[] | undefined,
+              vehicles: extra.debugVehicles as
+                | { kind: string; x: number; y: number; angle: number }[]
+                | undefined,
+            }
+          : undefined;
+      await this.connect(async () => asRoom(await hostArena(localPlayer(loadout), map, debug)), false);
       return;
     }
     await this.connect(() =>

@@ -221,6 +221,45 @@ export class Effects {
     this.ringBurst(x, y, 0x7dffb0, 80, 300);
   }
 
+  /** A vehicle blowing up: fireball light, shock ring, debris and smoke. */
+  explosion(x: number, y: number): void {
+    this.ringBurst(x, y, 0xffb36b, 300, 520);
+    const l = this.takeFlash(this.lights, TEX.glow, 5);
+    l.img.setPosition(x, y).setOrigin(0.5).setTint(0xff8a3d).setAlpha(0.9).setDisplaySize(420, 420);
+    l.life = l.max = 600;
+    this.debris.setParticleTint?.(0x2a2c31);
+    this.debris.explode(this.high ? 26 : 12, x, y);
+    this.sparks.setParticleTint?.(0xffc46b);
+    this.sparks.explode(this.high ? 30 : 14, x, y);
+    this.smoke.explode(this.high ? 12 : 5, x, y);
+  }
+
+  /** Damaged vehicles trail smoke (darker and denser when burning). */
+  vehicleSmoke(x: number, y: number, burning: boolean): void {
+    this.smoke.setParticleTint?.(burning ? 0x2a2522 : 0x8a8a8a);
+    this.smoke.emitParticleAt(x, y, 1);
+    this.smoke.setParticleTint?.(0xffffff);
+    if (burning && this.high) {
+      this.sparks.setParticleTint?.(0xff7a2e);
+      this.sparks.emitParticleAt(x, y, 1);
+    }
+  }
+
+  /** Dust kicked up by drifting tyres or rotor wash. */
+  dust(x: number, y: number): void {
+    if (!this.high) return;
+    this.smoke.setParticleTint?.(0xb8a98a);
+    this.smoke.emitParticleAt(x, y, 1);
+    this.smoke.setParticleTint?.(0xffffff);
+  }
+
+  /** Metal-on-metal or metal-on-wall contact. */
+  crash(x: number, y: number, force: number): void {
+    this.sparks.setParticleTint?.(0xffd89a);
+    this.sparks.explode(Math.min(24, 4 + Math.round(force / 40)), x, y);
+    if (force > 300) this.ringBurst(x, y, 0xffd89a, 90, 240);
+  }
+
   private ringBurst(x: number, y: number, color: number, size: number, ms: number) {
     const r = this.takeFlash(this.rings, TEX.ring, 36);
     r.img.setPosition(x, y).setOrigin(0.5).setTint(color).setAlpha(0.9).setDisplaySize(10, 10);

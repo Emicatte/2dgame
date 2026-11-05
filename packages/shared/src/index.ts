@@ -1,6 +1,7 @@
 export * from "./config/game.ts";
 export * from "./config/modes.ts";
 export * from "./config/progression.ts";
+export * from "./config/vehicles.ts";
 export * from "./config/weapons.ts";
 export * from "./maps/index.ts";
 export * from "./protocol/api.ts";
@@ -11,4 +12,5 @@ export * from "./sim/hitscan.ts";
 export * from "./sim/math.ts";
 export * from "./sim/player.ts";
 export * from "./sim/rng.ts";
+export * from "./sim/vehicle.ts";
 export * from "./state.ts";

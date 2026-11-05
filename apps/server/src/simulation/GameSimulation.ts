@@ -1,30 +1,59 @@
 import {
+  AIRBORNE_ALT,
+  airWorldFor,
   BTN,
+  type Circle,
   type CollisionWorld,
   canDamage,
   clamp,
+  closestOnBody,
   collisionWorldFor,
   createPlayerSim,
+  createVehicleSim,
   damageAtDistance,
   distSq,
+  ENTER_REACH,
+  findExitSpot,
+  fullSlot,
   giveWeapon,
   type HitTarget,
   hasLineOfSight,
   type InputFrame,
+  inSector,
+  isFreeSpot,
+  KILL_BY_EXPLOSION,
+  KILL_BY_VEHICLE,
+  lerpAngle,
   type MapDef,
   NET,
   type NetEvent,
+  NO_WEAPON,
   type PickupDef,
   PLAYER,
   type PlayerSim,
+  RAM_COOLDOWN_SEC,
+  RAM_CREDIT_SEC,
   refillAmmo,
+  resolveCircle,
+  type SeatDef,
   type ShotIntent,
   type SimEvent,
+  SLOT_PICKUP,
+  seatWorld,
   stepPlayer,
+  stepVehicle,
   teamSpawns,
   tracePellet,
+  VEHICLES,
+  type VehicleDef,
+  type VehicleSim,
+  type VehicleSpawnDef,
+  type VehicleStepResult,
+  vehicleCircles,
+  vehicleSpeed,
   WEAPONS,
   type WeaponId,
+  type WeaponSlotState,
   weaponByIndex,
 } from "@scrapline/shared";
 
@@ -68,6 +97,14 @@ export interface ServerPlayer {
   interact: boolean;
   connected: boolean;
   joinedTick: number;
+  /** Buttons of the previous applied frame (edge detection for enter / exit / seat change). */
+  prevButtons: number;
+  /** Vehicle the player sits in (null on foot) and the seat index. */
+  vehicle: string | null;
+  seat: number;
+  /** Weapon in the pickup slot while a mounted gun occupies it, and the slot that was active. */
+  stash: WeaponSlotState | null;
+  stashSlot: number;
   /** Input pipeline counters (diagnostics; never affect the simulation). */
   inputStats: InputStats;
   stats: PlayerMatchStats;
@@ -134,6 +171,41 @@ export interface NewPlayer {
 interface HistoryFrame {
   tick: number;
   pos: Map<string, { x: number; y: number; alive: boolean }>;
+  vehicles: Map<string, VehiclePose>;
+}
+
+export interface VehiclePose {
+  x: number;
+  y: number;
+  angle: number;
+  alt: number;
+  ready: boolean;
+}
+
+export const VEHICLE_READY = 0;
+export const VEHICLE_WRECK = 1;
+export const VEHICLE_GONE = 2;
+
+export interface ServerVehicle {
+  id: string;
+  def: VehicleDef;
+  spawn: VehicleSpawnDef;
+  sim: VehicleSim;
+  hp: number;
+  /** VEHICLE_READY, VEHICLE_WRECK or VEHICLE_GONE. */
+  status: number;
+  /** Tick of the next status change (wreck clears, respawn). */
+  statusTick: number;
+  /** Occupant ids by seat. */
+  seats: (string | null)[];
+  /** Real-time step credit while nobody drives (the vehicle coasts / lands on its own). */
+  credit: number;
+  lastDriver: string | null;
+  lastDriverTick: number;
+  lastAttacker: string | null;
+  lastAttackTick: number;
+  /** Contact cooldowns: other party id → first tick a new hit may land. */
+  contacts: Map<string, number>;
 }
 
 interface PickupRuntime {
@@ -158,6 +230,18 @@ export interface CombatRules {
 }
 
 const HEALTH_PICKUP = 50;
+/** Wall impacts above this speed (px/s) damage the vehicle. */
+const CRASH_MIN_SPEED = 260;
+const CRASH_DAMAGE_PER_SPEED = 0.35;
+/** Vehicle-vs-vehicle contacts above this closing speed damage both. */
+const COLLIDE_MIN_SPEED = 150;
+const COLLIDE_DAMAGE_PER_SPEED = 0.4;
+/** Wrecks burn for this long before they disappear and the respawn timer starts. */
+const WRECK_SEC = 5;
+const EXPLOSION_RADIUS = 130;
+const EXPLOSION_DAMAGE = 70;
+/** Server tolerance on the client's fire-sector check (anti-cheat only; the client strips first). */
+const SECTOR_TOLERANCE = 0.3;
 const PICKUP_RADIUS = PLAYER.radius + 16;
 
 export function emptyStats(): PlayerMatchStats {
@@ -185,12 +269,16 @@ export class GameSimulation {
   tick = 0;
   readonly players = new Map<string, ServerPlayer>();
   readonly pickups = new Map<string, PickupRuntime>();
+  readonly vehicles = new Map<string, ServerVehicle>();
+  airWorld: CollisionWorld;
   firstBloodDone = false;
   rules: CombatRules = { teams: false, friendlyFire: false };
   /** Team scores indexed by team id (index 0 unused). */
   readonly teamScores: [number, number, number] = [0, 0, 0];
   /** Test-only fixed spawn list (enabled exclusively with ENABLE_DEBUG_ROUTES). */
   spawnOverride: { x: number; y: number }[] | null = null;
+  /** Test-only vehicle placement replacing the map's (same gate). */
+  private vehicleOverride: VehicleSpawnDef[] | null = null;
   private events: NetEvent[] = [];
   private readonly history: HistoryFrame[] = [];
   private readonly tickRate: number;
@@ -199,9 +287,11 @@ export class GameSimulation {
   constructor(map: MapDef, opts: SimOptions) {
     this.map = map;
     this.world = collisionWorldFor(map);
+    this.airWorld = airWorldFor(map);
     this.tickRate = opts.tickRate;
     this.rng = opts.rng ?? Math.random;
     this.resetPickups();
+    this.resetVehicles();
   }
 
   get maxRewindTicks(): number {
@@ -215,8 +305,10 @@ export class GameSimulation {
   setMap(map: MapDef): void {
     this.map = map;
     this.world = collisionWorldFor(map);
+    this.airWorld = airWorldFor(map);
     this.history.length = 0;
     this.resetPickups();
+    this.resetVehicles();
   }
 
   private resetPickups(): void {
@@ -243,6 +335,11 @@ export class GameSimulation {
       interact: false,
       connected: true,
       joinedTick: this.tick,
+      prevButtons: 0,
+      vehicle: null,
+      seat: -1,
+      stash: null,
+      stashSlot: 0,
       inputStats: emptyInputStats(),
       stats: emptyStats(),
     };
@@ -252,6 +349,7 @@ export class GameSimulation {
 
   removePlayer(id: string): ServerPlayer | undefined {
     const p = this.players.get(id);
+    if (p) this.leaveVehicle(p, true);
     this.players.delete(id);
     return p;
   }
@@ -307,6 +405,8 @@ export class GameSimulation {
     this.teamScores[1] = 0;
     this.teamScores[2] = 0;
     this.resetPickups();
+    for (const p of this.players.values()) this.leaveVehicle(p, true);
+    this.resetVehicles();
     this.history.length = 0;
     for (const p of this.players.values()) {
       p.stats = emptyStats();
@@ -317,6 +417,7 @@ export class GameSimulation {
   }
 
   spawnLater(p: ServerPlayer, delaySec: number): void {
+    this.leaveVehicle(p, true);
     p.alive = false;
     p.respawnTick = this.tick + Math.max(1, this.secToTicks(delaySec));
   }
@@ -330,6 +431,9 @@ export class GameSimulation {
     const tickInputs = elapsedSec * NET.inputRate;
     const perTickMax = Math.max(1, Math.ceil(tickInputs * NET.inputCatchUpRate));
     const floorWindowTicks = Math.max(1, Math.round(NET.standingQueueWindowSec * this.tickRate));
+
+    // A disconnected occupant leaves the vehicle at once: a frozen driver must not hold the car.
+    for (const p of this.players.values()) if (!p.connected && p.vehicle) this.leaveVehicle(p, true);
 
     for (const p of this.players.values()) {
       p.interact = false;
@@ -363,11 +467,14 @@ export class GameSimulation {
       if (mode === "live" && p.connected) p.stats.activeTicks += 1;
     }
 
+    this.stepUndrivenVehicles(tickInputs, perTickMax, mode === "live");
+    this.pinOccupants();
     if (mode === "live") {
       for (const p of this.players.values()) {
         if (!p.alive && p.respawnTick > 0 && this.tick >= p.respawnTick) this.spawn(p, false);
       }
       this.updatePickups();
+      this.updateVehicleLifecycle();
     }
     this.recordHistory();
     return this.events;
@@ -375,21 +482,59 @@ export class GameSimulation {
 
   private applyInput(p: ServerPlayer, frame: InputFrame, live: boolean): void {
     const canAct = live && p.alive;
+    const pressed = frame.buttons & ~p.prevButtons;
+    p.prevButtons = frame.buttons;
     const shots: { shot: ShotIntent; view: number }[] = [];
+    const emit = (e: SimEvent) => {
+      if (e.kind === "shot") shots.push({ shot: e.shot, view: frame.viewTick });
+      else if (e.kind === "reloadStart") this.events.push({ t: "reload", p: p.id, w: e.weapon });
+      else if (e.kind === "dash") this.events.push({ t: "dash", p: p.id });
+    };
+    const veh = p.vehicle ? this.vehicles.get(p.vehicle) : undefined;
+    if (veh && p.seat >= 0) {
+      const seat = veh.def.seats[p.seat]!;
+      if (p.seat === 0 && canAct && veh.status === VEHICLE_READY) this.driveVehicle(veh, frame, p);
+      // Shots leave from the seat as the shooter saw the vehicle (lag compensation of the shooter's
+      // own position), and only inside the seat's fire sector.
+      const seen = this.vehiclePoseAt(veh, frame.viewTick);
+      const at = seatWorld(seen, seat);
+      p.sim.x = at.x;
+      p.sim.y = at.y;
+      const fireOk = seat.arc > 0 && inSector(seat, seen.angle, frame.aim, SECTOR_TOLERANCE);
+      const keep = (fireOk ? BTN.FIRE : 0) | BTN.RELOAD;
+      const mounted: InputFrame = {
+        ...frame,
+        mx: 0,
+        my: 0,
+        buttons: frame.buttons & keep,
+        slot: seat.mounted ? -1 : frame.slot,
+      };
+      stepPlayer(p.sim, mounted, { world: this.world, seed: p.seed, alive: canAct, emit, mounted: true });
+      const now = seatWorld(veh.sim, seat);
+      p.sim.x = now.x;
+      p.sim.y = now.y;
+      p.lastProcessedSeq = frame.seq;
+      p.inputStats.processed++;
+      for (const s of shots) this.resolveShot(p, s.shot, s.view, seen.alt >= AIRBORNE_ALT);
+      if (canAct && p.vehicle) {
+        if (pressed & BTN.INTERACT) this.leaveVehicle(p, false);
+        else if (pressed & BTN.SEAT) this.switchSeat(p, veh);
+      }
+      return;
+    }
     stepPlayer(p.sim, frame, {
       world: this.world,
       seed: p.seed,
       alive: canAct,
-      emit: (e: SimEvent) => {
-        if (e.kind === "shot") shots.push({ shot: e.shot, view: frame.viewTick });
-        else if (e.kind === "reloadStart") this.events.push({ t: "reload", p: p.id, w: e.weapon });
-        else if (e.kind === "dash") this.events.push({ t: "dash", p: p.id });
-      },
+      emit,
+      obstacles: this.groundObstacles(null),
     });
-    if (canAct && (frame.buttons & BTN.INTERACT) !== 0) p.interact = true;
+    let entered = false;
+    if (canAct && (pressed & BTN.INTERACT) !== 0) entered = this.tryEnter(p);
+    if (canAct && !entered && (frame.buttons & BTN.INTERACT) !== 0) p.interact = true;
     p.lastProcessedSeq = frame.seq;
     p.inputStats.processed++;
-    for (const s of shots) this.resolveShot(p, s.shot, s.view);
+    for (const s of shots) this.resolveShot(p, s.shot, s.view, false);
   }
 
   /** Positions of all players as the shooter saw them (interpolated server history). */
@@ -420,12 +565,22 @@ export class GameSimulation {
   private recordHistory(): void {
     const pos = new Map<string, { x: number; y: number; alive: boolean }>();
     for (const p of this.players.values()) pos.set(p.id, { x: p.sim.x, y: p.sim.y, alive: p.alive });
-    this.history.push({ tick: this.tick, pos });
+    const vehicles = new Map<string, VehiclePose>();
+    for (const v of this.vehicles.values()) {
+      vehicles.set(v.id, {
+        x: v.sim.x,
+        y: v.sim.y,
+        angle: v.sim.angle,
+        alt: v.sim.alt,
+        ready: v.status === VEHICLE_READY,
+      });
+    }
+    this.history.push({ tick: this.tick, pos, vehicles });
     const keep = this.maxRewindTicks + 4;
     if (this.history.length > keep) this.history.splice(0, this.history.length - keep);
   }
 
-  private resolveShot(shooter: ServerPlayer, shot: ShotIntent, viewTick: number): void {
+  private resolveShot(shooter: ServerPlayer, shot: ShotIntent, viewTick: number, shooterAir: boolean): void {
     const weapon = weaponByIndex(shot.weapon);
     if (!weapon) return;
     shooter.protectedUntil = 0;
@@ -433,20 +588,57 @@ export class GameSimulation {
 
     const seen = this.rewind(viewTick);
     const targets: HitTarget[] = [];
+    const occupantSeat = new Map<string, SeatDef>();
     for (const t of this.players.values()) {
       if (t.id === shooter.id || !t.alive) continue;
       // Without friendly fire, shots pass through teammates (they never block or absorb them).
       if (!canDamage(shooter, t, this.rules)) continue;
+      if (t.vehicle) {
+        // Occupants are hit only where they are exposed (window, turret, door), and never by
+        // somebody riding in the same vehicle.
+        const v = this.vehicles.get(t.vehicle);
+        const seat = v?.def.seats[t.seat];
+        if (!v || !seat || seat.exposure <= 0 || t.vehicle === shooter.vehicle) continue;
+        const pose = this.vehiclePoseAt(v, viewTick);
+        const at = seatWorld(pose, seat);
+        occupantSeat.set(t.id, seat);
+        targets.push({
+          id: t.id,
+          x: at.x,
+          y: at.y,
+          r: 13,
+          air: pose.alt >= AIRBORNE_ALT,
+          group: v.id,
+          occupant: true,
+        });
+        continue;
+      }
       const past = seen.get(t.id);
       if (past && !past.alive) continue;
       targets.push({ id: t.id, x: past?.x ?? t.sim.x, y: past?.y ?? t.sim.y, r: PLAYER.radius });
+    }
+    for (const v of this.vehicles.values()) {
+      if (v.status !== VEHICLE_READY || v.id === shooter.vehicle) continue;
+      if (!canDamage(shooter, { id: `veh:${v.id}`, team: this.vehicleTeam(v) }, this.rules)) continue;
+      const pose = this.vehiclePoseAt(v, viewTick);
+      if (!pose.ready) continue;
+      targets.push({
+        id: `veh:${v.id}`,
+        x: pose.x,
+        y: pose.y,
+        r: 0,
+        air: pose.alt >= AIRBORNE_ALT,
+        body: { angle: pose.angle, def: v.def },
+        group: v.id,
+      });
     }
 
     const damageByTarget = new Map<string, { dmg: number; x: number; y: number }>();
     const angles: number[] = [];
     const dists: number[] = [];
+    const opts = { airWorld: this.airWorld, shooterAir };
     for (const angle of shot.angles) {
-      const r = tracePellet(this.world, shot.ox, shot.oy, angle, weapon.rangePx, targets, shooter.id);
+      const r = tracePellet(this.world, shot.ox, shot.oy, angle, weapon.rangePx, targets, shooter.id, opts);
       angles.push(Math.round(angle * 1000));
       dists.push(Math.round(r.dist));
       if (r.targetId) {
@@ -470,27 +662,50 @@ export class GameSimulation {
 
     if (damageByTarget.size > 0) shooter.stats.shotsHit += 1;
     for (const [targetId, hit] of damageByTarget) {
+      if (targetId.startsWith("veh:")) {
+        const v = this.vehicles.get(targetId.slice(4));
+        if (v) this.damageVehicle(v, hit.dmg * v.def.bulletArmor, shooter, hit.x, hit.y);
+        continue;
+      }
       const target = this.players.get(targetId);
       if (!target?.alive) continue;
-      const shielded = target.protectedUntil > this.tick;
-      const dmg = shielded ? 0 : Math.max(1, Math.round(hit.dmg));
-      target.hp = Math.max(0, target.hp - dmg);
-      shooter.stats.damageDealt += dmg;
-      const lethal = target.hp === 0;
-      this.events.push({
-        t: "hit",
-        p: shooter.id,
-        v: target.id,
-        dmg,
-        x: Math.round(hit.x),
-        y: Math.round(hit.y),
-        k: lethal,
-      });
-      if (lethal) this.kill(target, shooter, weapon.index);
+      const exposure = occupantSeat.get(targetId)?.exposure ?? 1;
+      this.damagePlayer(target, hit.dmg * exposure, shooter, weapon.index, hit.x, hit.y);
     }
   }
 
-  private kill(victim: ServerPlayer, killer: ServerPlayer, weapon: number): void {
+  /**
+   * Applies damage to a player (spawn protection absorbs it) and reports it. `attacker` null =
+   * nobody is credited (a crash, a driverless vehicle).
+   */
+  private damagePlayer(
+    target: ServerPlayer,
+    raw: number,
+    attacker: ServerPlayer | null,
+    weapon: number,
+    x: number,
+    y: number,
+  ): void {
+    if (!target.alive) return;
+    const shielded = target.protectedUntil > this.tick;
+    const dmg = shielded ? 0 : Math.max(1, Math.round(raw));
+    target.hp = Math.max(0, target.hp - dmg);
+    if (attacker && attacker !== target) attacker.stats.damageDealt += dmg;
+    const lethal = target.hp === 0;
+    this.events.push({
+      t: "hit",
+      p: attacker?.id ?? "",
+      v: target.id,
+      dmg,
+      x: Math.round(x),
+      y: Math.round(y),
+      k: lethal,
+    });
+    if (lethal) this.kill(target, attacker && attacker !== target ? attacker : null, weapon);
+  }
+
+  private kill(victim: ServerPlayer, killer: ServerPlayer | null, weapon: number): void {
+    this.leaveVehicle(victim, true, true);
     victim.alive = false;
     victim.hp = 0;
     victim.sim.vx = 0;
@@ -498,6 +713,10 @@ export class GameSimulation {
     victim.stats.deaths += 1;
     victim.stats.streak = 0;
     victim.respawnTick = this.tick + this.secToTicks(PLAYER.respawnSeconds);
+    if (!killer) {
+      this.events.push({ t: "kill", k: "", v: victim.id, w: weapon, fb: false, st: 0 });
+      return;
+    }
     killer.stats.kills += 1;
     killer.stats.streak += 1;
     killer.stats.bestStreak = Math.max(killer.stats.bestStreak, killer.stats.streak);
@@ -573,7 +792,7 @@ export class GameSimulation {
         continue;
       }
       for (const p of this.players.values()) {
-        if (!p.alive) continue;
+        if (!p.alive || p.vehicle) continue;
         const reach = pk.def.kind === "weapon" ? PLAYER.interactRadius : PICKUP_RADIUS;
         if (distSq(p.sim.x, p.sim.y, pk.def.x, pk.def.y) > reach * reach) continue;
         let taken = false;
@@ -596,6 +815,532 @@ export class GameSimulation {
         }
       }
     }
+  }
+
+  // ---------------------------------------------------------------- vehicles
+
+  setVehicleOverride(list: VehicleSpawnDef[] | null): void {
+    this.vehicleOverride = list;
+    this.resetVehicles();
+  }
+
+  private resetVehicles(): void {
+    this.vehicles.clear();
+    for (const spawn of this.vehicleOverride ?? this.map.vehicleSpawns ?? []) {
+      const def = VEHICLES[spawn.kind];
+      this.vehicles.set(spawn.id, {
+        id: spawn.id,
+        def,
+        spawn,
+        sim: createVehicleSim(spawn.x, spawn.y, spawn.angle),
+        hp: def.maxHp,
+        status: VEHICLE_READY,
+        statusTick: 0,
+        seats: def.seats.map(() => null),
+        credit: 0,
+        lastDriver: null,
+        lastDriverTick: 0,
+        lastAttacker: null,
+        lastAttackTick: 0,
+        contacts: new Map(),
+      });
+    }
+  }
+
+  /** Team of a vehicle for damage rules: its first occupant's, 0 when empty. */
+  vehicleTeam(v: ServerVehicle): number {
+    for (const id of v.seats) {
+      const p = id ? this.players.get(id) : undefined;
+      if (p) return p.team;
+    }
+    return 0;
+  }
+
+  /** Vehicle pose as a client rendering `viewTick` saw it (interpolated history). */
+  vehiclePoseAt(v: ServerVehicle, viewTick: number): VehiclePose {
+    const current: VehiclePose = {
+      x: v.sim.x,
+      y: v.sim.y,
+      angle: v.sim.angle,
+      alt: v.sim.alt,
+      ready: v.status === VEHICLE_READY,
+    };
+    if (this.history.length === 0) return current;
+    const newest = this.history[this.history.length - 1]!.tick;
+    const t = clamp(viewTick, newest - this.maxRewindTicks, newest);
+    const t0 = Math.floor(t);
+    const frac = t - t0;
+    const a = this.historyAt(t0)?.vehicles.get(v.id);
+    if (!a) return current;
+    const b = this.historyAt(t0 + 1)?.vehicles.get(v.id) ?? a;
+    // A respawn in between is a teleport, not motion.
+    if (Math.hypot(b.x - a.x, b.y - a.y) > 200) return frac < 0.5 ? a : b;
+    return {
+      x: a.x + (b.x - a.x) * frac,
+      y: a.y + (b.y - a.y) * frac,
+      angle: lerpAngle(a.angle, b.angle, frac),
+      alt: a.alt + (b.alt - a.alt) * frac,
+      ready: a.ready && b.ready,
+    };
+  }
+
+  /** Collision circles of every vehicle standing on the ground (wrecks included). */
+  groundObstacles(except: ServerVehicle | null): Circle[] {
+    const out: Circle[] = [];
+    for (const v of this.vehicles.values()) {
+      if (v === except || v.status === VEHICLE_GONE || v.sim.alt >= AIRBORNE_ALT) continue;
+      for (const c of vehicleCircles(v.sim, v.def)) out.push(c);
+    }
+    return out;
+  }
+
+  private stepContext(v: ServerVehicle) {
+    return { world: this.world, airWorld: this.airWorld, obstacles: this.groundObstacles(v) };
+  }
+
+  private driveVehicle(v: ServerVehicle, frame: InputFrame, driver: ServerPlayer): void {
+    v.credit = 0;
+    v.lastDriver = driver.id;
+    v.lastDriverTick = this.tick;
+    const res = stepVehicle(v.sim, v.def, frame, this.stepContext(v));
+    this.afterVehicleStep(v, res);
+  }
+
+  /** Vehicles nobody drives coast to a stop (helicopters land) at real-time rate. */
+  private stepUndrivenVehicles(tickInputs: number, perTickMax: number, live: boolean): void {
+    for (const v of this.vehicles.values()) {
+      if (v.status === VEHICLE_GONE) continue;
+      const driver = v.seats[0] ? this.players.get(v.seats[0]) : undefined;
+      if (driver && v.status === VEHICLE_READY) continue;
+      const moving =
+        Math.abs(v.sim.vx) > 0.01 ||
+        Math.abs(v.sim.vy) > 0.01 ||
+        v.sim.alt > 0 ||
+        v.sim.rotor > 0 ||
+        v.sim.lift;
+      if (!moving) {
+        v.credit = 0;
+        continue;
+      }
+      v.credit += tickInputs;
+      let n = 0;
+      while (v.credit >= 1 && n < perTickMax) {
+        v.credit -= 1;
+        n++;
+        const res = stepVehicle(v.sim, v.def, null, this.stepContext(v));
+        if (live) this.afterVehicleStep(v, res);
+      }
+    }
+  }
+
+  /** Who gets the credit for what a vehicle does: its driver, or the last one for a few seconds. */
+  private vehicleCredit(v: ServerVehicle): ServerPlayer | null {
+    const driver = v.seats[0] ? this.players.get(v.seats[0]) : undefined;
+    if (driver?.alive) return driver;
+    if (v.lastDriver && this.tick - v.lastDriverTick <= this.secToTicks(RAM_CREDIT_SEC)) {
+      return this.players.get(v.lastDriver) ?? null;
+    }
+    return null;
+  }
+
+  private contactReady(v: ServerVehicle, otherId: string): boolean {
+    const until = v.contacts.get(otherId) ?? 0;
+    if (this.tick < until) return false;
+    v.contacts.set(otherId, this.tick + Math.max(1, this.secToTicks(RAM_COOLDOWN_SEC)));
+    return true;
+  }
+
+  /** Crashes, vehicle-vs-vehicle hits and run-overs after one vehicle step. */
+  private afterVehicleStep(v: ServerVehicle, res: VehicleStepResult): void {
+    if (v.status !== VEHICLE_READY) return;
+    const credit = this.vehicleCredit(v);
+    // Vehicle against vehicle: both take damage scaled by the other's mass.
+    if (res.obstacleImpact > COLLIDE_MIN_SPEED) {
+      const other = this.vehicleInContact(v);
+      if (other && this.contactReady(v, `veh:${other.id}`)) {
+        const over = res.obstacleImpact - COLLIDE_MIN_SPEED;
+        const total = v.def.mass + other.def.mass;
+        const otherCredit = this.vehicleCredit(other);
+        this.events.push({
+          t: "crash",
+          v: v.id,
+          o: other.id,
+          x: Math.round((v.sim.x + other.sim.x) / 2),
+          y: Math.round((v.sim.y + other.sim.y) / 2),
+          f: Math.round(res.obstacleImpact),
+        });
+        // Push the other body along the contact normal (momentum transfer).
+        const nx = other.sim.x - v.sim.x;
+        const ny = other.sim.y - v.sim.y;
+        const len = Math.hypot(nx, ny) || 1;
+        const push = res.obstacleImpact * (v.def.mass / total);
+        other.sim.vx += (nx / len) * push;
+        other.sim.vy += (ny / len) * push;
+        this.damageVehicle(
+          other,
+          over * COLLIDE_DAMAGE_PER_SPEED * (v.def.mass / other.def.mass),
+          credit,
+          other.sim.x,
+          other.sim.y,
+        );
+        this.damageVehicle(
+          v,
+          over * COLLIDE_DAMAGE_PER_SPEED * (other.def.mass / v.def.mass),
+          otherCredit,
+          v.sim.x,
+          v.sim.y,
+        );
+      }
+    } else if (res.impact > CRASH_MIN_SPEED && this.contactReady(v, "wall")) {
+      this.events.push({
+        t: "crash",
+        v: v.id,
+        o: "",
+        x: Math.round(v.sim.x),
+        y: Math.round(v.sim.y),
+        f: Math.round(res.impact),
+      });
+      this.damageVehicle(v, (res.impact - CRASH_MIN_SPEED) * CRASH_DAMAGE_PER_SPEED, null, v.sim.x, v.sim.y);
+    }
+    if (v.status !== VEHICLE_READY || v.sim.alt > 0.1) return;
+    this.runOver(v, credit);
+  }
+
+  private vehicleInContact(v: ServerVehicle): ServerVehicle | null {
+    const mine = vehicleCircles(v.sim, v.def);
+    let best: ServerVehicle | null = null;
+    let bestGap = 3;
+    for (const o of this.vehicles.values()) {
+      if (o === v || o.status === VEHICLE_GONE || o.sim.alt >= AIRBORNE_ALT) continue;
+      for (const a of mine) {
+        for (const b of vehicleCircles(o.sim, o.def)) {
+          const gap = Math.hypot(a.x - b.x, a.y - b.y) - a.r - b.r;
+          if (gap < bestGap) {
+            bestGap = gap;
+            best = o;
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Players on foot touching the body are pushed aside; above the vehicle's minimum ramming speed
+   * they are hit: damage grows with the closing speed (relative velocity along the contact normal,
+   * so a glancing contact hurts less than a head-on one) and the vehicle's ramming factor.
+   */
+  private runOver(v: ServerVehicle, credit: ServerPlayer | null): void {
+    const cos = Math.cos(v.sim.angle);
+    const sin = Math.sin(v.sim.angle);
+    for (const p of this.players.values()) {
+      if (!p.alive || p.vehicle) continue;
+      const c = closestOnBody(v.sim, v.def, p.sim.x, p.sim.y);
+      if (!c.inside && c.dist >= PLAYER.radius) continue;
+      let nx: number;
+      let ny: number;
+      if (c.inside || c.dist < 1e-6) {
+        // Centre inside the hull: push out sideways from the vehicle's axis.
+        const lx = (p.sim.x - v.sim.x) * cos + (p.sim.y - v.sim.y) * sin;
+        const ly = -(p.sim.x - v.sim.x) * sin + (p.sim.y - v.sim.y) * cos;
+        const side = ly >= 0 ? 1 : -1;
+        nx = -sin * side;
+        ny = cos * side;
+        const edge = seatWorld(v.sim, { ox: lx, oy: side * v.def.halfWidth });
+        c.x = edge.x;
+        c.y = edge.y;
+      } else {
+        nx = (p.sim.x - c.x) / c.dist;
+        ny = (p.sim.y - c.y) / c.dist;
+      }
+      // Velocity of the hull at the contact point (translation + rotation).
+      const rx = c.x - v.sim.x;
+      const ry = c.y - v.sim.y;
+      const pvx = v.sim.vx - v.sim.av * ry;
+      const pvy = v.sim.vy + v.sim.av * rx;
+      const closing = (pvx - p.sim.vx) * nx + (pvy - p.sim.vy) * ny;
+      const out = resolveCircle(
+        this.world,
+        c.x + nx * (PLAYER.radius + 1),
+        c.y + ny * (PLAYER.radius + 1),
+        PLAYER.radius,
+      );
+      p.sim.x = out.x;
+      p.sim.y = out.y;
+      if (closing <= 0) continue;
+      p.sim.vx += nx * closing * 0.8;
+      p.sim.vy += ny * closing * 0.8;
+      if (closing < v.def.ramMinSpeed || !this.contactReady(v, p.id)) continue;
+      const dmg = (closing - v.def.ramMinSpeed) * v.def.ramFactor;
+      v.sim.vx *= 0.94;
+      v.sim.vy *= 0.94;
+      this.events.push({
+        t: "crash",
+        v: v.id,
+        o: p.id,
+        x: Math.round(c.x),
+        y: Math.round(c.y),
+        f: Math.round(closing),
+      });
+      // Teammates are bumped, not hurt, without friendly fire.
+      if (credit && !canDamage(credit, p, this.rules)) continue;
+      this.damagePlayer(p, dmg, credit, KILL_BY_VEHICLE, c.x, c.y);
+    }
+  }
+
+  damageVehicle(v: ServerVehicle, raw: number, attacker: ServerPlayer | null, x: number, y: number): void {
+    if (v.status !== VEHICLE_READY || raw <= 0) return;
+    const dmg = Math.max(1, Math.round(raw));
+    v.hp = Math.max(0, v.hp - dmg);
+    if (attacker) {
+      v.lastAttacker = attacker.id;
+      v.lastAttackTick = this.tick;
+      attacker.stats.damageDealt += dmg;
+    }
+    this.events.push({ t: "vhit", p: attacker?.id ?? "", v: v.id, dmg, x: Math.round(x), y: Math.round(y) });
+    if (v.hp === 0) this.destroyVehicle(v);
+  }
+
+  /** The hull explodes: occupants and bystanders take blast damage credited to the last attacker. */
+  private destroyVehicle(v: ServerVehicle): void {
+    v.status = VEHICLE_WRECK;
+    v.statusTick = this.tick + this.secToTicks(WRECK_SEC);
+    v.sim.vx *= 0.3;
+    v.sim.vy *= 0.3;
+    v.sim.av = 0;
+    v.sim.lift = false;
+    v.sim.alt = 0;
+    v.sim.rotor = 0;
+    const recent = v.lastAttacker && this.tick - v.lastAttackTick <= this.secToTicks(10);
+    const attacker = recent ? (this.players.get(v.lastAttacker!) ?? null) : null;
+    this.events.push({
+      t: "wreck",
+      v: v.id,
+      p: attacker?.id ?? "",
+      x: Math.round(v.sim.x),
+      y: Math.round(v.sim.y),
+    });
+    const occupants = v.seats
+      .map((id) => (id ? this.players.get(id) : undefined))
+      .filter((p): p is ServerPlayer => !!p);
+    for (const p of occupants) this.leaveVehicle(p, true);
+    for (const p of occupants) {
+      this.damagePlayer(
+        p,
+        v.def.wreckDamage,
+        attacker && attacker !== p ? attacker : null,
+        KILL_BY_EXPLOSION,
+        p.sim.x,
+        p.sim.y,
+      );
+    }
+    for (const p of this.players.values()) {
+      if (!p.alive || p.vehicle || occupants.includes(p)) continue;
+      const d = Math.hypot(p.sim.x - v.sim.x, p.sim.y - v.sim.y);
+      if (d > EXPLOSION_RADIUS) continue;
+      if (attacker && !canDamage(attacker, p, this.rules) && attacker !== p) continue;
+      const dmg = EXPLOSION_DAMAGE * (1 - d / EXPLOSION_RADIUS);
+      if (dmg >= 1)
+        this.damagePlayer(
+          p,
+          dmg,
+          attacker && attacker !== p ? attacker : null,
+          KILL_BY_EXPLOSION,
+          p.sim.x,
+          p.sim.y,
+        );
+    }
+  }
+
+  private updateVehicleLifecycle(): void {
+    for (const v of this.vehicles.values()) {
+      if (v.status === VEHICLE_WRECK && this.tick >= v.statusTick) {
+        v.status = VEHICLE_GONE;
+        v.statusTick = this.tick + this.secToTicks(v.def.respawnSec);
+      } else if (v.status === VEHICLE_GONE && this.tick >= v.statusTick) {
+        // Respawn only onto a clear spot: never inside a player or another vehicle.
+        const probe = createVehicleSim(v.spawn.x, v.spawn.y, v.spawn.angle);
+        const blocked =
+          [...this.players.values()].some(
+            (p) =>
+              p.alive && !p.vehicle && closestOnBody(probe, v.def, p.sim.x, p.sim.y).dist < PLAYER.radius + 8,
+          ) ||
+          this.groundObstacles(v).some((o) =>
+            vehicleCircles(probe, v.def).some((c) => Math.hypot(c.x - o.x, c.y - o.y) < c.r + o.r + 4),
+          );
+        if (blocked) {
+          v.statusTick = this.tick + this.secToTicks(1);
+          continue;
+        }
+        v.sim = probe;
+        v.hp = v.def.maxHp;
+        v.status = VEHICLE_READY;
+        v.credit = 0;
+        v.contacts.clear();
+        v.lastDriver = null;
+        v.lastAttacker = null;
+        this.events.push({ t: "vspawn", v: v.id });
+      }
+    }
+    // Contact cooldowns of parties that are long gone are forgotten (bounded maps).
+    if (this.tick % 200 === 0) {
+      for (const v of this.vehicles.values()) {
+        for (const [k, until] of v.contacts) if (until < this.tick) v.contacts.delete(k);
+      }
+    }
+  }
+
+  /** Keeps every occupant on their seat. */
+  private pinOccupants(): void {
+    for (const v of this.vehicles.values()) {
+      v.seats.forEach((id, i) => {
+        const p = id ? this.players.get(id) : undefined;
+        if (!p) return;
+        const at = seatWorld(v.sim, v.def.seats[i]!);
+        p.sim.x = at.x;
+        p.sim.y = at.y;
+        p.sim.vx = 0;
+        p.sim.vy = 0;
+      });
+    }
+  }
+
+  /** Vehicle a player on foot can enter right now (nearest body within reach), with the seat. */
+  enterableVehicle(p: ServerPlayer): { v: ServerVehicle; seat: number } | null {
+    let best: { v: ServerVehicle; seat: number; d: number } | null = null;
+    for (const v of this.vehicles.values()) {
+      if (v.status !== VEHICLE_READY) continue;
+      if (vehicleSpeed(v.sim) > v.def.enterMaxSpeed || v.sim.alt > 0.05) continue;
+      const d = closestOnBody(v.sim, v.def, p.sim.x, p.sim.y).dist;
+      if (d > ENTER_REACH) continue;
+      // Never into a vehicle held by the other team.
+      if (this.rules.teams) {
+        const team = this.vehicleTeam(v);
+        if (team !== 0 && team !== p.team) continue;
+      }
+      const seat = v.seats[0] === null ? 0 : v.seats.indexOf(null);
+      if (seat < 0) continue;
+      if (!best || d < best.d) best = { v, seat, d };
+    }
+    return best ? { v: best.v, seat: best.seat } : null;
+  }
+
+  private tryEnter(p: ServerPlayer): boolean {
+    const target = this.enterableVehicle(p);
+    if (!target) return false;
+    p.protectedUntil = 0;
+    p.sim.vx = 0;
+    p.sim.vy = 0;
+    p.sim.dash = 0;
+    this.takeSeat(p, target.v, target.seat);
+    return true;
+  }
+
+  /** Seats are claimed one input at a time, so two players can never hold the same seat. */
+  private takeSeat(p: ServerPlayer, v: ServerVehicle, seat: number): void {
+    v.seats[seat] = p.id;
+    p.vehicle = v.id;
+    p.seat = seat;
+    if (seat === 0) {
+      v.lastDriver = p.id;
+      v.lastDriverTick = this.tick;
+      v.credit = 0;
+    }
+    const def = v.def.seats[seat]!;
+    if (def.mounted) {
+      p.stash = { ...p.sim.slots[SLOT_PICKUP]! };
+      p.stashSlot = p.sim.slot;
+      p.sim.slots[SLOT_PICKUP] = fullSlot(def.mounted);
+      p.sim.slot = SLOT_PICKUP;
+      p.sim.reload = 0;
+      p.sim.swap = 0;
+      p.sim.bloom = 0;
+    }
+    const at = seatWorld(v.sim, def);
+    p.sim.x = at.x;
+    p.sim.y = at.y;
+    this.events.push({ t: "seat", p: p.id, v: v.id, s: seat });
+  }
+
+  private releaseSeat(p: ServerPlayer, v: ServerVehicle): void {
+    const def = v.def.seats[p.seat];
+    if (p.seat >= 0 && v.seats[p.seat] === p.id) v.seats[p.seat] = null;
+    if (p.seat === 0) {
+      v.lastDriver = p.id;
+      v.lastDriverTick = this.tick;
+    }
+    if (def?.mounted && p.stash) {
+      p.sim.slots[SLOT_PICKUP] = p.stash;
+      p.sim.slot = p.stashSlot;
+      const active = p.sim.slots[p.sim.slot];
+      if (!active || active.id === NO_WEAPON) p.sim.slot = 0;
+      p.sim.reload = 0;
+      p.sim.swap = 0;
+    }
+    p.stash = null;
+    p.vehicle = null;
+    p.seat = -1;
+  }
+
+  private switchSeat(p: ServerPlayer, v: ServerVehicle): void {
+    const n = v.seats.length;
+    for (let k = 1; k < n; k++) {
+      const next = (p.seat + k) % n;
+      if (v.seats[next] !== null) continue;
+      this.releaseSeat(p, v);
+      this.takeSeat(p, v, next);
+      return;
+    }
+  }
+
+  /**
+   * Leaves the vehicle. A voluntary exit needs a slow vehicle (a landed helicopter) and a free spot
+   * beside it; a forced one (death, disconnect, destruction, match reset) always succeeds.
+   */
+  leaveVehicle(p: ServerPlayer, forced: boolean, dying = false): boolean {
+    const v = p.vehicle ? this.vehicles.get(p.vehicle) : undefined;
+    if (!v) {
+      p.vehicle = null;
+      p.seat = -1;
+      return true;
+    }
+    const seat = v.def.seats[p.seat] ?? v.def.seats[0]!;
+    if (!forced && (vehicleSpeed(v.sim) > v.def.exitMaxSpeed || v.sim.alt > 0.2)) return false;
+    const blockers: Circle[] = [...this.groundObstacles(v)];
+    for (const o of this.players.values()) {
+      if (o !== p && o.alive && !o.vehicle) blockers.push({ x: o.sim.x, y: o.sim.y, r: PLAYER.radius });
+    }
+    let spot = findExitSpot(v.sim, v.def, seat, this.world, blockers);
+    if (!spot) {
+      if (!forced) return false;
+      spot = this.freeSpotNear(seatWorld(v.sim, seat));
+    }
+    this.releaseSeat(p, v);
+    if (!dying) {
+      p.sim.x = spot.x;
+      p.sim.y = spot.y;
+    }
+    p.sim.vx = 0;
+    p.sim.vy = 0;
+    this.events.push({ t: "seat", p: p.id, v: v.id, s: -1 });
+    return true;
+  }
+
+  private freeSpotNear(from: { x: number; y: number }): { x: number; y: number } {
+    for (let r = 0; r <= 240; r += 24) {
+      for (let k = 0; k < 12; k++) {
+        const a = (k / 12) * Math.PI * 2;
+        const q = { x: from.x + Math.cos(a) * r, y: from.y + Math.sin(a) * r };
+        if (
+          isFreeSpot(this.world, q) &&
+          !this.groundObstacles(null).some((o) => Math.hypot(o.x - q.x, o.y - q.y) < o.r + PLAYER.radius)
+        ) {
+          return q;
+        }
+        if (r === 0) break;
+      }
+    }
+    return this.chooseSpawn("");
   }
 
   /** Ranking: kills desc, deaths asc, earliest to reach the score first. */

@@ -74,3 +74,61 @@ export class SnapshotBuffer {
     };
   }
 }
+
+export interface VehicleSample {
+  x: number;
+  y: number;
+  angle: number;
+  alt: number;
+  rotor: number;
+  hp: number;
+  status: number;
+  /** Speed (px/s) for the HUD and effects. */
+  speed: number;
+}
+
+/** Same timeline as remote players: vehicles are rendered as two blended server states. */
+export class VehicleBuffer {
+  private readonly snaps: { tick: number; vehicles: Map<string, VehicleSample> }[] = [];
+  private readonly maxSnaps = 40;
+
+  push(tick: number, vehicles: Map<string, VehicleSample>): void {
+    const last = this.snaps[this.snaps.length - 1];
+    if (last && tick <= last.tick) {
+      if (tick === last.tick) last.vehicles = vehicles;
+      return;
+    }
+    this.snaps.push({ tick, vehicles });
+    if (this.snaps.length > this.maxSnaps) this.snaps.shift();
+  }
+
+  clear(): void {
+    this.snaps.length = 0;
+  }
+
+  sample(id: string, renderTick: number): VehicleSample | null {
+    const n = this.snaps.length;
+    if (n === 0) return null;
+    let i = n - 1;
+    while (i >= 0 && this.snaps[i]!.tick > renderTick) i--;
+    if (i < 0) return this.snaps[0]!.vehicles.get(id) ?? null;
+    const older = this.snaps[i]!;
+    const newer = this.snaps[i + 1];
+    const a = older.vehicles.get(id);
+    if (!a) return newer?.vehicles.get(id) ?? null;
+    if (!newer) return a;
+    const b = newer.vehicles.get(id);
+    if (!b) return a;
+    const t = (renderTick - older.tick) / (newer.tick - older.tick);
+    if (a.status !== b.status || Math.hypot(b.x - a.x, b.y - a.y) > 200) return t < 0.5 ? a : b;
+    return {
+      ...b,
+      x: lerp(a.x, b.x, t),
+      y: lerp(a.y, b.y, t),
+      angle: lerpAngle(a.angle, b.angle, t),
+      alt: lerp(a.alt, b.alt, t),
+      rotor: lerp(a.rotor, b.rotor, t),
+      speed: lerp(a.speed, b.speed, t),
+    };
+  }
+}

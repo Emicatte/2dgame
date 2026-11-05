@@ -224,6 +224,101 @@ class Sfx {
     this.noiseBurst(out, t, 0.35, "lowpass", 1200, 0.8, 0.7);
   }
 
+  /** A vehicle exploding: deep boom plus a long debris rumble. */
+  explosion(distance = 0, pan = 0): void {
+    if (!this.ctx) return;
+    const out = this.out(this.sfxBus, pan, Math.max(0.08, 1 - distance / 2600));
+    if (!out) return;
+    const t = this.ctx.currentTime;
+    this.tone(out, t, "sine", 110, 30, 0.9, 0.9);
+    this.noiseBurst(out, t, 0.9, "lowpass", 700, 0.7, 0.9);
+    this.noiseBurst(out, t + 0.05, 0.4, "bandpass", 2400, 1.2, 0.35);
+  }
+
+  /** Metal impact (crash, ramming), louder with force. */
+  crash(force: number, distance = 0, pan = 0): void {
+    if (!this.ctx || !this.throttle("crash", 90)) return;
+    const k = Math.min(1, force / 500);
+    const out = this.out(this.sfxBus, pan, Math.max(0.05, (0.3 + k * 0.5) * (1 - distance / 2400)));
+    if (!out) return;
+    const t = this.ctx.currentTime;
+    this.noiseBurst(out, t, 0.18 + k * 0.2, "bandpass", 900 + k * 900, 1.5, 0.8);
+    this.tone(out, t, "square", 180 + k * 120, 60, 0.2, 0.25);
+  }
+
+  /** Door / seat change. */
+  door(local: boolean, distance = 0, pan = 0): void {
+    if (!this.ctx) return;
+    const out = this.out(this.sfxBus, pan, local ? 0.45 : Math.max(0.04, 0.3 - distance / 2400));
+    if (!out) return;
+    const t = this.ctx.currentTime;
+    this.noiseBurst(out, t, 0.06, "highpass", 1800, 0.9, 0.6);
+    this.tone(out, t + 0.03, "square", 140, 90, 0.08, 0.35);
+  }
+
+  /** Bullet on armor plate. */
+  armorHit(): void {
+    if (!this.ctx || !this.throttle("armor", 50)) return;
+    const out = this.out(this.uiBus, 0, 0.3);
+    if (!out) return;
+    const t = this.ctx.currentTime;
+    this.tone(out, t, "triangle", 1700, 1200, 0.06, 0.4);
+  }
+
+  private engine: {
+    osc: OscillatorNode;
+    osc2: OscillatorNode;
+    gain: GainNode;
+    filter: BiquadFilterNode;
+  } | null = null;
+
+  /**
+   * Continuous engine / rotor sound of the vehicle the local player is in: pitch follows speed (or
+   * rotor speed), volume fades out when they leave. `level` 0 stops it.
+   */
+  engineSound(level: number, pitch: number, rotor: boolean): void {
+    if (!this.ctx) return;
+    if (!this.engine && level <= 0) return;
+    const ctx = this.ctx;
+    if (!this.engine) {
+      const osc = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+      osc.type = "sawtooth";
+      osc2.type = "square";
+      filter.type = "lowpass";
+      filter.frequency.value = 600;
+      gain.gain.value = 0;
+      osc.connect(filter);
+      osc2.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.sfxBus);
+      osc.start();
+      osc2.start();
+      this.engine = { osc, osc2, gain, filter };
+    }
+    const t = ctx.currentTime;
+    const e = this.engine;
+    const base = rotor ? 18 + pitch * 14 : 38 + pitch * 70;
+    e.osc.frequency.setTargetAtTime(base, t, 0.08);
+    e.osc2.frequency.setTargetAtTime(rotor ? base * 0.5 : base * 1.5, t, 0.08);
+    e.filter.frequency.setTargetAtTime(rotor ? 380 : 420 + pitch * 900, t, 0.1);
+    e.gain.gain.setTargetAtTime(Math.max(0, level) * 0.12, t, 0.12);
+    if (level <= 0) {
+      const old = e;
+      this.engine = null;
+      setTimeout(() => {
+        try {
+          old.osc.stop();
+          old.osc2.stop();
+        } catch {
+          // already stopped
+        }
+      }, 800);
+    }
+  }
+
   pickup(): void {
     if (!this.ctx) return;
     const out = this.out(this.uiBus, 0, 0.35);

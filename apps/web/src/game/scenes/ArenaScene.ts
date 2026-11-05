@@ -1,22 +1,32 @@
 import type { Room } from "@colyseus/sdk";
 import {
+  AIRBORNE_ALT,
   activeWeapon,
+  airWorldFor,
   BTN,
+  bodyFits,
   C2S,
+  type Circle,
   canDamage,
   clamp,
+  closestOnBody,
   collisionWorldFor,
   currentSpreadDeg,
   DEFAULT_MAP,
+  ENTER_REACH,
   encodeInput,
   fireIntervalSteps,
   type HitTarget,
   hashString,
   type InputFrame,
+  inSector,
   isMapId,
   isTeamMode,
+  isVehicleKind,
+  lerpAngle,
   MAPS,
   type MapDef,
+  type MapId,
   type MatchPhase,
   type MatchState,
   NET,
@@ -28,8 +38,15 @@ import {
   quantizeInput,
   raycastSolids,
   STEP_DT,
+  seatOccupant,
+  seatWorld,
   secToSteps,
   tracePellet,
+  VEHICLE_STATUS,
+  VEHICLES,
+  type VehicleDef,
+  type VehicleState,
+  vehicleCircles,
   WEAPONS,
   type WeaponDef,
   weaponByIndex,
@@ -44,12 +61,18 @@ import { sfx } from "../audio/sfx.ts";
 import { autopilot } from "../bench/autopilot.ts";
 import { Effects } from "../effects/Effects.ts";
 import { PlayerView } from "../entities/PlayerView.ts";
-import { hudStore, uiStore } from "../hudStore.ts";
+import { VehicleView } from "../entities/VehicleView.ts";
+import { type HudVehicle, hudStore, uiStore } from "../hudStore.ts";
 import { InputManager } from "../input/InputManager.ts";
 import { ServerClock } from "../net/clock.ts";
-import { type RemoteSample, SnapshotBuffer } from "../net/interpolation.ts";
+import {
+  type RemoteSample,
+  SnapshotBuffer,
+  VehicleBuffer,
+  type VehicleSample,
+} from "../net/interpolation.ts";
 import { NetMetrics } from "../net/metrics.ts";
-import { Predictor } from "../net/Predictor.ts";
+import { type PredictEnv, Predictor } from "../net/Predictor.ts";
 import { PerfRecorder } from "../perf/PerfRecorder.ts";
 
 interface PickupView {
@@ -68,6 +91,23 @@ interface QueuedEvent {
 }
 
 const STEP_MS = STEP_DT * 1000;
+/** px/s → km/h shown on the speedometer (a car body is ~4.5 m long). */
+const KMH_PER_PX = 0.18;
+
+interface VehiclePose {
+  x: number;
+  y: number;
+  angle: number;
+  alt: number;
+  rotor: number;
+  speed: number;
+}
+
+interface EnterTarget {
+  id: string;
+  def: VehicleDef;
+  seat: number;
+}
 /** Visible world area stays the same on every screen size (fairness across resolutions). */
 const VIEW_W = 1600;
 const VIEW_H = 900;
@@ -83,6 +123,20 @@ export class ArenaScene extends Phaser.Scene {
   private lightImages: { img: Phaser.GameObjects.Image; base: number; flicker: number; seed: number }[] = [];
   private pickupViews = new Map<string, PickupView>();
   private views = new Map<string, PlayerView>();
+  private vehicleViews = new Map<string, VehicleView>();
+  private vbuffer = new VehicleBuffer();
+  /** Pose of every vehicle as rendered this frame (players on seats follow it). */
+  private vehiclePoses = new Map<string, VehiclePose>();
+  private prevVehicle = { x: 0, y: 0, angle: 0 };
+  private env: PredictEnv = { obstacles: [], vehicleObstacles: [], ridePose: null };
+  private enterTarget: EnterTarget | null = null;
+  private enterBlocked: string | null = null;
+  private seatPending = false;
+  private baseZoom = 1;
+  private zoomFactor = 1;
+  private engineTimer = 0;
+  private mapTiles: Phaser.GameObjects.Image[] = [];
+  private pendingMap: MapId | null = null;
   private controls!: InputManager;
   private predictor!: Predictor;
   private netMetrics = new NetMetrics();
@@ -123,7 +177,7 @@ export class ArenaScene extends Phaser.Scene {
     this.perf = new PerfRecorder(this.game, () => this.children.length);
     this.crosshair = this.add.graphics().setDepth(1000).setScrollFactor(0);
     this.hitMarker = this.add.graphics().setDepth(1001).setScrollFactor(0);
-    this.predictor = new Predictor(collisionWorldFor(this.map), 0);
+    this.predictor = new Predictor(collisionWorldFor(this.map), 0, airWorldFor(this.map));
     this.loadMap(this.map);
     this.applyQuality();
     this.scale.on(Phaser.Scale.Events.RESIZE, () => this.fitCamera());
@@ -179,6 +233,42 @@ export class ArenaScene extends Phaser.Scene {
         return { x: (x - cam.worldView.x) * cam.zoom, y: (y - cam.worldView.y) * cam.zoom };
       },
       predictor: () => ({ corrections: this.predictor.corrections, pending: this.predictor.pendingCount }),
+      vehicles: () => {
+        const out: {
+          id: string;
+          kind: string;
+          x: number;
+          y: number;
+          angle: number;
+          alt: number;
+          hp: number;
+          status: number;
+          seats: string[];
+        }[] = [];
+        this.room?.state?.vehicles.forEach((v, id) => {
+          out.push({
+            id,
+            kind: v.kind,
+            x: v.x,
+            y: v.y,
+            angle: v.angle,
+            alt: v.alt,
+            hp: v.hp,
+            status: v.status,
+            seats: [v.s0, v.s1, v.s2, v.s3],
+          });
+        });
+        return out;
+      },
+      mount: () => {
+        const me = this.room?.state?.players.get(this.room.sessionId);
+        return me ? { vehicle: me.vehicle, seat: me.seat } : null;
+      },
+      enterTarget: () => this.enterTarget?.id ?? null,
+      renderedVehicle: (id: string) => {
+        const p = this.vehiclePoses.get(id);
+        return p ? { x: p.x, y: p.y, angle: p.angle, alt: p.alt } : null;
+      },
       net: () => ({
         ...this.netMetrics.snapshot(performance.now(), this.predictor),
         seq: this.predictor.lastSeq,
@@ -195,8 +285,15 @@ export class ArenaScene extends Phaser.Scene {
       }),
       perf: () => this.perf?.snapshot() ?? null,
       perfReset: () => this.perf?.reset(),
-      createDebugRoom: (spawns: { x: number; y: number }[]) =>
-        session.createPrivate(currentLoadout(), "industrial", { debugSpawns: spawns }),
+      createDebugRoom: (
+        spawns: { x: number; y: number }[],
+        map: MapId = "industrial",
+        vehicles?: { kind: string; x: number; y: number; angle: number }[],
+      ) =>
+        session.createPrivate(currentLoadout(), map, {
+          debugSpawns: spawns,
+          ...(vehicles ? { debugVehicles: vehicles } : {}),
+        }),
     };
   }
 
@@ -222,7 +319,8 @@ export class ArenaScene extends Phaser.Scene {
   private fitCamera() {
     const cam = this.cameras.main;
     const zoom = Math.min(this.scale.width / VIEW_W, this.scale.height / VIEW_H);
-    cam.setZoom(clamp(zoom, 0.5, 2));
+    this.baseZoom = clamp(zoom, 0.5, 2);
+    cam.setZoom(this.baseZoom * this.zoomFactor);
     cam.setBounds(0, 0, this.map.width, this.map.height);
   }
 
@@ -231,9 +329,37 @@ export class ArenaScene extends Phaser.Scene {
   private loadMap(map: MapDef) {
     this.map = map;
     const key = `map-${map.id}`;
-    if (!this.textures.exists(key)) this.textures.addCanvas(key, renderMap(map));
     this.mapImage?.destroy();
-    this.mapImage = this.add.image(0, 0, key).setOrigin(0).setDepth(0);
+    this.mapImage = undefined;
+    for (const t of this.mapTiles) t.destroy();
+    this.mapTiles = [];
+    if (map.large) {
+      // Large maps are baked once and sliced into tiles: a single texture would exceed the GPU's
+      // maximum texture size on many devices.
+      const TILE = 1024;
+      if (!this.textures.exists(`${key}-0-0`)) {
+        const full = renderMap(map);
+        for (let ty = 0; ty < map.height; ty += TILE) {
+          for (let tx = 0; tx < map.width; tx += TILE) {
+            const w = Math.min(TILE, map.width - tx);
+            const h = Math.min(TILE, map.height - ty);
+            const c = document.createElement("canvas");
+            c.width = w;
+            c.height = h;
+            c.getContext("2d")!.drawImage(full, tx, ty, w, h, 0, 0, w, h);
+            this.addStaticCanvas(`${key}-${tx}-${ty}`, c);
+          }
+        }
+      }
+      for (let ty = 0; ty < map.height; ty += TILE) {
+        for (let tx = 0; tx < map.width; tx += TILE) {
+          this.mapTiles.push(this.add.image(tx, ty, `${key}-${tx}-${ty}`).setOrigin(0).setDepth(0));
+        }
+      }
+    } else {
+      if (!this.textures.exists(key)) this.addStaticCanvas(key, renderMap(map));
+      this.mapImage = this.add.image(0, 0, key).setOrigin(0).setDepth(0);
+    }
     this.cameras.main.setBackgroundColor(map.theme.fog);
 
     for (const l of this.lightImages) l.img.destroy();
@@ -282,8 +408,20 @@ export class ArenaScene extends Phaser.Scene {
         .setDepth(10);
       this.pickupViews.set(p.id, { id: p.id, base, icon, glow, x: p.x, y: p.y, active: true });
     }
-    this.predictor?.setWorld(collisionWorldFor(map));
+    this.predictor?.setWorld(collisionWorldFor(map), airWorldFor(map));
+    for (const v of this.vehicleViews.values()) v.destroy();
+    this.vehicleViews.clear();
+    this.vbuffer.clear();
     this.fitCamera();
+  }
+
+  /**
+   * Registers a baked canvas as a plain image texture. `addCanvas` would wrap it in a
+   * CanvasTexture, which reads every pixel back (getImageData) for pixel access the map never
+   * needs: seconds on large maps with software rendering.
+   */
+  private addStaticCanvas(key: string, canvas: HTMLCanvasElement) {
+    this.textures.addImage(key, canvas as unknown as HTMLImageElement);
   }
 
   // ---------------------------------------------------------------- room
@@ -295,6 +433,10 @@ export class ArenaScene extends Phaser.Scene {
     this.registry.set("room", room ?? undefined);
     for (const v of this.views.values()) v.destroy();
     this.views.clear();
+    for (const v of this.vehicleViews.values()) v.destroy();
+    this.vehicleViews.clear();
+    this.vbuffer.clear();
+    this.vehiclePoses.clear();
     this.buffer.clear();
     this.clock.reset();
     this.eventQueue = [];
@@ -304,7 +446,11 @@ export class ArenaScene extends Phaser.Scene {
     hudStore.patch({ ready: false });
     if (!room) return;
 
-    this.predictor = new Predictor(collisionWorldFor(this.map), hashString(room.sessionId));
+    this.predictor = new Predictor(
+      collisionWorldFor(this.map),
+      hashString(room.sessionId),
+      airWorldFor(this.map),
+    );
     this.netMetrics = new NetMetrics();
     const onState = (state: MatchState) => this.onPatch(state);
     const listener = room.onStateChange(onState);
@@ -332,7 +478,16 @@ export class ArenaScene extends Phaser.Scene {
   private onPatch(state: MatchState) {
     if (!this.room) return;
     const mapId = isMapId(state.mapId) ? state.mapId : DEFAULT_MAP;
-    if (mapId !== this.map.id) this.loadMap(MAPS[mapId]);
+    if (mapId !== this.map.id && this.pendingMap !== mapId) {
+      // Baking a map takes a moment on slow devices: do it on the next frame so joining a room
+      // (whose first state carries the map) shows the lobby at once instead of freezing on it.
+      this.pendingMap = mapId;
+      this.time.delayedCall(0, () => {
+        if (this.pendingMap !== mapId) return;
+        this.pendingMap = null;
+        this.loadMap(MAPS[mapId]);
+      });
+    }
     if (state.tickRate) this.clock.setTickRate(state.tickRate);
 
     const phase = state.phase as MatchPhase;
@@ -368,12 +523,54 @@ export class ArenaScene extends Phaser.Scene {
     }
     if (inMatch) this.buffer.push(state.tick, samples);
 
+    const vsamples = new Map<string, VehicleSample>();
+    state.vehicles.forEach((v, id) => {
+      vsamples.set(id, {
+        x: v.x,
+        y: v.y,
+        angle: v.angle,
+        alt: v.alt,
+        rotor: v.rotor,
+        hp: v.hp,
+        status: v.status,
+        speed: Math.hypot(v.vx, v.vy),
+      });
+      const existing = this.vehicleViews.get(id);
+      if (existing && existing.kind !== v.kind) {
+        existing.destroy();
+        this.vehicleViews.delete(id);
+      }
+      if (!this.vehicleViews.has(id) && isVehicleKind(v.kind)) {
+        const view = new VehicleView(this, id, v.kind);
+        view.onSmoke = (x, y, burning) => this.effects.vehicleSmoke(x, y, burning);
+        view.onDust = (x, y) => this.effects.dust(x, y);
+        this.vehicleViews.set(id, view);
+      }
+    });
+    for (const [id, v] of this.vehicleViews) {
+      if (!state.vehicles.has(id)) {
+        v.destroy();
+        this.vehicleViews.delete(id);
+      }
+    }
+    if (inMatch) this.vbuffer.push(state.tick, vsamples);
+
     const me = state.players.get(this.room.sessionId);
     if (me && inMatch) {
       const wasAlive = this.predictorAlive;
       this.predictorAlive = me.alive && phase === "playing";
       if (me.alive && !wasAlive) this.localAliveSince = performance.now();
-      this.predictor.reconcile(me, this.predictorAlive);
+      const wasDriving = this.predictor.driving;
+      this.predictor.reconcile(
+        me,
+        this.predictorAlive,
+        me.vehicle ? state.vehicles.get(me.vehicle) : undefined,
+        this.env,
+      );
+      if (this.predictor.driving && !wasDriving && this.predictor.vehicle) {
+        const v = this.predictor.vehicle;
+        this.prevVehicle = { x: v.x, y: v.y, angle: v.angle };
+      }
       this.netMetrics.onPatch(me.ack, this.predictor.pendingCount, performance.now());
     }
     state.pickups.forEach((pk, id) => {
@@ -445,6 +642,28 @@ export class ArenaScene extends Phaser.Scene {
           break;
         case "pickup":
           if (ev.p === self) sfx.pickup();
+          break;
+        case "seat":
+          if (ev.p === self) sfx.door(true);
+          break;
+        case "vhit":
+          if (ev.p === self) {
+            this.hitMarkerLife = 140;
+            this.hitMarkerLethal = false;
+            sfx.armorHit();
+            this.effects.damageNumber(ev.x, ev.y, ev.dmg, false);
+            hudStore.patch({ hitConfirm: hudStore.get().hitConfirm + 1 });
+          }
+          break;
+        case "wreck":
+          if (this.predictor.mount?.vehicleId === ev.v) {
+            this.cameras.main.shake(260, 0.012 * settingsStore.get().screenShake);
+          }
+          break;
+        case "crash":
+          if (this.predictor.mount?.vehicleId === ev.v || ev.o === self) {
+            this.cameras.main.shake(140, Math.min(0.01, ev.f / 60000) * settingsStore.get().screenShake);
+          }
           break;
         default:
           break;
@@ -537,6 +756,35 @@ export class ArenaScene extends Phaser.Scene {
             }
           }
           break;
+        case "seat":
+          if (ev.p !== self) {
+            const pose = this.vehiclePoses.get(ev.v);
+            if (pose) {
+              const s = spatial(pose.x, pose.y);
+              sfx.door(false, s.distance, s.pan);
+            }
+          }
+          break;
+        case "vhit":
+          if (ev.p !== self) this.effects.impact(ev.x, ev.y, Math.random() * Math.PI * 2);
+          break;
+        case "wreck": {
+          this.effects.explosion(ev.x, ev.y);
+          const s = spatial(ev.x, ev.y);
+          sfx.explosion(s.distance, s.pan);
+          break;
+        }
+        case "crash": {
+          this.effects.crash(ev.x, ev.y, ev.f);
+          const s = spatial(ev.x, ev.y);
+          sfx.crash(ev.f, s.distance, s.pan);
+          break;
+        }
+        case "vspawn": {
+          const pose = this.vehiclePoses.get(ev.v);
+          if (pose) this.effects.spawn(pose.x, pose.y);
+          break;
+        }
       }
     }
   }
@@ -581,13 +829,18 @@ export class ArenaScene extends Phaser.Scene {
       // newer ones and rejected as out of order.
       this.accumulator = 0;
       this.prevRender = { x: this.predictor.sim.x, y: this.predictor.sim.y };
+      const v = this.predictor.vehicle;
+      if (v) this.prevVehicle = { x: v.x, y: v.y, angle: v.angle };
     } else {
       this.accumulator += dt;
       let steps = 0;
+      this.env = this.computeEnv(state, this.clock.renderTick());
       while (this.accumulator >= STEP_MS && steps < 15) {
         this.accumulator -= STEP_MS;
         steps++;
         this.prevRender = { x: this.predictor.sim.x, y: this.predictor.sim.y };
+        const v = this.predictor.vehicle;
+        if (v) this.prevVehicle = { x: v.x, y: v.y, angle: v.angle };
         this.fixedStep(phase);
       }
       if (steps >= 15) {
@@ -602,7 +855,10 @@ export class ArenaScene extends Phaser.Scene {
     this.predictor.decay(dt / 1000);
     const renderTick = this.clock.renderTick();
     this.playQueuedEvents(renderTick);
+    this.updateEnterTarget(state, renderTick);
+    this.renderVehicles(renderTick, dt / 1000, state);
     this.renderPlayers(renderTick, dt / 1000, state);
+    this.updateEngine(dt, state);
     this.updateCamera(dt);
     this.drawCrosshair();
     this.updatePing(dt);
@@ -613,6 +869,7 @@ export class ArenaScene extends Phaser.Scene {
     if (this.controls.consume("slot1")) this.pendingSlot = 0;
     if (this.controls.consume("slot2")) this.pendingSlot = 1;
     if (this.controls.consume("slot3")) this.pendingSlot = 2;
+    if (this.controls.consume("seat")) this.seatPending = true;
     const sb = this.controls.isDown("scoreboard");
     if (sb !== uiStore.get().scoreboard) uiStore.patch({ scoreboard: sb });
   }
@@ -636,6 +893,18 @@ export class ArenaScene extends Phaser.Scene {
     if (i.isDown("reload")) buttons |= BTN.RELOAD;
     if (i.isDown("dash")) buttons |= BTN.DASH;
     if (i.isDown("interact")) buttons |= BTN.INTERACT;
+    if (this.seatPending) {
+      buttons |= BTN.SEAT;
+      this.seatPending = false;
+    }
+    const mount = this.predictor.mount;
+    if (mount) {
+      // Seated: fire only through the seat's arc, as the vehicle is rendered (the server checks
+      // the same pose through lag compensation). Drivers and pilots never fire.
+      const pose = this.env.ridePose;
+      const aimNow = this.aimAngle();
+      if (mount.seat === 0 || !pose || !inSector(mount.seatDef, pose.angle, aimNow)) buttons &= ~BTN.FIRE;
+    }
     const ap = autopilot.get()?.(this.benchStep++, this.predictor.sim);
     const frame = quantizeInput({
       seq: this.predictor.nextSeq(),
@@ -648,28 +917,33 @@ export class ArenaScene extends Phaser.Scene {
     });
     this.pendingSlot = -1;
     const alive = this.predictorAlive && phase === "playing";
-    this.predictor.predict(frame, alive, (e) => {
-      switch (e.kind) {
-        case "shot":
-          this.localShot(e.shot.weapon, e.shot.angles);
-          break;
-        case "dry":
-          sfx.dry();
-          break;
-        case "reloadStart":
-          sfx.reload(true);
-          break;
-        case "reloadDone":
-          sfx.reloadDone();
-          break;
-        case "swap":
-          sfx.swap();
-          break;
-        case "dash":
-          sfx.dash(true);
-          break;
-      }
-    });
+    this.predictor.predict(
+      frame,
+      alive,
+      (e) => {
+        switch (e.kind) {
+          case "shot":
+            this.localShot(e.shot.weapon, e.shot.angles);
+            break;
+          case "dry":
+            sfx.dry();
+            break;
+          case "reloadStart":
+            sfx.reload(true);
+            break;
+          case "reloadDone":
+            sfx.reloadDone();
+            break;
+          case "swap":
+            sfx.swap();
+            break;
+          case "dash":
+            if (!this.predictor.mount) sfx.dash(true);
+            break;
+        }
+      },
+      this.env,
+    );
     this.outbox.push(frame);
     this.netMetrics.generated++;
   }
@@ -701,16 +975,52 @@ export class ArenaScene extends Phaser.Scene {
     const rules = { teams, friendlyFire: teams && !!state?.friendlyFire };
     const selfId = this.room?.sessionId ?? "";
     const myTeam = state?.players.get(selfId)?.team ?? 0;
+    const myVehicle = this.predictor.mount?.vehicleId ?? "";
     for (const [id, v] of this.views) {
       if (id === this.room?.sessionId || !v.visibleAlive) continue;
+      const ps = state?.players.get(id);
       // Same rule as the server: without friendly fire, tracers pass through teammates.
-      const team = state?.players.get(id)?.team ?? 0;
+      const team = ps?.team ?? 0;
       if (!canDamage({ id: selfId, team: myTeam }, { id, team }, rules)) continue;
+      if (ps?.vehicle) {
+        const vs = state?.vehicles.get(ps.vehicle);
+        const pose = this.vehiclePoses.get(ps.vehicle);
+        const seat = vs && isVehicleKind(vs.kind) ? VEHICLES[vs.kind].seats[ps.seat] : undefined;
+        if (!pose || !seat || seat.exposure <= 0 || ps.vehicle === myVehicle) continue;
+        const at = seatWorld(pose, seat);
+        targets.push({
+          id,
+          x: at.x,
+          y: at.y,
+          r: 13,
+          air: pose.alt >= AIRBORNE_ALT,
+          group: ps.vehicle,
+          occupant: true,
+        });
+        continue;
+      }
       const s = this.buffer.sample(id, renderTick);
       if (s?.alive) targets.push({ id, x: s.x, y: s.y, r: PLAYER.radius });
     }
+    state?.vehicles.forEach((vs, id) => {
+      const pose = this.vehiclePoses.get(id);
+      if (!pose || vs.status !== VEHICLE_STATUS.READY || id === myVehicle || !isVehicleKind(vs.kind)) return;
+      const team = this.vehicleTeam(vs, state);
+      if (!canDamage({ id: selfId, team: myTeam }, { id: `veh:${id}`, team }, rules)) return;
+      targets.push({
+        id: `veh:${id}`,
+        x: pose.x,
+        y: pose.y,
+        r: 0,
+        air: pose.alt >= AIRBORNE_ALT,
+        body: { angle: pose.angle, def: VEHICLES[vs.kind] },
+        group: id,
+      });
+    });
+    const ride = myVehicle ? this.vehiclePoses.get(myVehicle) : undefined;
+    const opts = { airWorld: airWorldFor(this.map), shooterAir: (ride?.alt ?? 0) >= AIRBORNE_ALT };
     const ends = angles.map((a) => {
-      const r = tracePellet(world, ox, oy, a, def.rangePx, targets, this.room?.sessionId ?? "");
+      const r = tracePellet(world, ox, oy, a, def.rangePx, targets, this.room?.sessionId ?? "", opts);
       return {
         x: ox + Math.cos(a) * r.dist,
         y: oy + Math.sin(a) * r.dist,
@@ -728,12 +1038,185 @@ export class ArenaScene extends Phaser.Scene {
     if (shake > 0) this.cameras.main.shake(70, 0.0012 * shake);
   }
 
+  /** Team of a vehicle for damage rules: its first occupant's (0 when empty). */
+  private vehicleTeam(vs: VehicleState, state: MatchState): number {
+    for (let i = 0; i < 4; i++) {
+      const id = seatOccupant(vs, i);
+      const p = id ? state.players.get(id) : undefined;
+      if (p) return p.team;
+    }
+    return 0;
+  }
+
+  /**
+   * Prediction environment for this frame: ground vehicles as obstacles (where they are rendered)
+   * and, for a passenger, the pose of the vehicle they ride.
+   */
+  private computeEnv(state: MatchState, renderTick: number): PredictEnv {
+    const obstacles: Circle[] = [];
+    const vehicleObstacles: Circle[] = [];
+    let ridePose: PredictEnv["ridePose"] = null;
+    const mount = this.predictor.mount;
+    state.vehicles.forEach((vs, id) => {
+      if (!isVehicleKind(vs.kind)) return;
+      const sample = this.vbuffer.sample(id, renderTick);
+      if (!sample) return;
+      if (mount && id === mount.vehicleId) ridePose = { x: sample.x, y: sample.y, angle: sample.angle };
+      if (sample.status === VEHICLE_STATUS.GONE || sample.alt >= AIRBORNE_ALT) return;
+      const circles = vehicleCircles(sample, VEHICLES[vs.kind]);
+      obstacles.push(...circles);
+      if (!mount || id !== mount.vehicleId) vehicleObstacles.push(...circles);
+    });
+    return { obstacles, vehicleObstacles, ridePose };
+  }
+
+  /** Mirrors the server's entry rule to show the prompt (the server decides). */
+  private updateEnterTarget(state: MatchState, renderTick: number) {
+    this.enterTarget = null;
+    this.enterBlocked = null;
+    const selfId = this.room?.sessionId ?? "";
+    const me = state.players.get(selfId);
+    if (!me || !this.predictorAlive || me.vehicle) return;
+    const sim = this.predictor.sim;
+    const teams = isTeamMode(state.mode);
+    let best: { t: EnterTarget; d: number } | null = null;
+    state.vehicles.forEach((vs, id) => {
+      if (!isVehicleKind(vs.kind) || vs.status !== VEHICLE_STATUS.READY) return;
+      const sample = this.vbuffer.sample(id, renderTick);
+      if (!sample) return;
+      const def = VEHICLES[vs.kind];
+      const d = closestOnBody(sample, def, sim.x, sim.y).dist;
+      if (d > ENTER_REACH) return;
+      if (best && d >= best.d) return;
+      if (teams) {
+        const team = this.vehicleTeam(vs, state);
+        if (team !== 0 && team !== me.team) {
+          this.enterBlocked = `${def.name}: held by the enemy`;
+          return;
+        }
+      }
+      if (sample.speed > def.enterMaxSpeed || sample.alt > 0.05) {
+        this.enterBlocked = `${def.name}: wait until it stops`;
+        return;
+      }
+      const seat =
+        vs.s0 === "" ? 0 : ([1, 2, 3].find((i) => i < def.seats.length && seatOccupant(vs, i) === "") ?? -1);
+      if (seat < 0) {
+        this.enterBlocked = `${def.name} is full`;
+        return;
+      }
+      best = { t: { id, def, seat }, d };
+    });
+    this.enterTarget = (best as { t: EnterTarget; d: number } | null)?.t ?? null;
+  }
+
+  private renderVehicles(renderTick: number, dtSec: number, state: MatchState) {
+    this.vehiclePoses.clear();
+    const mount = this.predictor.mount;
+    const quality = settingsStore.get().quality;
+    const alpha = this.accumulator / STEP_MS;
+    const selfId = this.room?.sessionId ?? "";
+    const teams = isTeamMode(state.mode);
+    for (const [id, view] of this.vehicleViews) {
+      const vs = state.vehicles.get(id);
+      if (!vs) continue;
+      let pose: VehiclePose;
+      const predicted = this.predictor.driving && mount?.vehicleId === id ? this.predictor.vehicle : null;
+      if (predicted) {
+        pose = {
+          x: Phaser.Math.Linear(this.prevVehicle.x, predicted.x, alpha) + this.predictor.offsetX,
+          y: Phaser.Math.Linear(this.prevVehicle.y, predicted.y, alpha) + this.predictor.offsetY,
+          angle: lerpAngle(this.prevVehicle.angle, predicted.angle, alpha),
+          alt: predicted.alt,
+          rotor: predicted.rotor,
+          speed: Math.hypot(predicted.vx, predicted.vy),
+        };
+      } else {
+        const sample = this.buffer.newestTick ? this.vbuffer.sample(id, renderTick) : null;
+        if (!sample) {
+          view.root.setVisible(false);
+          continue;
+        }
+        pose = sample;
+      }
+      this.vehiclePoses.set(id, pose);
+      const sample = this.vbuffer.sample(id, renderTick);
+      const def = view.def;
+      const gunSeat = def.seats.findIndex((x) => !!x.mounted);
+      let gunAim: number | null = null;
+      if (gunSeat >= 0) {
+        const gunner = seatOccupant(vs, gunSeat);
+        if (gunner === selfId) gunAim = this.aimAngle();
+        else if (gunner) gunAim = this.buffer.sample(gunner, renderTick)?.aim ?? null;
+      }
+      const driver = vs.s0 ? state.players.get(vs.s0) : undefined;
+      const occupied = !!(vs.s0 || vs.s1 || vs.s2 || vs.s3);
+      view.update(
+        {
+          x: pose.x,
+          y: pose.y,
+          angle: pose.angle,
+          alt: pose.alt,
+          rotor: pose.rotor,
+          hp: sample?.hp ?? vs.hp,
+          status: sample?.status ?? vs.status,
+          team: teams ? this.vehicleTeam(vs, state) : 0,
+          occupied,
+          gunAim,
+          label: driver && vs.s0 !== selfId ? driver.name : "",
+          enterable: this.enterTarget?.id === id,
+        },
+        dtSec,
+        quality,
+      );
+    }
+  }
+
   private renderPlayers(renderTick: number, dtSec: number, state: MatchState) {
     const self = this.room?.sessionId;
     const alpha = this.accumulator / STEP_MS;
     for (const [id, view] of this.views) {
       const ps = state.players.get(id);
       if (!ps) continue;
+      // Seated players follow their vehicle as it is rendered (never a separate interpolation).
+      const vs = ps.vehicle ? state.vehicles.get(ps.vehicle) : undefined;
+      const pose = ps.vehicle ? this.vehiclePoses.get(ps.vehicle) : undefined;
+      const seat = vs && isVehicleKind(vs.kind) ? VEHICLES[vs.kind].seats[ps.seat] : undefined;
+      if (pose && seat) {
+        const at = seatWorld(pose, seat);
+        const hidden = seat.exposure <= 0;
+        view.setSeated(true, hidden, pose.alt >= AIRBORNE_ALT);
+        if (id === self) {
+          const s = this.predictor.sim;
+          const sl = s.slots[s.slot];
+          view.update(
+            at.x,
+            at.y,
+            this.aimAngle(),
+            ps.alive,
+            sl?.id ?? NO_WEAPON,
+            ps.hp,
+            ps.protected,
+            dtSec,
+            0,
+          );
+        } else {
+          const sample = this.buffer.sample(id, renderTick);
+          view.update(
+            at.x,
+            at.y,
+            sample?.aim ?? pose.angle,
+            ps.alive,
+            sample?.weapon ?? ps.weapon,
+            sample?.hp ?? ps.hp,
+            false,
+            dtSec,
+            0,
+          );
+        }
+        continue;
+      }
+      view.setSeated(false, false, false);
       if (id === self) {
         const s = this.predictor.sim;
         const x = Phaser.Math.Linear(this.prevRender.x, s.x, alpha) + this.predictor.offsetX;
@@ -764,6 +1247,23 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
+  /** Engine / rotor sound of the vehicle the local player sits in. */
+  private updateEngine(dt: number, state: MatchState) {
+    this.engineTimer -= dt;
+    if (this.engineTimer > 0) return;
+    this.engineTimer = 90;
+    const mount = this.predictor.mount;
+    const pose = mount ? this.vehiclePoses.get(mount.vehicleId) : undefined;
+    const vs = mount ? state.vehicles.get(mount.vehicleId) : undefined;
+    if (!mount || !pose || !vs || vs.status !== VEHICLE_STATUS.READY) {
+      sfx.engineSound(0, 0, false);
+      return;
+    }
+    const heli = !!mount.def.flight;
+    const pitch = heli ? pose.rotor : Math.min(1, pose.speed / mount.def.maxSpeed);
+    sfx.engineSound(mount.seat === 0 ? 1 : 0.6, pitch, heli);
+  }
+
   private laserLength(x: number, y: number, aim: number, weaponIndex: number): number {
     const def = weaponIndex === NO_WEAPON ? undefined : weaponByIndex(weaponIndex);
     if (!def?.fx.laserSight) return 0;
@@ -775,12 +1275,34 @@ export class ArenaScene extends Phaser.Scene {
     const me = this.views.get(this.room?.sessionId ?? "");
     if (!me) return;
     const pointer = this.input_pointer();
-    // Look-ahead towards the cursor so aiming at range is comfortable.
-    const lookX = clamp((pointer.x - this.scale.width / 2) / (this.scale.width / 2), -1, 1) * 140;
-    const lookY = clamp((pointer.y - this.scale.height / 2) / (this.scale.height / 2), -1, 1) * 100;
-    const tx = me.root.x + lookX;
-    const ty = me.root.y + lookY;
-    const k = 1 - Math.exp(-dt / 90);
+    // In a vehicle the view leads along the direction of travel and widens a little with speed and
+    // altitude (gently, so it never pumps); on foot it leads towards the cursor.
+    const mount = this.predictor.mount;
+    const pose = mount ? this.vehiclePoses.get(mount.vehicleId) : undefined;
+    let cursorLead = 1;
+    let leadX = 0;
+    let leadY = 0;
+    let targetZoom = 1;
+    if (mount && pose) {
+      const v = this.predictor.vehicle;
+      const vx = v ? v.vx : Math.cos(pose.angle) * pose.speed;
+      const vy = v ? v.vy : Math.sin(pose.angle) * pose.speed;
+      const lead = Math.min(1, pose.speed / mount.def.maxSpeed);
+      leadX = clamp(vx * 0.35, -240, 240);
+      leadY = clamp(vy * 0.35, -170, 170);
+      cursorLead = 0.6;
+      targetZoom = 1 - 0.1 * lead - 0.12 * pose.alt;
+    }
+    const zk = 1 - Math.exp(-dt / 500);
+    this.zoomFactor += (targetZoom - this.zoomFactor) * zk;
+    cam.setZoom(this.baseZoom * this.zoomFactor);
+    const lookX =
+      clamp((pointer.x - this.scale.width / 2) / (this.scale.width / 2), -1, 1) * 140 * cursorLead;
+    const lookY =
+      clamp((pointer.y - this.scale.height / 2) / (this.scale.height / 2), -1, 1) * 100 * cursorLead;
+    const tx = me.root.x + lookX + leadX;
+    const ty = me.root.y + lookY + leadY;
+    const k = 1 - Math.exp(-dt / (mount ? 140 : 90));
     const mid = cam.midPoint;
     cam.centerOn(Phaser.Math.Linear(mid.x, tx, k), Phaser.Math.Linear(mid.y, ty, k));
   }
@@ -943,7 +1465,10 @@ export class ArenaScene extends Phaser.Scene {
       if (s !== this.lastCountdownSec && s > 0 && s <= 3) sfx.countdown(false);
       this.lastCountdownSec = s;
     }
-    const interact = this.nearbyWeaponPickup();
+    const weapon = this.predictor.mount ? null : this.nearbyWeaponPickup();
+    const interact = this.enterTarget
+      ? `Enter ${this.enterTarget.def.name} · ${this.enterTarget.def.seats[this.enterTarget.seat]!.role}`
+      : (this.enterBlocked ?? (weapon ? `Take ${weapon}` : null));
     const killerName = this.killedBy ? (state.players.get(this.killedBy)?.name ?? "someone") : null;
     const keySlots = ["1", "2", "3"];
     hudStore.patch({
@@ -978,6 +1503,7 @@ export class ArenaScene extends Phaser.Scene {
         me && !me.alive && me.respawnTick > 0 ? Math.max(0, (me.respawnTick - serverTick) / tickRate) : null,
       killedBy: killerName,
       interactPrompt: interact,
+      vehicle: this.vehicleHud(state),
       protected: !!me?.protected,
       ping: Math.round(this.ping),
       fps,
@@ -1002,6 +1528,54 @@ export class ArenaScene extends Phaser.Scene {
       },
     });
     void this.localAliveSince;
+  }
+
+  private vehicleHud(state: MatchState): HudVehicle | null {
+    const mount = this.predictor.mount;
+    const vs = mount ? state.vehicles.get(mount.vehicleId) : undefined;
+    const pose = mount ? this.vehiclePoses.get(mount.vehicleId) : undefined;
+    if (!mount || !vs || !pose) return null;
+    const def = mount.def;
+    const selfId = this.room?.sessionId ?? "";
+    const occupants: HudVehicle["occupants"] = [];
+    for (let i = 0; i < def.seats.length; i++) {
+      const id = seatOccupant(vs, i);
+      if (!id) continue;
+      occupants.push({
+        seat: i,
+        role: def.seats[i]!.role,
+        name: state.players.get(id)?.name ?? "?",
+        you: id === selfId,
+      });
+    }
+    const v = this.predictor.vehicle;
+    const landBlocked =
+      !!def.flight &&
+      !!v &&
+      !v.lift &&
+      v.alt >= AIRBORNE_ALT &&
+      !bodyFits(collisionWorldFor(this.map), v, def);
+    const ride = this.env.ridePose;
+    return {
+      name: def.name,
+      kind: def.kind,
+      role: mount.seatDef.role,
+      seat: mount.seat,
+      hp: vs.hp,
+      maxHp: def.maxHp,
+      speedKmh: Math.round(pose.speed * KMH_PER_PX),
+      altitude: def.flight ? Math.round(pose.alt * 100) : null,
+      lift: v ? v.lift : vs.lift,
+      landBlocked,
+      occupants,
+      seatRoles: def.seats.map((x) => x.role),
+      freeSeats: def.seats.length - occupants.length,
+      seats: def.seats.length,
+      canFire: mount.seatDef.arc > 0,
+      inSector: !!ride && inSector(mount.seatDef, ride.angle, this.aimAngle()),
+      mounted: !!mount.seatDef.mounted,
+      canExit: pose.speed <= def.exitMaxSpeed && pose.alt <= 0.2,
+    };
   }
 
   private nearbyWeaponPickup(): string | null {

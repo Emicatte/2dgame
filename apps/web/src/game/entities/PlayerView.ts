@@ -36,6 +36,8 @@ export class PlayerView {
   private lastY = 0;
   private hpShown = 100;
   private team = 0;
+  private seated = false;
+  private hidden = false;
   visibleAlive = true;
 
   constructor(
@@ -112,6 +114,22 @@ export class PlayerView {
     }
   }
 
+  /**
+   * In a vehicle: no feet, shadow or ground marker, slightly smaller, drawn above the hull (and
+   * above everything in a flying helicopter). Hidden seats (driver, enclosed passengers) are not
+   * drawn at all: the vehicle shows they are occupied.
+   */
+  setSeated(seated: boolean, hidden: boolean, air: boolean): void {
+    this.seated = seated;
+    this.hidden = seated && hidden;
+    this.footL.setVisible(!seated);
+    this.footR.setVisible(!seated);
+    this.shadow.setVisible(!seated);
+    this.marker.setVisible(!seated);
+    this.root.setScale(seated ? 0.82 : 1);
+    this.root.setDepth(seated ? (air ? 46 : 19) : this.isLocal ? 21 : 20);
+  }
+
   private setWeapon(index: number): WeaponDef | undefined {
     const def = index === NO_WEAPON ? undefined : weaponByIndex(index);
     if (index !== this.weaponIndex) {
@@ -140,7 +158,7 @@ export class PlayerView {
   ): void {
     this.root.setPosition(x, y);
     this.visibleAlive = alive;
-    this.root.setVisible(alive);
+    this.root.setVisible(alive && !this.hidden);
     if (!alive) {
       this.lastX = x;
       this.lastY = y;
@@ -186,6 +204,7 @@ export class PlayerView {
       this.laser.setAlpha(0);
     }
 
+    this.nameText.setVisible(!this.isLocal && !this.seated);
     if (!this.isLocal) {
       this.hpShown += (hp - this.hpShown) * Math.min(1, dtSec * 12);
       this.hpBar.clear();

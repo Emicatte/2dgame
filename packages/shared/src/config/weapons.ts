@@ -4,9 +4,10 @@
  *
  * Numeric `index` is what travels on the wire; keep indices stable once a release ships.
  */
-export type WeaponId = "pistol" | "rifle" | "smg" | "shotgun" | "sniper";
+export type WeaponId = "pistol" | "rifle" | "smg" | "shotgun" | "sniper" | "mg" | "doorgun";
 export type FireMode = "semi" | "auto";
-export type WeaponSlotKind = "primary" | "secondary";
+/** "mounted": vehicle weapons, only usable from their seat (never in loadouts or pickups). */
+export type WeaponSlotKind = "primary" | "secondary" | "mounted";
 
 export interface WeaponDef {
   id: WeaponId;
@@ -237,6 +238,77 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       laserSight: true,
     },
     sound: { body: 60, pitch: 0.6, decay: 0.45, noise: 0.9, crack: 1, gain: 0.85 },
+  },
+  // ----- mounted (vehicle) weapons: used from a gunner seat, infinite reserve, reload = cooldown
+  mg: {
+    id: "mg",
+    index: 5,
+    name: "Bulwark MG",
+    blurb: "Turret machine gun of the light armored vehicle.",
+    slotKind: "mounted",
+    fireMode: "auto",
+    damage: 15,
+    pellets: 1,
+    rpm: 720,
+    magSize: 60,
+    reserveAmmo: -1,
+    reloadSec: 2.4,
+    spreadDeg: 1.6,
+    bloomPerShotDeg: 0.4,
+    maxBloomDeg: 5,
+    bloomRecoveryDegPerSec: 10,
+    movingSpreadDeg: 1,
+    evenPelletSpread: false,
+    rangePx: 1450,
+    falloffStartPx: 800,
+    minDamageMult: 0.6,
+    moveSpeedMult: 1,
+    swapSec: 0.4,
+    fx: {
+      tracerColor: 0xffb347,
+      tracerWidth: 2.5,
+      tracerSpeed: 6500,
+      muzzleScale: 1.1,
+      recoilKickPx: 3,
+      shake: 0.9,
+      laserSight: false,
+    },
+    sound: { body: 95, pitch: 0.85, decay: 0.18, noise: 0.9, crack: 0.7, gain: 0.65 },
+  },
+  doorgun: {
+    id: "doorgun",
+    index: 6,
+    name: "Kestrel chin gun",
+    blurb: "Helicopter nose gun, controlled by the gunner.",
+    slotKind: "mounted",
+    fireMode: "auto",
+    damage: 14,
+    pellets: 1,
+    rpm: 780,
+    magSize: 80,
+    reserveAmmo: -1,
+    reloadSec: 2.8,
+    spreadDeg: 2,
+    bloomPerShotDeg: 0.35,
+    maxBloomDeg: 5,
+    bloomRecoveryDegPerSec: 9,
+    movingSpreadDeg: 1,
+    evenPelletSpread: false,
+    rangePx: 1400,
+    falloffStartPx: 750,
+    minDamageMult: 0.6,
+    moveSpeedMult: 1,
+    swapSec: 0.4,
+    fx: {
+      tracerColor: 0x9fe7ff,
+      tracerWidth: 2.5,
+      tracerSpeed: 6500,
+      muzzleScale: 1,
+      recoilKickPx: 2,
+      shake: 0.7,
+      laserSight: false,
+    },
+    sound: { body: 100, pitch: 0.95, decay: 0.15, noise: 0.85, crack: 0.6, gain: 0.6 },
   },
 };
 

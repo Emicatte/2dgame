@@ -11,6 +11,7 @@ export type Action =
   | "slot2"
   | "slot3"
   | "interact"
+  | "seat"
   | "scoreboard";
 
 export const ACTION_LABELS: Record<Action, string> = {
@@ -19,11 +20,12 @@ export const ACTION_LABELS: Record<Action, string> = {
   left: "Move left",
   right: "Move right",
   reload: "Reload",
-  dash: "Dash",
+  dash: "Dash / handbrake / take off-land",
   slot1: "Primary weapon",
   slot2: "Sidearm",
   slot3: "Picked-up weapon",
-  interact: "Interact / pick up",
+  interact: "Interact / pick up / enter-exit vehicle",
+  seat: "Change vehicle seat",
   scoreboard: "Scoreboard",
 };
 
@@ -39,6 +41,7 @@ export const DEFAULT_BINDINGS: Record<Action, string> = {
   slot2: "Digit2",
   slot3: "Digit3",
   interact: "KeyE",
+  seat: "KeyF",
   scoreboard: "Tab",
 };
 

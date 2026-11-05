@@ -1,7 +1,8 @@
+import type { VehicleKind } from "../config/vehicles.ts";
 import type { WeaponId } from "../config/weapons.ts";
 import type { Rect, Vec2 } from "../sim/math.ts";
 
-export type MapId = "industrial" | "neon" | "desert";
+export type MapId = "industrial" | "neon" | "desert" | "urban" | "airbase";
 
 /** Visual style of a solid block; collision is always the rectangle itself. */
 export type SolidKind =
@@ -35,7 +36,15 @@ export type DecorKind =
   | "sand"
   | "tracks"
   | "bones"
-  | "cables";
+  | "cables"
+  /** Asphalt road surface (drawn under everything). */
+  | "road"
+  /** Dashed lane marking along the longer side. */
+  | "lane"
+  /** Helicopter landing pad. */
+  | "helipad"
+  /** Grass / dirt verge. */
+  | "verge";
 
 export interface DecorDef extends Rect {
   kind: DecorKind;
@@ -61,6 +70,19 @@ export interface PickupDef extends Vec2 {
   weapon?: WeaponId;
   respawnSec: number;
 }
+
+export interface VehicleSpawnDef extends Vec2 {
+  id: string;
+  kind: VehicleKind;
+  /** Heading in radians. */
+  angle: number;
+}
+
+/**
+ * Solids tall enough to stop a flying helicopter and the bullets between the ground and the air.
+ * Everything else (walls, crates, cars, sandbags…) is overflown.
+ */
+export const TALL_SOLIDS: ReadonlySet<SolidKind> = new Set<SolidKind>(["building", "pillar", "tank"]);
 
 export interface ThemeDef {
   floor: number;
@@ -91,6 +113,10 @@ export interface MapDef {
    */
   teamSpawns?: { 1: readonly Vec2[]; 2: readonly Vec2[] };
   pickups: readonly PickupDef[];
+  /** Vehicles parked at match start and respawned in place after destruction. */
+  vehicleSpawns?: readonly VehicleSpawnDef[];
+  /** Large maps: shown in the map picker as "vehicles" maps, sized for bigger matches. */
+  large?: boolean;
 }
 
 /**
@@ -119,6 +145,19 @@ export function withMirrorPoints<T extends Vec2>(
     ...items,
     ...items.map((p) => (rename ? rename(mirrorPoint(p, width, height)) : mirrorPoint(p, width, height))),
   ];
+}
+
+/** Mirrored vehicles face the opposite way (point symmetry) and get a "-m" id. */
+export function withMirrorVehicles(
+  items: readonly VehicleSpawnDef[],
+  width: number,
+  height: number,
+): VehicleSpawnDef[] {
+  return withMirrorPoints(items, width, height, (v) => ({
+    ...v,
+    id: `${v.id}-m`,
+    angle: v.angle > 0 ? v.angle - Math.PI : v.angle + Math.PI,
+  }));
 }
 
 export function withMirrorPickups(items: readonly PickupDef[], width: number, height: number): PickupDef[] {

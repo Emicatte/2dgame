@@ -31,6 +31,9 @@ export const PlayerState = schema(
     joinedAt: t.uint32().default(0),
     /** 0 = no team (free for all), 1 = Alpha, 2 = Bravo. */
     team: t.uint8().default(0),
+    /** Vehicle the player is in ("" on foot) and the seat index in it. */
+    vehicle: t.string().default(""),
+    seat: t.int8().default(-1),
 
     // ----- owner-only reconciliation fields -----
     ack: t.uint32().default(0).view(),
@@ -69,6 +72,43 @@ export const PickupState = schema(
 );
 export type PickupState = SchemaType<typeof PickupState>;
 
+/**
+ * One vehicle. Everybody receives all of it: the driver reconciles its prediction from these
+ * values (the vehicle advances only on the driver's inputs, so this is the state after the
+ * driver's acknowledged input), everybody else interpolates them.
+ */
+export const VehicleState = schema(
+  {
+    kind: t.string().default("car"),
+    x: t.float32().default(0),
+    y: t.float32().default(0),
+    angle: t.float32().default(0),
+    vx: t.float32().default(0),
+    vy: t.float32().default(0),
+    av: t.float32().default(0),
+    alt: t.float32().default(0),
+    rotor: t.float32().default(0),
+    lift: t.boolean().default(false),
+    liftHeld: t.boolean().default(false),
+    hp: t.uint16().default(0),
+    /** 0 = ready, 1 = wrecked (burning hulk), 2 = gone (waiting to respawn). */
+    status: t.uint8().default(0),
+    /** Occupant session ids by seat ("" = free). */
+    s0: t.string().default(""),
+    s1: t.string().default(""),
+    s2: t.string().default(""),
+    s3: t.string().default(""),
+  },
+  "VehicleState",
+);
+export type VehicleState = SchemaType<typeof VehicleState>;
+
+export const VEHICLE_STATUS = { READY: 0, WRECK: 1, GONE: 2 } as const;
+
+export function seatOccupant(v: VehicleState, seat: number): string {
+  return seat === 0 ? v.s0 : seat === 1 ? v.s1 : seat === 2 ? v.s2 : seat === 3 ? v.s3 : "";
+}
+
 export type MatchPhase = "lobby" | "countdown" | "playing" | "results";
 
 export const MatchState = schema(
@@ -91,6 +131,7 @@ export const MatchState = schema(
     firstBloodDone: t.boolean().default(false),
     players: t.map(PlayerState),
     pickups: t.map(PickupState),
+    vehicles: t.map(VehicleState),
     /** Team modes: players per team (0 in free-for-all). */
     teamSize: t.uint8().default(0),
     friendlyFire: t.boolean().default(false),
