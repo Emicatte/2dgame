@@ -33,7 +33,7 @@ export const nicknameSchema = z
   .trim()
   .min(NICKNAME.min)
   .max(NICKNAME.max)
-  .regex(/^[\p{L}\p{N} _.\-]+$/u, "Use letters, numbers, spaces, _ . -");
+  .regex(/^[\p{L}\p{N} _.-]+$/u, "Use letters, numbers, spaces, _ . -");
 
 export const joinOptionsSchema = z.object({
   token: z.string().min(10).max(1024),
@@ -48,7 +48,12 @@ export const readySchema = z.object({ ready: z.boolean() });
 
 export const settingsSchema = z.object({
   map: mapIdSchema.optional(),
-  durationSec: z.number().int().min(MATCH_LIMITS.durationSec.min).max(MATCH_LIMITS.durationSec.max).optional(),
+  durationSec: z
+    .number()
+    .int()
+    .min(MATCH_LIMITS.durationSec.min)
+    .max(MATCH_LIMITS.durationSec.max)
+    .optional(),
   killLimit: z.number().int().min(MATCH_LIMITS.killLimit.min).max(MATCH_LIMITS.killLimit.max).optional(),
   maxPlayers: z.number().int().min(MATCH_LIMITS.maxPlayers.min).max(MATCH_LIMITS.maxPlayers.max).optional(),
 });

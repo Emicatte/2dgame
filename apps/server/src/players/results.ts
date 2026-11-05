@@ -1,4 +1,10 @@
-import { computeMatchXp, levelFromXp, type PersonalResult, type ResultRow, rewardsForLevel } from "@scrapline/shared";
+import {
+  computeMatchXp,
+  levelFromXp,
+  type PersonalResult,
+  type ResultRow,
+  rewardsForLevel,
+} from "@scrapline/shared";
 import type { MatchPlayerResult } from "../persistence/repository.ts";
 import type { ServerPlayer } from "../simulation/GameSimulation.ts";
 
@@ -77,7 +83,8 @@ export function personalResult(
   const leveledUp = !!(after && levelBefore !== null && after.level > levelBefore);
   const unlocked: string[] = [];
   if (after && levelBefore !== null) {
-    for (let l = levelBefore + 1; l <= after.level; l++) unlocked.push(...rewardsForLevel(l).map((s) => s.name));
+    for (let l = levelBefore + 1; l <= after.level; l++)
+      unlocked.push(...rewardsForLevel(l).map((s) => s.name));
   }
   return {
     placement: r.placement,

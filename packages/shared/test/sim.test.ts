@@ -11,8 +11,8 @@ import {
   giveWeapon,
   type PlayerSim,
   refillAmmo,
-  SLOT_PICKUP,
   type SimEvent,
+  SLOT_PICKUP,
   secToSteps,
   stepPlayer,
 } from "../src/sim/player.ts";
@@ -26,7 +26,8 @@ function input(partial: Partial<InputFrame> = {}): InputFrame {
 }
 
 function run(s: PlayerSim, frames: InputFrame[], events?: SimEvent[]) {
-  for (const f of frames) stepPlayer(s, f, { world, seed: 7, alive: true, emit: events ? (e) => events.push(e) : undefined });
+  for (const f of frames)
+    stepPlayer(s, f, { world, seed: 7, alive: true, emit: events ? (e) => events.push(e) : undefined });
 }
 
 const repeat = (n: number, f: () => InputFrame) => Array.from({ length: n }, f);
@@ -34,23 +35,35 @@ const repeat = (n: number, f: () => InputFrame) => Array.from({ length: n }, f);
 describe("movement", () => {
   it("accelerates up to max speed and decelerates to rest", () => {
     const s = createPlayerSim(100, 500, "smg");
-    run(s, repeat(60, () => input({ mx: 1 })));
+    run(
+      s,
+      repeat(60, () => input({ mx: 1 })),
+    );
     const speed = Math.hypot(s.vx, s.vy);
     expect(speed).toBeCloseTo(PLAYER.maxSpeed * WEAPONS.smg.moveSpeedMult, 3);
-    run(s, repeat(30, () => input()));
+    run(
+      s,
+      repeat(30, () => input()),
+    );
     expect(Math.hypot(s.vx, s.vy)).toBe(0);
   });
 
   it("normalises diagonal movement", () => {
     const s = createPlayerSim(100, 100, "pistol" as never);
     s.slots[0] = { id: WEAPONS.pistol.index, mag: 12, reserve: -1 };
-    run(s, repeat(60, () => input({ mx: 1, my: 1 })));
+    run(
+      s,
+      repeat(60, () => input({ mx: 1, my: 1 })),
+    );
     expect(Math.hypot(s.vx, s.vy)).toBeCloseTo(PLAYER.maxSpeed, 3);
   });
 
   it("stops at walls and never enters them", () => {
     const s = createPlayerSim(300, 500, "rifle");
-    run(s, repeat(120, () => input({ mx: 1 })));
+    run(
+      s,
+      repeat(120, () => input({ mx: 1 })),
+    );
     expect(s.x).toBeLessThanOrEqual(400 - PLAYER.radius + 1e-6);
     expect(s.vx).toBe(0);
   });
@@ -61,10 +74,17 @@ describe("movement", () => {
     run(s, [input({ mx: 1, buttons: BTN.DASH })], events);
     expect(Math.hypot(s.vx, s.vy)).toBe(PLAYER.dashSpeed);
     // Holding the key does not re-trigger, and pressing again during cooldown does nothing
-    run(s, repeat(10, () => input({ mx: 1, buttons: BTN.DASH })), events);
+    run(
+      s,
+      repeat(10, () => input({ mx: 1, buttons: BTN.DASH })),
+      events,
+    );
     run(s, [input({ mx: 1 }), input({ mx: 1, buttons: BTN.DASH })], events);
     expect(events.filter((e) => e.kind === "dash")).toHaveLength(1);
-    run(s, repeat(secToSteps(PLAYER.dashCooldown), () => input({ mx: 1 })));
+    run(
+      s,
+      repeat(secToSteps(PLAYER.dashCooldown), () => input({ mx: 1 })),
+    );
     run(s, [input({ mx: 1, buttons: BTN.DASH })], events);
     expect(events.filter((e) => e.kind === "dash")).toHaveLength(2);
   });
@@ -75,7 +95,11 @@ describe("weapons", () => {
     const s = createPlayerSim(100, 500, "rifle");
     const events: SimEvent[] = [];
     const steps = 60; // one second
-    run(s, repeat(steps, () => input({ buttons: BTN.FIRE })), events);
+    run(
+      s,
+      repeat(steps, () => input({ buttons: BTN.FIRE })),
+      events,
+    );
     const shots = events.filter((e) => e.kind === "shot").length;
     expect(shots).toBe(Math.ceil(steps / fireIntervalSteps(WEAPONS.rifle)));
     expect(s.slots[0]!.mag).toBe(WEAPONS.rifle.magSize - shots);
@@ -84,7 +108,11 @@ describe("weapons", () => {
   it("requires a new trigger pull for semi-automatic weapons", () => {
     const s = createPlayerSim(100, 500, "shotgun");
     const events: SimEvent[] = [];
-    run(s, repeat(120, () => input({ buttons: BTN.FIRE })), events);
+    run(
+      s,
+      repeat(120, () => input({ buttons: BTN.FIRE })),
+      events,
+    );
     expect(events.filter((e) => e.kind === "shot")).toHaveLength(1);
   });
 
@@ -102,7 +130,11 @@ describe("weapons", () => {
     const events: SimEvent[] = [];
     run(s, [input({ buttons: BTN.FIRE })], events);
     expect(events.some((e) => e.kind === "reloadStart")).toBe(true);
-    run(s, repeat(secToSteps(WEAPONS.sniper.reloadSec), () => input()), events);
+    run(
+      s,
+      repeat(secToSteps(WEAPONS.sniper.reloadSec), () => input()),
+      events,
+    );
     expect(s.slots[0]!.mag).toBe(WEAPONS.sniper.magSize);
     expect(s.slots[0]!.reserve).toBe(WEAPONS.sniper.reserveAmmo - WEAPONS.sniper.magSize);
   });
@@ -123,9 +155,15 @@ describe("weapons", () => {
     const s = createPlayerSim(100, 500, "rifle");
     run(s, [input({ slot: 1 })]);
     s.slots[1]!.mag = 0;
-    run(s, repeat(secToSteps(WEAPONS.pistol.swapSec) + 1, () => input()));
+    run(
+      s,
+      repeat(secToSteps(WEAPONS.pistol.swapSec) + 1, () => input()),
+    );
     run(s, [input({ buttons: BTN.RELOAD })]);
-    run(s, repeat(secToSteps(WEAPONS.pistol.reloadSec), () => input()));
+    run(
+      s,
+      repeat(secToSteps(WEAPONS.pistol.reloadSec), () => input()),
+    );
     expect(s.slots[1]!.mag).toBe(WEAPONS.pistol.magSize);
     expect(s.slots[1]!.reserve).toBe(-1);
   });
@@ -166,7 +204,15 @@ describe("determinism", () => {
   });
 
   it("encodes inputs exactly", () => {
-    const f = quantizeInput({ seq: 42, mx: -1, my: 1, aim: 1.23456789, buttons: 5, slot: 2, viewTick: 1234.567 });
+    const f = quantizeInput({
+      seq: 42,
+      mx: -1,
+      my: 1,
+      aim: 1.23456789,
+      buttons: 5,
+      slot: 2,
+      viewTick: 1234.567,
+    });
     expect(decodeInput(encodeInput(f))).toEqual(f);
   });
 });
@@ -194,7 +240,9 @@ describe("collision and hitscan", () => {
       targetId: null,
       hitWall: true,
     });
-    expect(tracePellet(world, 100, 500, 0, 2000, [{ id: "me", x: 150, y: 500, r: 18 }], "me").targetId).toBeNull();
+    expect(
+      tracePellet(world, 100, 500, 0, 2000, [{ id: "me", x: 150, y: 500, r: 18 }], "me").targetId,
+    ).toBeNull();
   });
 
   it("uses the fixed step consistently", () => {

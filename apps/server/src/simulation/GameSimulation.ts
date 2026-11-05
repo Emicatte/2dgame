@@ -7,15 +7,15 @@ import {
   damageAtDistance,
   distSq,
   giveWeapon,
-  hasLineOfSight,
   type HitTarget,
+  hasLineOfSight,
   type InputFrame,
   type MapDef,
   NET,
   type NetEvent,
+  type PickupDef,
   PLAYER,
   type PlayerSim,
-  type PickupDef,
   refillAmmo,
   type ShotIntent,
   type SimEvent,
@@ -122,6 +122,8 @@ export class GameSimulation {
   readonly players = new Map<string, ServerPlayer>();
   readonly pickups = new Map<string, PickupRuntime>();
   firstBloodDone = false;
+  /** Test-only fixed spawn list (enabled exclusively with ENABLE_DEBUG_ROUTES). */
+  spawnOverride: { x: number; y: number }[] | null = null;
   private events: NetEvent[] = [];
   private readonly history: HistoryFrame[] = [];
   private readonly tickRate: number;
@@ -244,17 +246,21 @@ export class GameSimulation {
   step(elapsedMs: number, mode: StepMode): NetEvent[] {
     this.tick += 1;
     this.events = [];
-    const elapsedSec = clamp(elapsedMs, 0, 250) / 1000;
+    const elapsedSec = clamp(elapsedMs, 0, 1000) / 1000;
     const creditCap = NET.maxInputCreditSeconds * NET.inputRate;
 
     for (const p of this.players.values()) {
       p.interact = false;
-      p.credit = Math.min(creditCap, p.credit + elapsedSec * NET.inputRate);
+      // Inputs may be consumed at most at real-time rate. Credit accrues with real elapsed time
+      // (so a stalled server catches up), but idle time is banked only up to a small cap, which is
+      // what stops a modified client from "saving up" time and then moving faster than allowed.
+      p.credit += elapsedSec * NET.inputRate;
       while (p.queue.length > 0 && p.credit >= 1) {
         const frame = p.queue.shift()!;
         p.credit -= 1;
         this.applyInput(p, frame, mode === "live");
       }
+      if (p.queue.length === 0) p.credit = Math.min(p.credit, creditCap);
       if (mode === "live" && p.connected) p.stats.activeTicks += 1;
     }
 
@@ -410,7 +416,8 @@ export class GameSimulation {
     const enemies = [...this.players.values()].filter((p) => p.alive && p.id !== forId);
     const minGap = PLAYER.radius * 3;
     let best: { x: number; y: number; score: number }[] = [];
-    for (const s of this.map.spawns) {
+    const spawns = this.spawnOverride ?? this.map.spawns;
+    for (const s of spawns) {
       if (enemies.some((e) => distSq(e.sim.x, e.sim.y, s.x, s.y) < minGap * minGap)) continue;
       let score: number;
       if (enemies.length === 0) {
@@ -426,7 +433,7 @@ export class GameSimulation {
       }
       best.push({ x: s.x, y: s.y, score });
     }
-    if (best.length === 0) best = this.map.spawns.map((s) => ({ x: s.x, y: s.y, score: this.rng() }));
+    if (best.length === 0) best = spawns.map((s) => ({ x: s.x, y: s.y, score: this.rng() }));
     best.sort((a, b) => b.score - a.score);
     const pick = best[0]!;
     return { x: pick.x, y: pick.y };

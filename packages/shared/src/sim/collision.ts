@@ -222,7 +222,13 @@ export function raycastCircle(
 }
 
 /** True when the straight segment between two points crosses no solid. */
-export function hasLineOfSight(world: CollisionWorld, ax: number, ay: number, bx: number, by: number): boolean {
+export function hasLineOfSight(
+  world: CollisionWorld,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): boolean {
   const dx = bx - ax;
   const dy = by - ay;
   const d = Math.hypot(dx, dy);

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { type Client, Room, ServerError } from "@colyseus/core";
+import { type Client, CloseCode, Room, ServerError } from "@colyseus/core";
 import { StateView } from "@colyseus/schema";
 import {
   C2S,
@@ -51,9 +51,20 @@ interface AuthData {
 interface CreateOptions {
   kind?: RoomKind;
   map?: MapId;
+  /** Deterministic spawns for automated end-to-end tests; ignored unless debug routes are enabled. */
+  debugSpawns?: unknown;
 }
 
+const debugSpawnsSchema = z
+  .array(z.object({ x: z.number().min(0).max(10_000), y: z.number().min(0).max(10_000) }))
+  .min(2)
+  .max(16);
+
 const pingSchema = z.object({ ms: z.number().int().min(0).max(5000) });
+
+/** Application close codes (4000-4099 are reserved by Colyseus). */
+const CLOSE_KICKED = 4101;
+const CLOSE_INACTIVE = 4102;
 
 /** Inputs older than this many seconds of silence during a live match get the player kicked as AFK. */
 const AFK_KICK_SEC = 120;
@@ -87,6 +98,11 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     this.code = await uniqueRoomCode();
 
     this.sim = new GameSimulation(MAPS[mapId], { tickRate: NET.serverTickRate });
+    const { cfg } = getServices();
+    if (cfg.ENABLE_DEBUG_ROUTES && options.debugSpawns) {
+      const parsed = debugSpawnsSchema.safeParse(options.debugSpawns);
+      if (parsed.success) this.sim.spawnOverride = parsed.data;
+    }
     Object.assign(this.state, {
       phase: "lobby",
       mode: "deathmatch",
@@ -104,7 +120,15 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
 
     // Exactly one patch per simulation tick: snapshots carry the tick number used for interpolation.
     this.patchRate = null;
-    this.setTimestep((dt) => this.onTick(dt), SERVER_TICK_MS);
+    // Elapsed time is measured here: the room clock's deltaTime is shared with other timers and
+    // under-reports the real interval, which would throttle input processing below real time.
+    let last = performance.now();
+    this.setTimestep(() => {
+      const now = performance.now();
+      const elapsed = now - last;
+      last = now;
+      this.onTick(elapsed);
+    }, SERVER_TICK_MS);
 
     this.onMessage(C2S.INPUT, inputBatchSchema, (client, msg) => this.handleInput(client, msg));
     this.onMessage(C2S.READY, readySchema, (client, msg) => this.handleReady(client, msg.ready));
@@ -133,7 +157,13 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     for (const p of this.sim.players.values()) {
       if (p.playerId === record.id) throw new ServerError(409, "already in this room");
     }
-    return { playerId: record.id, nickname: record.nickname, level: record.level, skin, primary: parsed.data.primary };
+    return {
+      playerId: record.id,
+      nickname: record.nickname,
+      level: record.level,
+      skin,
+      primary: parsed.data.primary,
+    };
   }
 
   override onJoin(client: Client, _options: unknown, auth: AuthData) {
@@ -160,7 +190,8 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     client.view = new StateView();
     client.view.add(ps);
 
-    if (!this.state.hostId || !this.state.players.has(this.state.hostId)) this.state.hostId = client.sessionId;
+    if (!this.state.hostId || !this.state.players.has(this.state.hostId))
+      this.state.hostId = client.sessionId;
     if (this.state.phase === "countdown" || this.state.phase === "playing") this.sim.spawnLater(p, 1);
     this.lastInputTick.set(client.sessionId, this.state.tick);
     this.touchActivity();
@@ -168,12 +199,20 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     void this.updateMetadata();
   }
 
-  override onDrop(client: Client) {
+  override onDrop(client: Client, code?: number) {
+    // Protocol violations (malformed messages) are not network drops: no seat is held.
+    if (code === CloseCode.WITH_ERROR) return;
     const ps = this.state.players.get(client.sessionId);
     const p = this.sim.players.get(client.sessionId);
     if (ps) ps.connected = false;
     if (p) p.connected = false;
-    this.allowReconnection(client, NET.reconnectSeconds);
+    try {
+      const pending = this.allowReconnection(client, NET.reconnectSeconds) as unknown as Promise<unknown>;
+      // Rejected when the seat expires or the room shuts down: both are normal outcomes.
+      pending?.catch?.(() => undefined);
+    } catch {
+      // Room is disposing: no seat to hold.
+    }
   }
 
   override onReconnect(client: Client) {
@@ -276,7 +315,9 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   private handleStart(client: Client) {
     if (client.sessionId !== this.state.hostId || this.kind !== "private") return;
     if (this.state.phase !== "lobby") return;
-    const notReady = [...this.state.players.entries()].filter(([id, p]) => id !== this.state.hostId && !p.ready);
+    const notReady = [...this.state.players.entries()].filter(
+      ([id, p]) => id !== this.state.hostId && !p.ready,
+    );
     if (notReady.length > 0) {
       this.notice(`Waiting for: ${notReady.map(([, p]) => p.name).join(", ")}`, "warn", undefined, client);
       return;
@@ -299,7 +340,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   private handleKick(client: Client, targetId: string) {
     if (client.sessionId !== this.state.hostId || targetId === client.sessionId) return;
     if (!this.state.players.has(targetId)) return;
-    this.kickClient(targetId, 4001, "kicked by host");
+    this.kickClient(targetId, CLOSE_KICKED, "kicked by host");
   }
 
   // ---------------------------------------------------------------- loop
@@ -407,7 +448,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       const p = this.sim.players.get(id);
       if (p?.connected && tick - last > limit) {
         this.lastInputTick.set(id, tick);
-        this.kickClient(id, 4002, "inactive");
+        this.kickClient(id, CLOSE_INACTIVE, "inactive");
       }
     }
   }
@@ -424,7 +465,10 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     });
     const rows = resultRows(results);
     const winnerId = this.state.winnerId;
-    const all: MatchPlayerResult[] = [...results.map((r) => r.persist), ...this.leavers.map((l) => l.persist)];
+    const all: MatchPlayerResult[] = [
+      ...results.map((r) => r.persist),
+      ...this.leavers.map((l) => l.persist),
+    ];
     const before = new Map<string, { xp: number }>();
     let updated = new Map<string, { xp: number; level: number }>();
     try {

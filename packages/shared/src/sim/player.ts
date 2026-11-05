@@ -1,5 +1,5 @@
 import { NET, PLAYER, STEP_DT } from "../config/game.ts";
-import { NO_WEAPON, type WeaponDef, WEAPONS, type WeaponId, weaponByIndex } from "../config/weapons.ts";
+import { NO_WEAPON, WEAPONS, type WeaponDef, type WeaponId, weaponByIndex } from "../config/weapons.ts";
 import { BTN, type InputFrame } from "../protocol/input.ts";
 import { type CollisionWorld, resolveCircle } from "./collision.ts";
 import { approach2, DEG } from "./math.ts";

@@ -14,7 +14,7 @@ export const NET = {
   /** Inputs a player may bank (catch-up after jitter). Bounds how far ahead of real time a client can act. */
   maxInputCreditSeconds: 0.25,
   /** Queued inputs beyond this are dropped (protects memory and blocks speed hacks). */
-  maxQueuedInputs: 30,
+  maxQueuedInputs: 60,
   /** Remote players are rendered this far in the past (ms) so there are always two snapshots to blend. */
   interpolationDelayMs: 110,
   /** Lag compensation never rewinds further than this (ms). */

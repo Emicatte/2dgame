@@ -33,7 +33,9 @@ export type AppConfig = z.infer<typeof envSchema> & { allowedOrigins: string[]; 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = envSchema.safeParse(env);
   if (!parsed.success) {
-    throw new Error(`Invalid environment: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
+    throw new Error(
+      `Invalid environment: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+    );
   }
   const cfg = parsed.data;
   if (cfg.NODE_ENV === "production") {

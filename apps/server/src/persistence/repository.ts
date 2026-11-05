@@ -48,7 +48,10 @@ export interface Repository {
   readonly kind: "postgres" | "memory";
   createPlayer(id: string, nickname: string): Promise<PlayerRecord>;
   getPlayer(id: string): Promise<PlayerRecord | null>;
-  updateProfile(id: string, patch: { nickname?: string; skin?: string; primary?: string }): Promise<PlayerRecord | null>;
+  updateProfile(
+    id: string,
+    patch: { nickname?: string; skin?: string; primary?: string },
+  ): Promise<PlayerRecord | null>;
   touch(id: string): Promise<void>;
   /** Applies all stats/XP changes of a match atomically and returns the updated players. */
   recordMatch(match: MatchRecord): Promise<Map<string, PlayerRecord>>;

@@ -72,10 +72,12 @@ export function computeMatchXp(p: MatchPerformance): { total: number; lines: XpL
   const lines: XpLine[] = [];
   if (p.completed) lines.push({ reason: "Match completed", xp: XP_RULES.matchCompleted });
   const rewardedKills = Math.min(p.kills, XP_RULES.maxRewardedKills);
-  if (rewardedKills > 0) lines.push({ reason: `${rewardedKills} eliminations`, xp: rewardedKills * XP_RULES.perKill });
+  if (rewardedKills > 0)
+    lines.push({ reason: `${rewardedKills} eliminations`, xp: rewardedKills * XP_RULES.perKill });
   if (p.completed && p.playerCount >= 2) {
     if (p.placement === 1) lines.push({ reason: "Victory", xp: XP_RULES.win });
-    else if (p.placement <= 3 && p.playerCount >= 4) lines.push({ reason: "Podium finish", xp: XP_RULES.podium });
+    else if (p.placement <= 3 && p.playerCount >= 4)
+      lines.push({ reason: "Podium finish", xp: XP_RULES.podium });
   }
   if (p.firstBlood) lines.push({ reason: "First blood", xp: XP_RULES.firstBlood });
   if (p.bestStreak >= 5) lines.push({ reason: "Streak x5", xp: XP_RULES.streak5 });

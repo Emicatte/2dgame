@@ -27,12 +27,22 @@ function sign(data: string, secret: string): string {
 }
 
 export function issueToken(playerId: string, secret: string, nowSec = Math.floor(Date.now() / 1000)): string {
-  const payload: TokenPayload = { sub: playerId, iat: nowSec, exp: nowSec + TOKEN_TTL_SEC, v: 1, kind: "guest" };
+  const payload: TokenPayload = {
+    sub: playerId,
+    iat: nowSec,
+    exp: nowSec + TOKEN_TTL_SEC,
+    v: 1,
+    kind: "guest",
+  };
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
   return `${body}.${sign(body, secret)}`;
 }
 
-export function verifyToken(token: unknown, secret: string, nowSec = Math.floor(Date.now() / 1000)): TokenPayload | null {
+export function verifyToken(
+  token: unknown,
+  secret: string,
+  nowSec = Math.floor(Date.now() / 1000),
+): TokenPayload | null {
   if (typeof token !== "string" || token.length > 1024) return null;
   const dot = token.indexOf(".");
   if (dot <= 0 || dot !== token.lastIndexOf(".")) return null;

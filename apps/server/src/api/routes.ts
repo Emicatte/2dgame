@@ -79,7 +79,9 @@ export function registerRoutes(app: express.Application, services: Services): vo
 
   app.get("/health", async (_req, res) => {
     const db = await repo.ping();
-    res.status(db ? 200 : 503).json({ status: db ? "ok" : "degraded", db: repo.kind, uptime: process.uptime() });
+    res
+      .status(db ? 200 : 503)
+      .json({ status: db ? "ok" : "degraded", db: repo.kind, uptime: process.uptime() });
   });
 
   app.use("/api", (req, res, next) => {
@@ -115,7 +117,10 @@ export function registerRoutes(app: express.Application, services: Services): vo
       return;
     }
     const rec = await repo.createPlayer(randomUUID(), parsed.data.nickname);
-    const body: GuestSessionResponse = { token: issueToken(rec.id, cfg.tokenSecret), profile: toProfile(rec) };
+    const body: GuestSessionResponse = {
+      token: issueToken(rec.id, cfg.tokenSecret),
+      profile: toProfile(rec),
+    };
     log.info({ playerId: rec.id }, "guest created");
     res.status(201).json(body);
   });

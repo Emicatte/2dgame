@@ -52,7 +52,8 @@ export function validateMap(map: MapDef): MapIssue[] {
   const world = collisionWorldFor(map);
   const clearance = PLAYER.radius + 2;
   map.spawns.forEach((s, i) => {
-    if (!isFreeSpot(world, s, clearance)) issues.push({ map: map.id, problem: `spawn ${i} at ${s.x},${s.y} is blocked` });
+    if (!isFreeSpot(world, s, clearance))
+      issues.push({ map: map.id, problem: `spawn ${i} at ${s.x},${s.y} is blocked` });
   });
   map.pickups.forEach((p) => {
     if (!isFreeSpot(world, p, clearance)) issues.push({ map: map.id, problem: `pickup ${p.id} is blocked` });
@@ -71,7 +72,8 @@ export function validateMap(map: MapDef): MapIssue[] {
   const free = new Uint8Array(cols * rows);
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      if (isFreeSpot(world, { x: c * step + step / 2, y: r * step + step / 2 }, PLAYER.radius)) free[r * cols + c] = 1;
+      if (isFreeSpot(world, { x: c * step + step / 2, y: r * step + step / 2 }, PLAYER.radius))
+        free[r * cols + c] = 1;
     }
   }
   const cellOf = (p: Vec2) => {

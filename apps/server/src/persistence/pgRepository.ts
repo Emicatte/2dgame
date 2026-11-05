@@ -98,7 +98,8 @@ export class PgRepository implements Repository {
         roomKind: match.roomKind,
         startedAt: match.startedAt,
         endedAt: match.endedAt,
-        winnerPlayerId: match.winnerPlayerId && knownIds.has(match.winnerPlayerId) ? match.winnerPlayerId : null,
+        winnerPlayerId:
+          match.winnerPlayerId && knownIds.has(match.winnerPlayerId) ? match.winnerPlayerId : null,
         endReason: match.endReason,
       });
 

@@ -90,7 +90,10 @@ export const NEON_DISTRICT: MapDef = {
   },
   solids: [...withMirror(halfSolids, W, H), { kind: "vending", x: 1216, y: 768, w: 128, h: 128, tone: 2 }],
   decor: withMirror(halfDecor, W, H),
-  lights: [...withMirrorPoints(halfLights, W, H), { x: 1280, y: 832, radius: 300, color: 0xff3fae, intensity: 0.45 }],
+  lights: [
+    ...withMirrorPoints(halfLights, W, H),
+    { x: 1280, y: 832, radius: 300, color: 0xff3fae, intensity: 0.45 },
+  ],
   spawns: withMirrorPoints(halfSpawns, W, H),
   pickups: [
     ...withMirrorPickups(halfPickups, W, H),

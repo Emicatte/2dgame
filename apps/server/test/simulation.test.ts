@@ -17,11 +17,26 @@ const ARENA_Y = 1180;
 
 function makeSim() {
   let r = 0.5;
-  return new GameSimulation(MAPS.industrial, { tickRate: NET.serverTickRate, rng: () => (r = (r * 9301 + 49297) % 1) });
+  return new GameSimulation(MAPS.industrial, {
+    tickRate: NET.serverTickRate,
+    rng: () => (r = (r * 9301 + 49297) % 1),
+  });
 }
 
-function addPlayer(sim: GameSimulation, id: string, primary: "rifle" | "sniper" | "shotgun" = "rifle"): ServerPlayer {
-  return sim.addPlayer({ id, playerId: `00000000-0000-0000-0000-00000000000${id.length}`, name: id, skin: "foundry", level: 1, primary, seed: id.length * 97 });
+function addPlayer(
+  sim: GameSimulation,
+  id: string,
+  primary: "rifle" | "sniper" | "shotgun" = "rifle",
+): ServerPlayer {
+  return sim.addPlayer({
+    id,
+    playerId: `00000000-0000-0000-0000-00000000000${id.length}`,
+    name: id,
+    skin: "foundry",
+    level: 1,
+    primary,
+    seed: id.length * 97,
+  });
 }
 
 function place(p: ServerPlayer, x: number, y: number) {

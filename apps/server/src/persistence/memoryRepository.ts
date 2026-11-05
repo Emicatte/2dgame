@@ -72,7 +72,8 @@ export class MemoryRepository implements Repository {
   }
 
   async leaderboard(sort: LeaderboardSort, limit: number): Promise<LeaderboardEntry[]> {
-    const key = (p: PlayerRecord) => (sort === "kills" ? p.stats.kills : sort === "wins" ? p.stats.wins : p.xp);
+    const key = (p: PlayerRecord) =>
+      sort === "kills" ? p.stats.kills : sort === "wins" ? p.stats.wins : p.xp;
     return [...this.players.values()]
       .filter((p) => p.stats.matchesPlayed > 0)
       .sort((a, b) => key(b) - key(a))

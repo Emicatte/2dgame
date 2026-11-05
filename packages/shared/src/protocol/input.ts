@@ -74,7 +74,11 @@ export function quantizeInput(f: InputFrame): InputFrame {
 const axis = z.number().int().min(-1).max(1);
 
 export const wireInputSchema = z.object({
-  s: z.number().int().min(0).max(2 ** 31),
+  s: z
+    .number()
+    .int()
+    .min(0)
+    .max(2 ** 31),
   x: axis,
   y: axis,
   a: z
@@ -84,7 +88,11 @@ export const wireInputSchema = z.object({
     .max(Math.ceil(Math.PI * AIM_SCALE) + 1),
   b: z.number().int().min(0).max(15),
   w: z.number().int().min(-1).max(2),
-  v: z.number().int().min(0).max(2 ** 31),
+  v: z
+    .number()
+    .int()
+    .min(0)
+    .max(2 ** 31),
 });
 
 export const inputBatchSchema = z.object({

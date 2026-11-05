@@ -94,9 +94,9 @@ export const INDUSTRIAL_ARENA: MapDef = {
   width: W,
   height: H,
   theme: {
-    floor: 0x2a2d31,
-    floorAlt: 0x31353a,
-    grid: 0x3a3f45,
+    floor: 0x33373c,
+    floorAlt: 0x3b3f45,
+    grid: 0x464c53,
     wall: 0x5a5f66,
     wallTop: 0x7b818a,
     shadow: 0x0b0c0e,
@@ -106,7 +106,10 @@ export const INDUSTRIAL_ARENA: MapDef = {
   },
   solids: withMirror(halfSolids, W, H),
   decor: [...withMirror(halfDecor, W, H), { kind: "paint", x: 1216, y: 768, w: 128, h: 128, tone: 3 }],
-  lights: [...withMirrorPoints(halfLights, W, H), { x: 1280, y: 832, radius: 220, color: 0xfff1d0, intensity: 0.5 }],
+  lights: [
+    ...withMirrorPoints(halfLights, W, H),
+    { x: 1280, y: 832, radius: 220, color: 0xfff1d0, intensity: 0.5 },
+  ],
   spawns: withMirrorPoints(halfSpawns, W, H),
   pickups: [
     ...withMirrorPickups(halfPickups, W, H),

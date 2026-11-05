@@ -85,7 +85,10 @@ export const DESERT_OUTPOST: MapDef = {
   },
   solids: [...withMirror(halfSolids, W, H), { kind: "tank", x: 1216, y: 768, w: 128, h: 128, tone: 1 }],
   decor: withMirror(halfDecor, W, H),
-  lights: [...withMirrorPoints(halfLights, W, H), { x: 1280, y: 832, radius: 240, color: 0xffe2b0, intensity: 0.3 }],
+  lights: [
+    ...withMirrorPoints(halfLights, W, H),
+    { x: 1280, y: 832, radius: 240, color: 0xffe2b0, intensity: 0.3 },
+  ],
   spawns: withMirrorPoints(halfSpawns, W, H),
   pickups: withMirrorPickups(halfPickups, W, H),
 };

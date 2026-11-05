@@ -110,7 +110,10 @@ export function withMirrorPoints<T extends Vec2>(
   height: number,
   rename?: (item: T) => T,
 ): T[] {
-  return [...items, ...items.map((p) => (rename ? rename(mirrorPoint(p, width, height)) : mirrorPoint(p, width, height)))];
+  return [
+    ...items,
+    ...items.map((p) => (rename ? rename(mirrorPoint(p, width, height)) : mirrorPoint(p, width, height))),
+  ];
 }
 
 export function withMirrorPickups(items: readonly PickupDef[], width: number, height: number): PickupDef[] {
