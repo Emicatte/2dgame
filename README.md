@@ -11,15 +11,18 @@ prediction, persistent XP/levels/stats and private rooms you can share with a li
 | Area | State |
 |---|---|
 | Gameplay (movement, dash, aim, 5 weapons, pickups, health, respawn) | Done, unit-tested |
-| Authoritative multiplayer (prediction, reconciliation, interpolation, lag compensation) | Done, tested over real sockets and in 2-browser E2E, also with 120 ms RTT + jitter |
+| Authoritative multiplayer (prediction, reconciliation, interpolation, lag compensation) | Done; audited under 0–250 ms RTT, jitter, stalls, drops and page reloads (netcode matrix + 2-browser E2E) |
 | Deathmatch flow (countdown, timer, kill limit, kill feed, scoreboard, results, rematch) | Done |
 | Maps: Industrial Arena, Neon District, Desert Outpost | Done, validated (spawns, reachability, symmetry) |
 | Lobby: quick match, room browser, private rooms with code/link, ready, host controls, kick | Done |
 | Guest identity (signed tokens), XP, levels 1–20, cosmetic unlocks, career stats, leaderboard | Done, persisted in PostgreSQL (tested against a real database) |
 | Solo practice with training targets (never recorded) | Done |
-| Deployment config: Dockerfile, Render Blueprint, Vercel config, docs | Done; **not deployed** (no credentials, and paid resources need your approval) |
+| Deployment config: Dockerfile, Render Blueprint, Vercel config, docs | Done; image built and run in the audit; **not deployed** (no credentials, and paid resources need your approval) |
+| Performance | CPU cost per frame measured (small); **60 FPS on a real GPU not yet verified**: run `/bench.html` on target hardware |
 
 Details and the test record: [docs/TESTING.md](docs/TESTING.md). Open items: [docs/ROADMAP.md](docs/ROADMAP.md).
+Technical audit (findings, evidence, residual risks, conditions for publication):
+[docs/audit/AUDIT_REPORT.md](docs/audit/AUDIT_REPORT.md).
 
 ## Quick start (local)
 
@@ -70,7 +73,9 @@ All keys can be rebound in Settings (bindings use physical key positions, so AZE
 | `pnpm test` | Unit + integration tests (Vitest); set `TEST_DATABASE_URL` to include PostgreSQL |
 | `pnpm test:e2e` | Two independent Chrome instances play against a real server (Playwright) |
 | `E2E_LATENCY_MS=120 E2E_JITTER_MS=30 pnpm test:e2e` | Same, through the network-conditions proxy |
-| `pnpm --filter @scrapline/server loadtest -- --bots 8` | Headless bot load test (needs `ENABLE_DEBUG_ROUTES=true`) |
+| `pnpm --filter @scrapline/server loadtest -- --bots 8` | Headless bot load test (needs `ENABLE_DEBUG_ROUTES=true`, `TRUST_PROXY=1`) |
+| `pnpm --filter @scrapline/server netaudit` | Netcode matrix: RTT/jitter/stall/reconnect scenarios with acceptance criteria (docs/TESTING.md) |
+| `/bench.html` (dev or deployed client) | Offline client benchmark, 1/2/8 players, High/Low; `node tests/perf/run-bench.mjs` automates it |
 | `pnpm db:generate` / `pnpm db:migrate` | Drizzle migrations |
 
 ## Repository layout
@@ -101,6 +106,7 @@ synchronized state schema lives in `packages/shared` so the client decodes typed
 - [Deployment](docs/DEPLOYMENT.md) — Vercel, Render, Scaleway, DNS
 - [Testing](docs/TESTING.md) — what is tested, results, what was not run
 - [Roadmap](docs/ROADMAP.md) — phase checklist and next steps
+- [Audit report](docs/audit/AUDIT_REPORT.md) — v0.1.1 technical audit (Italian)
 - [Changelog](CHANGELOG.md)
 
 ## Assets and licenses

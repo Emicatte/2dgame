@@ -10,3 +10,6 @@ playwright-report/
 .DS_Store
 .vite/
 *.tsbuildinfo
+
+# Benchmark build published as an artifact (vite build --base ./)
+apps/web/dist-bench/

@@ -147,7 +147,7 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
 
   const leader = [...s.players].sort((a, b) => b.kills - a.kills)[0];
   const hpFrac = hud.hp / PLAYER.maxHealth;
-  const statusClass = s.status === "reconnecting" ? "is-bad" : hud.ping > 150 ? "is-warn" : "";
+  const statusClass = s.status === "reconnecting" || hud.stalled ? "is-bad" : hud.ping > 150 ? "is-warn" : "";
   const interactKey = keyLabel(settings.bindings.interact);
 
   return (
@@ -155,7 +155,13 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
       <div className="hud" data-testid="hud">
         <div className="netstat">
           <span className={`netstat__dot ${statusClass}`} />
-          <span className="mono">{s.status === "reconnecting" ? "Reconnecting…" : `${hud.ping} ms`}</span>
+          <span className="mono">
+            {s.status === "reconnecting"
+              ? "Reconnecting…"
+              : hud.stalled
+                ? "Connection interrupted"
+                : `${hud.ping} ms`}
+          </span>
           {settings.showDebug && <span className="mono">{hud.fps} fps</span>}
         </div>
         {settings.showDebug && (
@@ -164,11 +170,12 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
               `tick        ${hud.debug.tick}`,
               `fps         ${hud.fps}`,
               `ping        ${hud.ping} ms`,
-              `interp lag  ${hud.debug.renderLag} ms`,
+              `interp      ${hud.debug.renderLag} ms delay, ${hud.debug.interpBuffer} ms buffered`,
               `jitter      ${hud.debug.jitter} ms`,
-              `pending in  ${hud.debug.pending}`,
+              `pending     ${hud.debug.pending} (p95 ${hud.debug.pendingP95}, max ${hud.debug.pendingMax})`,
+              `ack age     ${hud.debug.ackAge} ms`,
               `last corr   ${hud.debug.correction} px`,
-              `corrections ${hud.debug.corrections}`,
+              `corrections ${hud.debug.corrections} (${hud.debug.snaps} snaps)`,
               `net in      ${hud.debug.kbIn} KB/s`,
               `net out     ${hud.debug.kbOut} KB/s (${hud.debug.msgsOut} msg/s)`,
               `objects     ${hud.debug.entities}  fx ${hud.debug.fx}`,

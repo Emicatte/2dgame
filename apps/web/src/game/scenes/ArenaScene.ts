@@ -39,13 +39,16 @@ import { currentLoadout } from "../../state/profile.ts";
 import { renderMap } from "../art/mapRenderer.ts";
 import { TEX, TEX_SCALE } from "../art/textures.ts";
 import { sfx } from "../audio/sfx.ts";
+import { autopilot } from "../bench/autopilot.ts";
 import { Effects } from "../effects/Effects.ts";
 import { PlayerView } from "../entities/PlayerView.ts";
 import { hudStore, uiStore } from "../hudStore.ts";
 import { InputManager } from "../input/InputManager.ts";
 import { ServerClock } from "../net/clock.ts";
 import { type RemoteSample, SnapshotBuffer } from "../net/interpolation.ts";
+import { NetMetrics } from "../net/metrics.ts";
 import { Predictor } from "../net/Predictor.ts";
+import { PerfRecorder } from "../perf/PerfRecorder.ts";
 
 interface PickupView {
   id: string;
@@ -80,6 +83,9 @@ export class ArenaScene extends Phaser.Scene {
   private views = new Map<string, PlayerView>();
   private controls!: InputManager;
   private predictor!: Predictor;
+  private netMetrics = new NetMetrics();
+  private perf: PerfRecorder | null = null;
+  private benchStep = 0;
   private clock = new ServerClock();
   private buffer = new SnapshotBuffer();
   private effects!: Effects;
@@ -112,6 +118,7 @@ export class ArenaScene extends Phaser.Scene {
   create(): void {
     this.controls = new InputManager();
     this.effects = new Effects(this);
+    this.perf = new PerfRecorder(this.game, () => this.children.length);
     this.crosshair = this.add.graphics().setDepth(1000).setScrollFactor(0);
     this.hitMarker = this.add.graphics().setDepth(1001).setScrollFactor(0);
     this.predictor = new Predictor(collisionWorldFor(this.map), 0);
@@ -133,7 +140,10 @@ export class ArenaScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.teardown());
 
-    const existing = this.registry.get("room") as Room<unknown, MatchState> | undefined;
+    // The session may have joined before this scene existed (page-reload resume and invite links
+    // start connecting as soon as the profile loads, while Phaser is still booting): pick up the
+    // current room instead of relying on a roomChanged event that was emitted too early.
+    const existing = session.room ?? (this.registry.get("room") as Room<unknown, MatchState> | undefined);
     if (existing) this.attachRoom(existing);
     if (import.meta.env.DEV || import.meta.env.VITE_E2E === "true") this.exposeTestHooks();
   }
@@ -167,6 +177,22 @@ export class ArenaScene extends Phaser.Scene {
         return { x: (x - cam.worldView.x) * cam.zoom, y: (y - cam.worldView.y) * cam.zoom };
       },
       predictor: () => ({ corrections: this.predictor.corrections, pending: this.predictor.pendingCount }),
+      net: () => ({
+        ...this.netMetrics.snapshot(performance.now(), this.predictor),
+        seq: this.predictor.lastSeq,
+        fps: this.fpsSamples.length
+          ? Math.round(1000 / (this.fpsSamples.reduce((a, b) => a + b, 0) / this.fpsSamples.length))
+          : 0,
+        frameP95Ms: Math.round(
+          [...this.fpsSamples].sort((a, b) => a - b)[Math.floor(this.fpsSamples.length * 0.95)] ?? 0,
+        ),
+        frameMaxMs: Math.round(Math.max(0, ...this.fpsSamples)),
+        stalled: this.netMetrics.isStalled,
+        local: { x: this.predictor.sim.x, y: this.predictor.sim.y },
+        ammo: this.predictor.sim.slots.map((sl) => ({ mag: sl.mag, reserve: sl.reserve })),
+      }),
+      perf: () => this.perf?.snapshot() ?? null,
+      perfReset: () => this.perf?.reset(),
       createDebugRoom: (spawns: { x: number; y: number }[]) =>
         session.createPrivate(currentLoadout(), "industrial", { debugSpawns: spawns }),
     };
@@ -177,6 +203,8 @@ export class ArenaScene extends Phaser.Scene {
     this.unsubs = [];
     this.cleanupRoom?.();
     this.controls?.destroy();
+    this.perf?.destroy();
+    this.perf = null;
   }
 
   private applyQuality() {
@@ -275,10 +303,12 @@ export class ArenaScene extends Phaser.Scene {
     if (!room) return;
 
     this.predictor = new Predictor(collisionWorldFor(this.map), hashString(room.sessionId));
+    this.netMetrics = new NetMetrics();
     const onState = (state: MatchState) => this.onPatch(state);
     const listener = room.onStateChange(onState);
     const onReconnect = () => {
       this.predictor.resetStream();
+      this.netMetrics.resetStream();
       this.clock.reset();
     };
     room.onReconnect(onReconnect);
@@ -341,6 +371,7 @@ export class ArenaScene extends Phaser.Scene {
       this.predictorAlive = me.alive && phase === "playing";
       if (me.alive && !wasAlive) this.localAliveSince = performance.now();
       this.predictor.reconcile(me, this.predictorAlive);
+      this.netMetrics.onPatch(me.ack, this.predictor.pendingCount, performance.now());
     }
     state.pickups.forEach((pk, id) => {
       const v = this.pickupViews.get(id);
@@ -539,16 +570,31 @@ export class ArenaScene extends Phaser.Scene {
     if (!this.clock.ready) return;
 
     this.sampleEdgeInputs();
-    this.accumulator += dt;
-    let steps = 0;
-    while (this.accumulator >= STEP_MS && steps < 15) {
-      this.accumulator -= STEP_MS;
-      steps++;
+    const stalled = this.netMetrics.updateStall(now, this.predictor.pendingCount, NET.inputStallMs, dt);
+    if (stalled || sessionStore.get().status === "reconnecting") {
+      // Connection interrupted: hold the local player instead of predicting ever further ahead of
+      // a server that is not receiving the inputs. Resumes as soon as the ack moves again. While
+      // the SDK reconnects nothing is produced either: inputs it buffers would be re-sent after
+      // newer ones and rejected as out of order.
+      this.accumulator = 0;
       this.prevRender = { x: this.predictor.sim.x, y: this.predictor.sim.y };
-      this.fixedStep(phase);
+    } else {
+      this.accumulator += dt;
+      let steps = 0;
+      while (this.accumulator >= STEP_MS && steps < 15) {
+        this.accumulator -= STEP_MS;
+        steps++;
+        this.prevRender = { x: this.predictor.sim.x, y: this.predictor.sim.y };
+        this.fixedStep(phase);
+      }
+      if (steps >= 15) {
+        this.netMetrics.lostStepMs += this.accumulator;
+        this.accumulator = 0;
+      }
     }
-    if (steps >= 15) this.accumulator = 0;
     this.flushInputs();
+    this.netMetrics.onFrame(now);
+    if (this.buffer.newestTick < this.clock.renderTick(now)) this.netMetrics.starvedFrames++;
 
     this.predictor.decay(dt / 1000);
     const renderTick = this.clock.renderTick();
@@ -587,12 +633,13 @@ export class ArenaScene extends Phaser.Scene {
     if (i.isDown("reload")) buttons |= BTN.RELOAD;
     if (i.isDown("dash")) buttons |= BTN.DASH;
     if (i.isDown("interact")) buttons |= BTN.INTERACT;
+    const ap = autopilot.get()?.(this.benchStep++, this.predictor.sim);
     const frame = quantizeInput({
       seq: this.predictor.nextSeq(),
-      mx: (i.isDown("right") ? 1 : 0) - (i.isDown("left") ? 1 : 0),
-      my: (i.isDown("down") ? 1 : 0) - (i.isDown("up") ? 1 : 0),
-      aim: this.aimAngle(),
-      buttons,
+      mx: ap ? ap.mx : (i.isDown("right") ? 1 : 0) - (i.isDown("left") ? 1 : 0),
+      my: ap ? ap.my : (i.isDown("down") ? 1 : 0) - (i.isDown("up") ? 1 : 0),
+      aim: ap ? ap.aim : this.aimAngle(),
+      buttons: ap ? ap.buttons : buttons,
       slot: this.pendingSlot,
       viewTick: Math.max(0, this.clock.renderTick()),
     });
@@ -621,6 +668,7 @@ export class ArenaScene extends Phaser.Scene {
       }
     });
     this.outbox.push(frame);
+    this.netMetrics.generated++;
   }
 
   private flushInputs() {
@@ -628,6 +676,8 @@ export class ArenaScene extends Phaser.Scene {
     while (this.outbox.length > 0) {
       const batch = this.outbox.splice(0, NET.maxInputsPerMessage).map(encodeInput);
       this.room.send(C2S.INPUT, { i: batch });
+      this.netMetrics.sent += batch.length;
+      this.netMetrics.messages += 1;
       this.stats.msgsOut += 1;
       this.stats.bytesOut += 4 + batch.length * 24;
     }
@@ -734,6 +784,8 @@ export class ArenaScene extends Phaser.Scene {
   private drawCrosshair() {
     const g = this.crosshair;
     g.clear();
+    // Benchmark autopilot aims by itself: a mouse crosshair would contradict the shown aim.
+    if (autopilot.get()) return;
     const pointer = this.game.input.activePointer;
     const color = Phaser.Display.Color.HexStringToColor(settingsStore.get().crosshairColor).color;
     const sim = this.predictor.sim;
@@ -873,6 +925,7 @@ export class ArenaScene extends Phaser.Scene {
     const serverTick = this.clock.serverTick();
     const tickRate = state.tickRate || NET.serverTickRate;
     const phase = state.phase as MatchPhase;
+    const net = this.netMetrics.snapshot(now, this.predictor);
     const secsLeft = Math.max(0, (state.phaseEndTick - serverTick) / tickRate);
     if (phase === "countdown") {
       const s = Math.ceil(secsLeft);
@@ -917,11 +970,17 @@ export class ArenaScene extends Phaser.Scene {
       protected: !!me?.protected,
       ping: Math.round(this.ping),
       fps,
+      stalled: this.netMetrics.isStalled,
       debug: {
         tick: state.tick,
         renderLag: Math.round((serverTick - this.clock.renderTick()) * (1000 / tickRate)),
+        interpBuffer: Math.round((this.buffer.newestTick - this.clock.renderTick()) * (1000 / tickRate)),
         jitter: Math.round(this.clock.jitterMs()),
         pending: this.predictor.pendingCount,
+        pendingP95: net.pendingP95,
+        pendingMax: net.pendingMax,
+        ackAge: net.ackAgeMs,
+        snaps: net.snaps,
         correction: Math.round(this.predictor.lastCorrection * 100) / 100,
         corrections: this.predictor.corrections,
         kbIn: Math.round(this.stats.kbIn * 10) / 10,

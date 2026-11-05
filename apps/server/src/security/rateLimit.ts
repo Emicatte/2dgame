@@ -24,7 +24,19 @@ export class RateLimiter {
     return true;
   }
 
+  get size(): number {
+    return this.buckets.size;
+  }
+
+  /**
+   * Forgets idle keys; if the map is still too large (many distinct addresses, e.g. an IPv6 range)
+   * drops the oldest entries so memory stays bounded. A dropped key starts again with a full bucket,
+   * which is only an advantage for an address that has been idle the longest.
+   */
   private prune(now: number) {
     for (const [k, b] of this.buckets) if (now - b.updated > 10 * 60_000) this.buckets.delete(k);
+    if (this.buckets.size <= 10_000) return;
+    const oldest = [...this.buckets.entries()].sort((x, y) => x[1].updated - y[1].updated);
+    for (const [k] of oldest.slice(0, this.buckets.size - 5_000)) this.buckets.delete(k);
   }
 }

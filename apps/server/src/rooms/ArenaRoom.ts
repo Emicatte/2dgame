@@ -19,7 +19,6 @@ import {
   type MatchPhase,
   MatchState,
   NET,
-  NO_WEAPON,
   type NoticeMessage,
   PickupState,
   PlayerState,
@@ -39,6 +38,7 @@ import { type ComputedResult, computeResults, personalResult, resultRows } from 
 import { verifyToken } from "../security/tokens.ts";
 import { getServices } from "../services.ts";
 import { GameSimulation, type ServerPlayer } from "../simulation/GameSimulation.ts";
+import { syncPlayerState } from "../simulation/stateSync.ts";
 
 interface AuthData {
   playerId: string;
@@ -92,6 +92,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   private persisting = false;
   /** Tick cost and interval statistics (ms), exposed on /api/debug/rooms. */
   private tickStats = { count: 0, total: 0, max: 0, maxInterval: 0 };
+  private readonly replacedSessions = new Set<string>();
   /** Training targets present while a private room has a single human (solo practice). */
   private readonly bots = new Set<string>();
   private practiceMatch = false;
@@ -123,10 +124,9 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
 
     if (this.kind === "private") await this.setPrivate(true);
 
-    // Exactly one patch per simulation tick: snapshots carry the tick number used for interpolation.
-    this.patchRate = null;
-    // Elapsed time is measured here: the room clock's deltaTime is shared with other timers and
-    // under-reports the real interval, which would throttle input processing below real time.
+    // Elapsed time is measured here rather than taken from the room clock: setting patchRate to
+    // null before a timestep exists makes Colyseus tick the clock from an extra 60 Hz interval,
+    // so its deltaTime under-reports the real tick interval (the v0.1.0 "pending 190" bug).
     let last = performance.now();
     this.setTimestep(() => {
       const now = performance.now();
@@ -139,6 +139,9 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       this.tickStats.max = Math.max(this.tickStats.max, cost);
       this.tickStats.maxInterval = Math.max(this.tickStats.maxInterval, elapsed);
     }, SERVER_TICK_MS);
+    // Exactly one patch per simulation tick: snapshots carry the tick number used for interpolation.
+    // Set after setTimestep so Colyseus does not start its own 60 Hz clock interval.
+    this.patchRate = null;
 
     this.onMessage(C2S.INPUT, inputBatchSchema, (client, msg) => this.handleInput(client, msg));
     this.onMessage(C2S.READY, readySchema, (client, msg) => this.handleReady(client, msg.ready));
@@ -155,7 +158,12 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     log.info({ roomId: this.roomId, code: this.code, kind: this.kind }, "room created");
   }
 
-  override async onAuth(_client: Client, rawOptions: unknown): Promise<AuthData> {
+  /**
+   * Runs during the matchmaking HTTP request, before any room is created or a seat reserved. With
+   * the instance-level onAuth of v0.1.0 an unauthenticated POST /matchmake/create created a real
+   * room (20 Hz timer, room code) that lived until the seat reservation expired.
+   */
+  static override async onAuth(_token: string | undefined, rawOptions: unknown): Promise<AuthData> {
     const { cfg, repo } = getServices();
     const parsed = joinOptionsSchema.safeParse(rawOptions);
     if (!parsed.success) throw new ServerError(400, "invalid join options");
@@ -164,9 +172,6 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     const record = await repo.getPlayer(payload.sub);
     if (!record) throw new ServerError(401, "unknown player");
     const skin = isSkinUnlocked(parsed.data.skin, record.level) ? parsed.data.skin : DEFAULT_SKIN;
-    for (const p of this.sim.players.values()) {
-      if (p.playerId === record.id) throw new ServerError(409, "already in this room");
-    }
     return {
       playerId: record.id,
       nickname: record.nickname,
@@ -177,6 +182,10 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   }
 
   override onJoin(client: Client, _options: unknown, auth: AuthData) {
+    // Same identity twice in one room (second tab, replayed seat): refuse before any state change.
+    for (const existing of this.sim.players.values()) {
+      if (existing.playerId === auth.playerId) throw new ServerError(409, "already in this room");
+    }
     const p = this.sim.addPlayer({
       id: client.sessionId,
       playerId: auth.playerId,
@@ -210,9 +219,22 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     void this.updateMetadata();
   }
 
+  /**
+   * A reconnect that presents the token of a still-connected client (the server has not yet
+   * noticed that the old socket is dead, e.g. after a Wi-Fi to mobile switch) makes Colyseus close
+   * the old connection with WITH_ERROR. Remember it, so onDrop holds the seat for the new
+   * connection instead of treating it as a protocol violation (v0.1.0 kicked the player).
+   */
+  override checkReconnectionToken(reconnectionToken: string): string {
+    const live = this.clients.find((c) => c.reconnectionToken === reconnectionToken);
+    if (live) this.replacedSessions.add(live.sessionId);
+    return super.checkReconnectionToken(reconnectionToken);
+  }
+
   override onDrop(client: Client, code?: number) {
-    // Protocol violations (malformed messages) are not network drops: no seat is held.
-    if (code === CloseCode.WITH_ERROR) return;
+    const replaced = this.replacedSessions.delete(client.sessionId);
+    // Protocol violations (malformed messages, flooding) are not network drops: no seat is held.
+    if (code === CloseCode.WITH_ERROR && !replaced) return;
     const ps = this.state.players.get(client.sessionId);
     const p = this.sim.players.get(client.sessionId);
     if (ps) ps.connected = false;
@@ -231,8 +253,10 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     const p = this.sim.players.get(client.sessionId);
     if (ps) ps.connected = true;
     if (p) p.connected = true;
-    // The client may have reloaded the page and restarted its input sequence.
+    // The client may have reloaded the page and restarted its input sequence. The ack is reset
+    // now, not at the next tick, so no snapshot can carry the previous stream's ack.
     this.sim.resetInputStream(client.sessionId);
+    if (ps) ps.ack = 0;
     if (ps && client.view && !client.view.has?.(ps)) client.view.add(ps);
     this.lastInputTick.set(client.sessionId, this.state.tick);
   }
@@ -260,7 +284,14 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       const host = this.state.players.get(this.state.hostId);
       if (host) this.notice(`${host.name} is now the host`, "info");
     }
-    if (p) this.notice(`${p.name} left`, "warn");
+    if (p) {
+      this.notice(`${p.name} left`, "warn");
+      // Input pipeline summary per session: the production signal for netcode problems.
+      getServices().log.info(
+        { roomId: this.roomId, sessionId: client.sessionId, inputs: p.inputStats },
+        "player left",
+      );
+    }
     if (
       this.state.phase === "playing" &&
       this.kind === "quick" &&
@@ -306,7 +337,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
         credit: Math.round(p.credit * 100) / 100,
         lastQueuedSeq: p.lastQueuedSeq,
         lastProcessedSeq: p.lastProcessedSeq,
-        droppedInputs: p.droppedInputs,
+        inputs: { ...p.inputStats },
         alive: p.alive,
         x: Math.round(p.sim.x),
         y: Math.round(p.sim.y),
@@ -664,46 +695,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   private syncState() {
     for (const [id, p] of this.sim.players) {
       const ps = this.views.get(id);
-      if (!ps) continue;
-      const s = p.sim;
-      ps.alive = p.alive;
-      ps.x = s.x;
-      ps.y = s.y;
-      ps.aim = s.aim;
-      ps.hp = p.hp;
-      ps.kills = p.stats.kills;
-      ps.deaths = p.stats.deaths;
-      ps.streak = p.stats.streak;
-      const slot = s.slots[s.slot];
-      ps.weapon = slot?.id ?? NO_WEAPON;
-      ps.reloading = s.reload > 0;
-      ps.protected = p.alive && p.protectedUntil > this.sim.tick;
-      ps.respawnTick = p.alive ? 0 : p.respawnTick;
-
-      ps.ack = p.lastProcessedSeq;
-      ps.vx = s.vx;
-      ps.vy = s.vy;
-      ps.dash = s.dash;
-      ps.dashCd = s.dashCd;
-      ps.dashDx = s.dashDx;
-      ps.dashDy = s.dashDy;
-      ps.dashHeld = s.dashHeld;
-      ps.slot = s.slot;
-      const [a, b, c] = s.slots;
-      ps.w0 = a!.id;
-      ps.m0 = a!.mag;
-      ps.r0 = a!.reserve;
-      ps.w1 = b!.id;
-      ps.m1 = b!.mag;
-      ps.r1 = b!.reserve;
-      ps.w2 = c!.id;
-      ps.m2 = c!.mag;
-      ps.r2 = c!.reserve;
-      ps.cooldown = s.cooldown;
-      ps.reload = s.reload;
-      ps.swap = s.swap;
-      ps.bloom = s.bloom;
-      ps.trigger = s.trigger;
+      if (ps) syncPlayerState(ps, p, this.sim.tick);
     }
     this.syncPickups(false);
   }

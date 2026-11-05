@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "startedAt": "2026-11-05T13:35:18.536Z",
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+  "hardwareConcurrency": 2,
+  "deviceMemoryGB": 8,
+  "viewport": {
+    "width": 1920,
+    "height": 1080,
+    "devicePixelRatio": 1
+  },
+  "runs": [
+    {
+      "players": 8,
+      "quality": "high",
+      "map": "industrial",
+      "perf": {
+        "frames": 37,
+        "seconds": 7.51,
+        "fpsAvg": 4.93,
+        "frameMs": {
+          "p50": 137.6,
+          "p95": 318,
+          "p99": 433.3,
+          "max": 433.3
+        },
+        "updateMs": {
+          "p50": 0.6,
+          "p95": 3.4,
+          "max": 5.1
+        },
+        "renderMs": {
+          "p50": 0.9,
+          "p95": 314.6,
+          "max": 373.8
+        },
+        "longFrames25": 32,
+        "longFrames50": 32,
+        "heapMB": 35.46,
+        "heapMaxMB": 38.09,
+        "textureMB": 17.34,
+        "textures": 45,
+        "objects": 92,
+        "renderer": {
+          "type": "webgl",
+          "vendor": "Google Inc. (Google)",
+          "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "software": true,
+          "devicePixelRatio": 1,
+          "canvas": {
+            "width": 1920,
+            "height": 1080
+          }
+        }
+      },
+      "localSimTickMs": {
+        "avg": 0.245,
+        "max": 4.2
+      }
+    },
+    {
+      "players": 8,
+      "quality": "low",
+      "map": "industrial",
+      "perf": {
+        "frames": 44,
+        "seconds": 7.62,
+        "fpsAvg": 5.77,
+        "frameMs": {
+          "p50": 116.7,
+          "p95": 315.5,
+          "p99": 382.8,
+          "max": 382.8
+        },
+        "updateMs": {
+          "p50": 0.5,
+          "p95": 2,
+          "max": 4.1
+        },
+        "renderMs": {
+          "p50": 0.6,
+          "p95": 42.8,
+          "max": 153.5
+        },
+        "longFrames25": 38,
+        "longFrames50": 37,
+        "heapMB": 40.93,
+        "heapMaxMB": 64.31,
+        "textureMB": 17.33,
+        "textures": 42,
+        "objects": 100,
+        "renderer": {
+          "type": "webgl",
+          "vendor": "Google Inc. (Google)",
+          "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+          "software": true,
+          "devicePixelRatio": 1,
+          "canvas": {
+            "width": 1920,
+            "height": 1080
+          }
+        }
+      },
+      "localSimTickMs": {
+        "avg": 0.106,
+        "max": 1.5
+      }
+    }
+  ]
+}

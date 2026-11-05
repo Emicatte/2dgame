@@ -1,0 +1,124 @@
+[
+  {
+    "scenario": {
+      "name": "drop-reconnect",
+      "latency": 40,
+      "jitter": 10,
+      "fps": 60,
+      "seconds": 16,
+      "drop": {
+        "atSec": 4
+      }
+    },
+    "pendingBound": 14,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 1021,
+          "sent": 1021,
+          "messages": 1019,
+          "acked": 1004,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 4,
+          "pendingMax": 4,
+          "pendingMaxEver": 4,
+          "ackAgeMs": 22,
+          "ackAgeMaxMs": 273,
+          "patches": 337,
+          "patchGapP95Ms": 57,
+          "patchGapMaxMs": 61,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "corrections": 1,
+          "snaps": 0,
+          "correctionP95": 9.44,
+          "correctionMax": 9.44,
+          "staleAcks": 0,
+          "capDropped": 0,
+          "resyncs": 1
+        },
+        "server": {
+          "received": 1017,
+          "accepted": 1007,
+          "duplicate": 10,
+          "overflow": 0,
+          "processed": 1008,
+          "queueP95": 3,
+          "queueMax": 4,
+          "queueAfterRecovery": 1
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 27,
+          "server": 27
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 0,
+        "drops": 1,
+        "reconnects": 1,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 1021,
+          "sent": 1021,
+          "messages": 1021,
+          "acked": 1003,
+          "pending": 0,
+          "pendingP50": 3,
+          "pendingP95": 4,
+          "pendingMax": 4,
+          "pendingMaxEver": 4,
+          "ackAgeMs": 29,
+          "ackAgeMaxMs": 277,
+          "patches": 337,
+          "patchGapP95Ms": 57,
+          "patchGapMaxMs": 59,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "corrections": 1,
+          "snaps": 0,
+          "correctionP95": 15.69,
+          "correctionMax": 15.69,
+          "staleAcks": 0,
+          "capDropped": 0,
+          "resyncs": 1
+        },
+        "server": {
+          "received": 1018,
+          "accepted": 1008,
+          "duplicate": 10,
+          "overflow": 0,
+          "processed": 1010,
+          "queueP95": 3,
+          "queueMax": 3,
+          "queueAfterRecovery": 0
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 0,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 27,
+          "server": 27
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": 250,
+        "drops": 1,
+        "reconnects": 1,
+        "ackRegressions": []
+      }
+    ],
+    "failures": []
+  }
+]

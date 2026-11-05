@@ -1,3 +1,4 @@
+import { matchMaker } from "@colyseus/core";
 import { Client, type Room } from "@colyseus/sdk";
 import {
   BTN,
@@ -165,6 +166,22 @@ describe("ArenaRoom over real sockets", () => {
     expect(a.state.hostId).toBe(a.sessionId);
   });
 
+  it("advances the room clock only from the 20 Hz simulation tick", async () => {
+    // v0.1.0 set patchRate = null before setTimestep, which made Colyseus start an extra 60 Hz
+    // clock interval; the timestep then received a deltaTime that under-reported real time.
+    const room = matchMaker.getLocalRoomById(a.roomId)!;
+    let ticks = 0;
+    const original = room.clock.tick.bind(room.clock);
+    room.clock.tick = () => {
+      ticks++;
+      return original();
+    };
+    await wait(1000);
+    room.clock.tick = original;
+    expect(ticks).toBeGreaterThanOrEqual(17);
+    expect(ticks).toBeLessThanOrEqual(23);
+  });
+
   it("enforces host-only controls and the ready check", async () => {
     b.send(C2S.SETTINGS, { killLimit: 5 });
     b.send(C2S.START, {});
@@ -219,6 +236,40 @@ describe("ArenaRoom over real sockets", () => {
     });
     await wait(300);
     expect(b.state.players.get(b.sessionId)!.ack).toBe(before);
+    expect(b.connection.isOpen).toBe(true);
+  });
+
+  it("tolerates the input burst released after a network stall, but disconnects a flooder", async () => {
+    // After a stall the client's buffered messages arrive at once: up to NET.inputStallMs worth
+    // (45 one-frame messages at 60 FPS) followed by normal traffic (60/s). v0.1.0 allowed 90
+    // messages/s and kicked the player with 4002 here.
+    let seq = b.state.players.get(b.sessionId)!.ack;
+    const neutral = () =>
+      encodeInput(
+        quantizeInput({ seq: ++seq, mx: 0, my: 0, aim: 0, buttons: 0, slot: -1, viewTick: b.state.tick }),
+      );
+    for (let i = 0; i < 45; i++) b.send(C2S.INPUT, { i: [neutral()] });
+    for (let i = 0; i < 60; i++) {
+      b.send(C2S.INPUT, { i: [neutral()] });
+      await wait(16);
+    }
+    await until(() => b.state.players.get(b.sessionId)!.ack === seq, 3000, "burst acknowledged");
+    expect(b.connection.isOpen).toBe(true);
+
+    const delta = await guest("Delta");
+    const d = await new Client(URL).joinById(a.roomId, { token: delta.token, kind: "private" }, MatchState);
+    await until(() => a.state.players.size === 3, 3000, "delta joined");
+    let dseq = 0;
+    for (let i = 0; i < 400; i++) {
+      d.send(C2S.INPUT, {
+        i: [
+          encodeInput(
+            quantizeInput({ seq: ++dseq, mx: 0, my: 0, aim: 0, buttons: 0, slot: -1, viewTick: 0 }),
+          ),
+        ],
+      });
+    }
+    await until(() => a.state.players.size === 2, 4000, "flooder removed");
     expect(b.connection.isOpen).toBe(true);
   });
 
@@ -320,5 +371,186 @@ describe("ArenaRoom over real sockets", () => {
     const lookup = await fetch(`${URL}/api/rooms/code/${a.state.code}`);
     expect(lookup.status).toBe(404);
     void roomId;
+  });
+});
+
+describe("Security: negative paths", () => {
+  let host: Room<unknown, MatchState>;
+  let guestRoom: Room<unknown, MatchState>;
+  let hostId: GuestSessionResponse;
+  let guestId: GuestSessionResponse;
+  const liveRooms = async () => (await matchMaker.query({ name: ROOM_NAME })).length;
+  const matchmake = (method: string, body: unknown) =>
+    fetch(`${URL}/matchmake/${method}/${ROOM_NAME}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("creates no room for a forged or missing identity token", async () => {
+    const before = await liveRooms();
+    const forged = await matchmake("create", { token: "forged-token-xxxxxxxx", kind: "private" });
+    expect(forged.ok).toBe(false);
+    const missing = await matchmake("create", { kind: "private" });
+    expect(missing.ok).toBe(false);
+    const fake = await matchmake("joinOrCreate", {
+      token: `${"a".repeat(40)}.${"b".repeat(43)}`,
+      kind: "quick",
+    });
+    expect(fake.ok).toBe(false);
+    expect(await liveRooms()).toBe(before);
+  });
+
+  it("never matches a private room through join/joinOrCreate", async () => {
+    hostId = await guest("Host");
+    guestId = await guest("Visitor");
+    host = await new Client(URL).create(ROOM_NAME, { token: hostId.token, kind: "private" }, MatchState);
+    await until(() => host.state.code?.length === 5, 3000, "code");
+    await expect(
+      new Client(URL).join(ROOM_NAME, { token: guestId.token, kind: "private" }, MatchState),
+    ).rejects.toThrow();
+    const other = await new Client(URL).joinOrCreate(
+      ROOM_NAME,
+      { token: guestId.token, kind: "private" },
+      MatchState,
+    );
+    expect(other.roomId).not.toBe(host.roomId);
+    await other.leave();
+  });
+
+  it("refuses the same identity twice in one room", async () => {
+    guestRoom = await new Client(URL).joinById(
+      host.roomId,
+      { token: guestId.token, kind: "private" },
+      MatchState,
+    );
+    await until(() => host.state.players.size === 2, 3000, "visitor joined");
+    await expect(
+      new Client(URL).joinById(host.roomId, { token: guestId.token, kind: "private" }, MatchState),
+    ).rejects.toThrow(/already in this room/);
+    expect(host.state.players.size).toBe(2);
+  });
+
+  it("rejects forged reconnection tokens", async () => {
+    await expect(new Client(URL).reconnect(`${host.roomId}:forged`, MatchState)).rejects.toThrow();
+    await expect(new Client(URL).reconnect(`${host.roomId}:${"x".repeat(9)}`, MatchState)).rejects.toThrow();
+    expect(host.connection.isOpen).toBe(true);
+    expect(host.state.players.size).toBe(2);
+  });
+
+  it("moves the seat to a new connection that presents the live token (stale-socket recovery)", async () => {
+    // The reconnection token is the seat's bearer credential: the client that holds it (e.g. after
+    // a network switch the server has not noticed yet) takes the seat over; nobody is duplicated
+    // and the player keeps its state. v0.1.0 dropped the seat instead (player kicked).
+    const old = host;
+    const sessionId = old.sessionId;
+    (old as unknown as { reconnection: { enabled: boolean } }).reconnection.enabled = false;
+    host = await new Client(URL).reconnect(old.reconnectionToken, MatchState);
+    expect(host.sessionId).toBe(sessionId);
+    await until(() => host.state.players.size === 2, 3000, "state after takeover");
+    expect(host.state.hostId).toBe(sessionId);
+    await until(() => !old.connection.isOpen, 3000, "old socket closed");
+  });
+
+  it("keeps owner-only fields (ack, ammo, timers) out of other clients' state", async () => {
+    guestRoom.send(C2S.READY, { ready: true });
+    await until(() => host.state.players.get(guestRoom.sessionId)?.ready === true, 2000, "ready");
+    host.send(C2S.START, {});
+    await until(() => host.state.phase === "playing", 8000, "playing");
+    let seq = 0;
+    for (let i = 0; i < 5; i++) {
+      guestRoom.send(C2S.INPUT, {
+        i: [0, 0, 0].map(() =>
+          encodeInput(quantizeInput({ seq: ++seq, mx: 0, my: 0, aim: 0, buttons: 0, slot: -1, viewTick: 0 })),
+        ),
+      });
+      await wait(50);
+    }
+    const own = () => guestRoom.state.players.get(guestRoom.sessionId)!;
+    await until(() => own().ack === seq && own().m0 > 0, 3000, "owner sees its private fields");
+    const seenByHost = host.state.players.get(guestRoom.sessionId)!;
+    // Never transmitted to other clients (left undefined or at the schema default).
+    expect([undefined, 0]).toContain(seenByHost.ack);
+    expect([undefined, 0]).toContain(seenByHost.m0);
+    expect([undefined, 0]).toContain(seenByHost.r1);
+    expect([undefined, 0]).toContain(seenByHost.cooldown);
+    // Public fields are shared.
+    expect(seenByHost.x).toBe(own().x);
+  });
+
+  it("contains sequence and view-tick manipulation to the sender", async () => {
+    const mallory = await guest("Mallory");
+    const m = await new Client(URL).joinById(
+      host.roomId,
+      { token: mallory.token, kind: "private" },
+      MatchState,
+    );
+    await until(() => host.state.players.size === 3, 3000, "mallory joined");
+    const frame = (seq: number, viewTick: number) =>
+      encodeInput(quantizeInput({ seq, mx: 1, my: 0, aim: 0, buttons: BTN.FIRE, slot: -1, viewTick }));
+    // Largest allowed sequence number with a view tick far in the future, then "normal" frames.
+    m.send(C2S.INPUT, { i: [frame(2 ** 31, 10_000_000)] });
+    m.send(C2S.INPUT, { i: [frame(1, 0), frame(2, 0)] });
+    await wait(400);
+    const room = matchMaker.getLocalRoomById(host.roomId) as unknown as {
+      sim: {
+        players: Map<string, { lastQueuedSeq: number; inputStats: { duplicate: number; processed: number } }>;
+      };
+    };
+    const sp = room.sim.players.get(m.sessionId)!;
+    expect(sp.lastQueuedSeq).toBe(2 ** 31);
+    expect(sp.inputStats.processed).toBe(1); // the forged frame, with its view tick clamped
+    expect(sp.inputStats.duplicate).toBe(2); // later frames can no longer advance: self-inflicted
+    // Out-of-range values are protocol violations: the sender is removed, nobody else is.
+    m.send(C2S.INPUT, { i: [frame(2 ** 31 + 1, 0)] });
+    await until(() => host.state.players.size === 2, 4000, "mallory removed");
+    expect(host.connection.isOpen).toBe(true);
+    expect(guestRoom.connection.isOpen).toBe(true);
+  });
+
+  it("disconnects senders of unknown message types and of oversized input batches", async () => {
+    const eve = await guest("Eve");
+    const e = await new Client(URL).joinById(host.roomId, { token: eve.token, kind: "private" }, MatchState);
+    await until(() => host.state.players.size === 3, 3000, "eve joined");
+    e.send("does-not-exist", { x: 1 });
+    await until(() => host.state.players.size === 2, 4000, "eve removed (unknown type)");
+    const frank = await guest("Frank");
+    const f = await new Client(URL).joinById(
+      host.roomId,
+      { token: frank.token, kind: "private" },
+      MatchState,
+    );
+    await until(() => host.state.players.size === 3, 3000, "frank joined");
+    const frames = Array.from({ length: 7 }, (_, k) =>
+      encodeInput(quantizeInput({ seq: k + 1, mx: 0, my: 0, aim: 0, buttons: 0, slot: -1, viewTick: 0 })),
+    );
+    f.send(C2S.INPUT, { i: frames });
+    await until(() => host.state.players.size === 2, 4000, "frank removed (oversized batch)");
+    expect(host.connection.isOpen).toBe(true);
+  });
+
+  it("does not let a spoofed X-Forwarded-For bypass the per-address limits", async () => {
+    // TRUST_PROXY defaults to 0: the header is ignored and the socket address is the key.
+    let limited = 0;
+    for (let i = 0; i < 12; i++) {
+      const res = await fetch(`${URL}/api/guest`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": `203.0.113.${i + 1}` },
+        body: JSON.stringify({ nickname: `Spoof ${i}` }),
+      });
+      if (res.status === 429) limited++;
+    }
+    expect(limited).toBeGreaterThan(0);
+  });
+
+  it("rate-limits matchmaking requests per address", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 30; i++) {
+      const res = await matchmake("joinOrCreate", { token: "forged-token-xxxxxxxx", kind: "quick" });
+      statuses.push(res.status);
+    }
+    expect(statuses).toContain(429);
+    await host.leave();
+    await guestRoom.leave();
   });
 });

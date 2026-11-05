@@ -2,6 +2,7 @@ import { kdRatio, type LeaderboardEntry, levelFromXp } from "@scrapline/shared";
 import { desc, eq, gt, sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import pg from "pg";
+import type { PgConnectionOptions } from "./pgSsl.ts";
 import type { LeaderboardSort, MatchRecord, PlayerRecord, Repository } from "./repository.ts";
 import * as schema from "./schema.ts";
 import { matches, matchPlayers, players } from "./schema.ts";
@@ -38,12 +39,12 @@ export class PgRepository implements Repository {
     this.db = drizzle(pool, { schema });
   }
 
-  static connect(url: string, ssl: boolean): PgRepository {
+  static connect(opts: PgConnectionOptions): PgRepository {
     const pool = new pg.Pool({
-      connectionString: url,
+      connectionString: opts.connectionString,
       max: 10,
       idleTimeoutMillis: 30_000,
-      ssl: ssl ? { rejectUnauthorized: false } : undefined,
+      ssl: opts.ssl,
     });
     return new PgRepository(pool);
   }

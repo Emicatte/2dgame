@@ -1,16 +1,20 @@
 import { defineConfig } from "@playwright/test";
 
-const SERVER_PORT = 2600;
-const PROXY_PORT = 2610;
+export const SERVER_PORT = 2600;
+export const PROXY_PORT = 2610;
 const WEB_PORT = 5199;
-/** E2E_LATENCY_MS / E2E_JITTER_MS route the clients through the network-conditions proxy. */
-const LATENCY = process.env.E2E_LATENCY_MS;
+/**
+ * Browsers always connect through the network-conditions proxy so tests can inject stalls and
+ * drops at runtime. E2E_LATENCY_MS / E2E_JITTER_MS / E2E_SPIKE_RATE set its base conditions
+ * (default: none, i.e. localhost).
+ */
+const LATENCY = process.env.E2E_LATENCY_MS ?? "0";
 const JITTER = process.env.E2E_JITTER_MS ?? "0";
-const CLIENT_PORT = LATENCY ? PROXY_PORT : SERVER_PORT;
+const SPIKE_RATE = process.env.E2E_SPIKE_RATE ?? "0";
 
 export default defineConfig({
   testDir: ".",
-  timeout: 120_000,
+  timeout: 150_000,
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],
@@ -35,23 +39,19 @@ export default defineConfig({
       },
     },
     {
+      command: `node tests/tools/netem-proxy.mjs --listen ${PROXY_PORT} --target http://localhost:${SERVER_PORT} --latency ${LATENCY} --jitter ${JITTER} --spike-rate ${SPIKE_RATE} --spike 150 --seed 7`,
+      cwd: "../..",
+      port: PROXY_PORT,
+      reuseExistingServer: false,
+      timeout: 20_000,
+    },
+    {
       command: `pnpm --filter @scrapline/web exec vite --port ${WEB_PORT} --strictPort`,
       cwd: "../..",
       url: `http://localhost:${WEB_PORT}`,
       reuseExistingServer: false,
       timeout: 60_000,
-      env: { VITE_SERVER_URL: `http://localhost:${CLIENT_PORT}`, VITE_E2E: "true" },
+      env: { VITE_SERVER_URL: `http://localhost:${PROXY_PORT}`, VITE_E2E: "true" },
     },
-    ...(LATENCY
-      ? [
-          {
-            command: `node tests/tools/netem-proxy.mjs --listen ${PROXY_PORT} --target http://localhost:${SERVER_PORT} --latency ${LATENCY} --jitter ${JITTER} --spike-rate 0.01 --spike 150`,
-            cwd: "../..",
-            port: PROXY_PORT,
-            reuseExistingServer: false,
-            timeout: 20_000,
-          },
-        ]
-      : []),
   ],
 });

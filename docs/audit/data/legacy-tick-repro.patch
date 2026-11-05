@@ -1,0 +1,49 @@
+diff -ru a/apps/server/src/rooms/ArenaRoom.ts b/apps/server/src/rooms/ArenaRoom.ts
+--- a/apps/server/src/rooms/ArenaRoom.ts	2026-11-05 14:11:35.763954793 +0100
++++ b/apps/server/src/rooms/ArenaRoom.ts	2026-11-05 14:11:35.744878309 +0100
+@@ -127,11 +127,10 @@
+     this.patchRate = null;
+     // Elapsed time is measured here: the room clock's deltaTime is shared with other timers and
+     // under-reports the real interval, which would throttle input processing below real time.
+-    let last = performance.now();
+-    this.setTimestep(() => {
++    // LEGACY REPRODUCTION (commit 5d1cd40): elapsed time taken from the room clock.
++    this.setTimestep((dt) => {
+       const now = performance.now();
+-      const elapsed = now - last;
+-      last = now;
++      const elapsed = dt;
+       this.onTick(elapsed);
+       const cost = performance.now() - now;
+       this.tickStats.count += 1;
+diff -ru a/apps/server/src/simulation/GameSimulation.ts b/apps/server/src/simulation/GameSimulation.ts
+--- a/apps/server/src/simulation/GameSimulation.ts	2026-11-05 14:11:35.764013323 +0100
++++ b/apps/server/src/simulation/GameSimulation.ts	2026-11-05 14:11:35.749653285 +0100
+@@ -287,13 +287,13 @@
+       // Inputs may be consumed at most at real-time rate. Credit accrues with real elapsed time
+       // (so a stalled server catches up), but idle time is banked only up to a small cap, which is
+       // what stops a modified client from "saving up" time and then moving faster than allowed.
+-      p.credit += elapsedSec * NET.inputRate;
++      // LEGACY REPRODUCTION (commit 5d1cd40): credit capped on every tick.
++      p.credit = Math.min(creditCap, p.credit + elapsedSec * NET.inputRate);
+       while (p.queue.length > 0 && p.credit >= 1) {
+         const frame = p.queue.shift()!;
+         p.credit -= 1;
+         this.applyInput(p, frame, mode === "live");
+       }
+-      if (p.queue.length === 0) p.credit = Math.min(p.credit, creditCap);
+       if (p.queue.length > p.inputStats.queueMax) p.inputStats.queueMax = p.queue.length;
+       if (mode === "live" && p.connected) p.stats.activeTicks += 1;
+     }
+diff -ru a/packages/shared/src/config/game.ts b/packages/shared/src/config/game.ts
+--- a/packages/shared/src/config/game.ts	2026-11-05 14:11:35.764057412 +0100
++++ b/packages/shared/src/config/game.ts	2026-11-05 14:11:35.754285167 +0100
+@@ -14,7 +14,7 @@
+   /** Inputs a player may bank (catch-up after jitter). Bounds how far ahead of real time a client can act. */
+   maxInputCreditSeconds: 0.25,
+   /** Queued inputs beyond this are dropped (protects memory and blocks speed hacks). */
+-  maxQueuedInputs: 60,
++  maxQueuedInputs: 30, // LEGACY REPRODUCTION (commit 5d1cd40)
+   /** Remote players are rendered this far in the past (ms) so there are always two snapshots to blend. */
+   interpolationDelayMs: 110,
+   /** Lag compensation never rewinds further than this (ms). */

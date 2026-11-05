@@ -58,11 +58,62 @@ export interface ServerPlayer {
   lastQueuedSeq: number;
   lastProcessedSeq: number;
   credit: number;
+  /** Smallest queue length left after a tick in the current standing-queue window. */
+  queueFloor: number;
+  queueFloorTicks: number;
   interact: boolean;
   connected: boolean;
   joinedTick: number;
-  droppedInputs: number;
+  /** Input pipeline counters (diagnostics; never affect the simulation). */
+  inputStats: InputStats;
   stats: PlayerMatchStats;
+}
+
+/** Per-player input pipeline counters, cumulative since the player joined the room. */
+export interface InputStats {
+  /** Input messages received. */
+  messages: number;
+  /** Frames received in input messages. */
+  received: number;
+  /** Frames accepted into the queue. */
+  accepted: number;
+  /** Frames rejected because their sequence number was not newer than the last queued one. */
+  duplicate: number;
+  /** Oldest frames evicted because the queue was full. */
+  overflow: number;
+  /** Oldest frames dropped because the queue never drained (standing latency after a stall). */
+  trimmed: number;
+  /** Frames applied to the simulation (their seq is what the client sees as `ack`). */
+  processed: number;
+  /** Largest queue length left after a tick. */
+  queueMax: number;
+}
+
+export const emptyInputStats = (): InputStats => ({
+  messages: 0,
+  received: 0,
+  accepted: 0,
+  duplicate: 0,
+  overflow: 0,
+  trimmed: 0,
+  processed: 0,
+  queueMax: 0,
+});
+
+/**
+ * Removes the `count` oldest frames. A weapon-slot change is a one-shot command, so the newest one
+ * among the removed frames is carried into the new head instead of being lost.
+ */
+function dropFront(queue: InputFrame[], count: number): void {
+  const removed = queue.splice(0, count);
+  const head = queue[0];
+  if (!head || head.slot >= 0) return;
+  for (let i = removed.length - 1; i >= 0; i--) {
+    if (removed[i]!.slot >= 0) {
+      queue[0] = { ...head, slot: removed[i]!.slot };
+      return;
+    }
+  }
 }
 
 export interface NewPlayer {
@@ -170,10 +221,12 @@ export class GameSimulation {
       lastQueuedSeq: 0,
       lastProcessedSeq: 0,
       credit: 0,
+      queueFloor: Number.POSITIVE_INFINITY,
+      queueFloorTicks: 0,
       interact: false,
       connected: true,
       joinedTick: this.tick,
-      droppedInputs: 0,
+      inputStats: emptyInputStats(),
       stats: emptyStats(),
     };
     this.players.set(p.id, p);
@@ -187,23 +240,27 @@ export class GameSimulation {
   }
 
   /**
-   * Queues validated inputs. Duplicates and out-of-order frames are dropped, the queue is bounded,
-   * so a misbehaving client can neither replay inputs nor exhaust memory.
+   * Queues validated inputs. Frames whose sequence number is not newer than the last queued one
+   * (duplicates, replays) are dropped; the queue is bounded and evicts its oldest frames, so a
+   * misbehaving client can neither replay inputs nor exhaust memory, and the newest intent wins.
    */
   enqueue(id: string, frames: readonly InputFrame[]): { accepted: number; dropped: number } {
     const p = this.players.get(id);
     if (!p) return { accepted: 0, dropped: frames.length };
     let accepted = 0;
     let dropped = 0;
+    p.inputStats.messages++;
+    p.inputStats.received += frames.length;
     for (const f of frames) {
       if (f.seq <= p.lastQueuedSeq) {
         dropped++;
+        p.inputStats.duplicate++;
         continue;
       }
       if (p.queue.length >= NET.maxQueuedInputs) {
+        dropFront(p.queue, 1);
         dropped++;
-        p.droppedInputs++;
-        continue;
+        p.inputStats.overflow++;
       }
       // Never trust the view tick beyond what the server has actually sent.
       const viewTick = clamp(f.viewTick, Math.max(0, this.tick - this.maxRewindTicks), this.tick);
@@ -211,6 +268,7 @@ export class GameSimulation {
       p.lastQueuedSeq = f.seq;
       accepted++;
     }
+    p.inputStats.accepted += accepted;
     return { accepted, dropped };
   }
 
@@ -222,6 +280,8 @@ export class GameSimulation {
     p.lastQueuedSeq = 0;
     p.lastProcessedSeq = 0;
     p.credit = 0;
+    p.queueFloor = Number.POSITIVE_INFINITY;
+    p.queueFloorTicks = 0;
   }
 
   /** Clears match stats and spawns everybody at distinct spawn points. */
@@ -248,19 +308,39 @@ export class GameSimulation {
     this.events = [];
     const elapsedSec = clamp(elapsedMs, 0, 1000) / 1000;
     const creditCap = NET.maxInputCreditSeconds * NET.inputRate;
+    const tickInputs = elapsedSec * NET.inputRate;
+    const perTickMax = Math.max(1, Math.ceil(tickInputs * NET.inputCatchUpRate));
+    const floorWindowTicks = Math.max(1, Math.round(NET.standingQueueWindowSec * this.tickRate));
 
     for (const p of this.players.values()) {
       p.interact = false;
-      // Inputs may be consumed at most at real-time rate. Credit accrues with real elapsed time
-      // (so a stalled server catches up), but idle time is banked only up to a small cap, which is
-      // what stops a modified client from "saving up" time and then moving faster than allowed.
-      p.credit += elapsedSec * NET.inputRate;
-      while (p.queue.length > 0 && p.credit >= 1) {
+      // Inputs are consumed at real-time rate. Credit accrues with real elapsed time (so a stalled
+      // server catches up); idle time is banked only while the queue is empty and only up to
+      // maxInputCreditSeconds, which is what stops a modified client from moving faster than real
+      // time. A backlog is consumed at most inputCatchUpRate times faster than real time.
+      p.credit += tickInputs;
+      let n = 0;
+      while (p.queue.length > 0 && p.credit >= 1 && n < perTickMax) {
         const frame = p.queue.shift()!;
         p.credit -= 1;
+        n++;
         this.applyInput(p, frame, mode === "live");
       }
       if (p.queue.length === 0) p.credit = Math.min(p.credit, creditCap);
+      if (p.queue.length > p.inputStats.queueMax) p.inputStats.queueMax = p.queue.length;
+      // Standing queue: inputs that arrived after a stall beyond what the bank covers would add
+      // latency forever (arrivals equal consumption). If the queue never drains below the target
+      // for a whole window, drop the oldest excess frames; the client reconciles the difference.
+      p.queueFloor = Math.min(p.queueFloor, p.queue.length);
+      if (++p.queueFloorTicks >= floorWindowTicks) {
+        const excess = p.queueFloor - NET.standingQueueFrames;
+        if (excess > 0) {
+          dropFront(p.queue, excess);
+          p.inputStats.trimmed += excess;
+        }
+        p.queueFloor = Number.POSITIVE_INFINITY;
+        p.queueFloorTicks = 0;
+      }
       if (mode === "live" && p.connected) p.stats.activeTicks += 1;
     }
 
@@ -289,6 +369,7 @@ export class GameSimulation {
     });
     if (canAct && (frame.buttons & BTN.INTERACT) !== 0) p.interact = true;
     p.lastProcessedSeq = frame.seq;
+    p.inputStats.processed++;
     for (const s of shots) this.resolveShot(p, s.shot, s.view);
   }
 

@@ -13,6 +13,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { ServerClock } from "../src/game/net/clock.ts";
 import { SnapshotBuffer } from "../src/game/net/interpolation.ts";
+import { NetMetrics, RollingStats } from "../src/game/net/metrics.ts";
 import { Predictor } from "../src/game/net/Predictor.ts";
 
 const world = collisionWorldFor(MAPS.industrial);
@@ -153,5 +154,66 @@ describe("Predictor (client prediction + reconciliation)", () => {
     const x = p.sim.x;
     p.reconcile(serverView(createPlayerSim(0, 0, "rifle"), 5), true);
     expect(p.sim.x).toBe(x);
+  });
+
+  it("keeps every unacknowledged input through a long stall and still converges exactly", () => {
+    const seed = 7;
+    const server = createPlayerSim(1300, 1180, "rifle");
+    const p = new Predictor(world, seed);
+    p.sim = createPlayerSim(1300, 1180, "rifle");
+    // 10 s without any ack (v0.1.0 silently discarded everything beyond 240 frames).
+    const all = frames(600, { mx: 1, my: 1 }, 1).map((f, i) => ({ ...f, mx: i % 120 < 60 ? 1 : -1 }));
+    for (const f of all) p.predict(f, true, () => {});
+    expect(p.pendingCount).toBe(600);
+    const predicted = { x: p.sim.x, y: p.sim.y };
+    for (const f of all.slice(0, 300)) stepPlayer(server, f, { world, seed, alive: true });
+    p.reconcile(serverView(server, 300), true);
+    p.reconcile(serverView(server, 300), true);
+    expect(p.pendingCount).toBe(300);
+    expect(Math.hypot(p.sim.x - predicted.x, p.sim.y - predicted.y)).toBeLessThan(0.05);
+    expect(p.stats.snaps).toBe(0);
+  });
+
+  it("counts the first snapshot of a stream as a resync, not as a correction", () => {
+    const p = new Predictor(world, 1);
+    p.reconcile(serverView(createPlayerSim(1300, 1180, "rifle"), 0), true);
+    expect(p.stats).toMatchObject({ resyncs: 1, corrections: 0, snaps: 0 });
+    p.resetStream();
+    p.reconcile(serverView(createPlayerSim(200, 200, "rifle"), 0), true);
+    expect(p.stats).toMatchObject({ resyncs: 2, corrections: 0, snaps: 0 });
+  });
+});
+
+describe("NetMetrics", () => {
+  it("engages the stall guard only after the limit with inputs outstanding, and releases on ack", () => {
+    const m = new NetMetrics();
+    m.onPatch(10, 3, 1000);
+    expect(m.updateStall(1500, 3, 750, 16)).toBe(false);
+    expect(m.updateStall(1760, 0, 750, 16)).toBe(false); // nothing outstanding: idle, not stalled
+    expect(m.updateStall(1760, 5, 750, 16)).toBe(true);
+    expect(m.updateStall(1800, 8, 750, 16)).toBe(true);
+    m.onPatch(11, 7, 1810);
+    expect(m.updateStall(1820, 7, 750, 16)).toBe(false);
+    expect(m.snapshot(1820, new Predictor(world, 1))).toMatchObject({ stallEvents: 1, stallMs: 32 });
+  });
+
+  it("tracks pending percentiles and patch gaps", () => {
+    const m = new NetMetrics();
+    for (let i = 0; i < 100; i++) m.onPatch(i, i % 10, i * 50);
+    const s = m.snapshot(5000, new Predictor(world, 1));
+    expect(s.pendingP50).toBe(4);
+    expect(s.pendingMax).toBe(9);
+    expect(s.patchGapMaxMs).toBe(50);
+  });
+});
+
+describe("RollingStats", () => {
+  it("returns nearest-rank percentiles over the most recent window", () => {
+    const r = new RollingStats(4);
+    for (const v of [100, 1, 2, 3, 4]) r.push(v);
+    expect(r.length).toBe(4);
+    expect(r.max()).toBe(4);
+    expect(r.percentile(50)).toBe(2);
+    expect(r.percentile(100)).toBe(4);
   });
 });

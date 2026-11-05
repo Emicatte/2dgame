@@ -1,13 +1,16 @@
 # Local stack: PostgreSQL + game server built from the same Dockerfile used in production.
 # The web client runs with `pnpm dev:web` (Vite) and points at http://localhost:2567.
+# No secrets are stored here: TOKEN_SECRET must come from the environment or an .env file, e.g.
+#   TOKEN_SECRET=$(openssl rand -base64 48) docker compose up --build
 services:
   db:
     image: postgres:17
     environment:
       POSTGRES_USER: scrapline
-      POSTGRES_PASSWORD: scrapline
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scrapline}
       POSTGRES_DB: scrapline
-    ports: ["5432:5432"]
+    # Loopback only: the local database is never published on the host's network interfaces.
+    ports: ["127.0.0.1:5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U scrapline"]
@@ -19,10 +22,14 @@ services:
       dockerfile: docker/server.Dockerfile
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://scrapline:scrapline@db:5432/scrapline
-      TOKEN_SECRET: local-compose-secret-change-me-0123456789abcdef
+      DATABASE_URL: postgres://scrapline:${POSTGRES_PASSWORD:-scrapline}@db:5432/scrapline
+      # Private compose network: plain TCP is acceptable here, never for a public endpoint.
+      DATABASE_SSL: disable
+      TOKEN_SECRET: ${TOKEN_SECRET:?set TOKEN_SECRET, e.g. openssl rand -base64 48}
       ALLOWED_ORIGINS: http://localhost:5173,http://localhost:4173
-    ports: ["2567:2567"]
+      SHUTDOWN_DRAIN_SEC: "20"
+    ports: ["127.0.0.1:2567:2567"]
+    stop_grace_period: 30s
     depends_on:
       db:
         condition: service_healthy

@@ -1,0 +1,270 @@
+[
+  {
+    "scenario": {
+      "name": "rtt0-13fps",
+      "latency": 0,
+      "jitter": 0,
+      "fps": 13,
+      "seconds": 12
+    },
+    "pendingBound": 18,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 787,
+          "sent": 787,
+          "messages": 172,
+          "acked": 888,
+          "pending": 8,
+          "pendingP50": 168,
+          "pendingP95": 186,
+          "pendingMax": 194,
+          "pendingMaxEver": 200,
+          "ackAgeMs": 2208,
+          "ackAgeMaxMs": 238,
+          "patches": 362,
+          "patchGapP95Ms": 51,
+          "patchGapMaxMs": 54,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "corrections": 85,
+          "snaps": 12,
+          "correctionP95": 263.63,
+          "correctionMax": 463.14,
+          "staleAcks": 0,
+          "capDropped": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 787,
+          "accepted": 130,
+          "duplicate": 0,
+          "overflow": 657,
+          "processed": 160,
+          "queueP95": 30,
+          "queueMax": 30,
+          "queueAfterRecovery": 29
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 8,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 21,
+          "server": 7
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 788,
+          "sent": 788,
+          "messages": 172,
+          "acked": 889,
+          "pending": 8,
+          "pendingP50": 168,
+          "pendingP95": 186,
+          "pendingMax": 194,
+          "pendingMaxEver": 200,
+          "ackAgeMs": 2208,
+          "ackAgeMaxMs": 242,
+          "patches": 362,
+          "patchGapP95Ms": 51,
+          "patchGapMaxMs": 54,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "corrections": 83,
+          "snaps": 12,
+          "correctionP95": 278.93,
+          "correctionMax": 389.42,
+          "staleAcks": 0,
+          "capDropped": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 788,
+          "accepted": 130,
+          "duplicate": 0,
+          "overflow": 658,
+          "processed": 160,
+          "queueP95": 30,
+          "queueMax": 30,
+          "queueAfterRecovery": 29
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 8,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 21,
+          "server": 7
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "ackRegressions": []
+      }
+    ],
+    "failures": [
+      "A: ack 8 frames behind after settling",
+      "A: 657 inputs dropped by the server (queue full)",
+      "A: pending p95 186 > bound 18",
+      "A: pending max 194 > bound 18",
+      "A: 12 snap corrections without respawn",
+      "A: correction up to 463.14px",
+      "A: predicted 21 shots, server fired 7",
+      "B: ack 8 frames behind after settling",
+      "B: 658 inputs dropped by the server (queue full)",
+      "B: pending p95 186 > bound 18",
+      "B: pending max 194 > bound 18",
+      "B: 12 snap corrections without respawn",
+      "B: correction up to 389.42px",
+      "B: predicted 21 shots, server fired 7"
+    ]
+  },
+  {
+    "scenario": {
+      "name": "rtt0-60fps",
+      "latency": 0,
+      "jitter": 0,
+      "fps": 60,
+      "seconds": 12
+    },
+    "pendingBound": 10,
+    "bots": [
+      {
+        "bot": "A",
+        "client": {
+          "generated": 784,
+          "sent": 784,
+          "messages": 783,
+          "acked": 891,
+          "pending": 3,
+          "pendingP50": 170,
+          "pendingP95": 183,
+          "pendingMax": 186,
+          "pendingMaxEver": 193,
+          "ackAgeMs": 2111,
+          "ackAgeMaxMs": 242,
+          "patches": 361,
+          "patchGapP95Ms": 51,
+          "patchGapMaxMs": 53,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "corrections": 97,
+          "snaps": 16,
+          "correctionP95": 236.65,
+          "correctionMax": 323.6,
+          "staleAcks": 0,
+          "capDropped": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 784,
+          "accepted": 132,
+          "duplicate": 0,
+          "overflow": 652,
+          "processed": 162,
+          "queueP95": 30,
+          "queueMax": 30,
+          "queueAfterRecovery": 30
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 3,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 21,
+          "server": 7
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "ackRegressions": []
+      },
+      {
+        "bot": "B",
+        "client": {
+          "generated": 783,
+          "sent": 783,
+          "messages": 781,
+          "acked": 891,
+          "pending": 2,
+          "pendingP50": 170,
+          "pendingP95": 183,
+          "pendingMax": 186,
+          "pendingMaxEver": 192,
+          "ackAgeMs": 2111,
+          "ackAgeMaxMs": 246,
+          "patches": 361,
+          "patchGapP95Ms": 51,
+          "patchGapMaxMs": 53,
+          "starvedFrames": 0,
+          "lostStepMs": 0,
+          "corrections": 84,
+          "snaps": 11,
+          "correctionP95": 227.62,
+          "correctionMax": 402,
+          "staleAcks": 0,
+          "capDropped": 0,
+          "resyncs": 0
+        },
+        "server": {
+          "received": 783,
+          "accepted": 132,
+          "duplicate": 0,
+          "overflow": 651,
+          "processed": 162,
+          "queueP95": 30,
+          "queueMax": 30,
+          "queueAfterRecovery": 30
+        },
+        "converged": {
+          "errPx": 0,
+          "ackBehind": 2,
+          "ammoMatch": true
+        },
+        "shots": {
+          "predicted": 21,
+          "server": 7
+        },
+        "aliveChanges": 0,
+        "lostStepMs": 0,
+        "recoveryMs": null,
+        "drops": 0,
+        "reconnects": 0,
+        "ackRegressions": []
+      }
+    ],
+    "failures": [
+      "A: ack 3 frames behind after settling",
+      "A: 652 inputs dropped by the server (queue full)",
+      "A: pending p95 183 > bound 10",
+      "A: pending max 186 > bound 10",
+      "A: 16 snap corrections without respawn",
+      "A: correction up to 323.6px",
+      "A: predicted 21 shots, server fired 7",
+      "B: ack 2 frames behind after settling",
+      "B: 651 inputs dropped by the server (queue full)",
+      "B: pending p95 183 > bound 10",
+      "B: pending max 186 > bound 10",
+      "B: 11 snap corrections without respawn",
+      "B: correction up to 402px",
+      "B: predicted 21 shots, server fired 7"
+    ]
+  }
+]

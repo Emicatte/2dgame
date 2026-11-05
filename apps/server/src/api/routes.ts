@@ -18,6 +18,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { z } from "zod";
 import { findRoomIdByCode } from "../matchmaking/roomCodes.ts";
 import type { PlayerRecord } from "../persistence/repository.ts";
+import { clientIp } from "../security/clientIp.ts";
 import { RateLimiter } from "../security/rateLimit.ts";
 import { bearerToken, issueToken, verifyToken } from "../security/tokens.ts";
 import type { Services } from "../services.ts";
@@ -45,10 +46,6 @@ const profilePatchSchema = z.object({
   primary: z.enum(PRIMARY_WEAPONS as [WeaponId, ...WeaponId[]]).optional(),
 });
 
-function clientKey(req: Request): string {
-  return req.ip ?? req.socket.remoteAddress ?? "unknown";
-}
-
 export function corsMiddleware(allowedOrigins: readonly string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     const origin = req.headers.origin;
@@ -71,9 +68,12 @@ export function registerRoutes(app: express.Application, services: Services): vo
   const { cfg, repo, log } = services;
   const guestLimiter = new RateLimiter(10, 10 / 60);
   const apiLimiter = new RateLimiter(60, 2);
+  // X-Forwarded-For is trusted only for the configured number of proxy hops (TRUST_PROXY): with a
+  // fixed "1" (v0.1.0) a client connecting directly could spoof its address and bypass every limit.
+  const clientKey = (req: Request) => clientIp(req, cfg.TRUST_PROXY);
 
   app.disable("x-powered-by");
-  app.set("trust proxy", 1);
+  app.set("trust proxy", cfg.TRUST_PROXY);
   app.use(corsMiddleware(cfg.allowedOrigins));
   app.use(express.json({ limit: "16kb" }));
 

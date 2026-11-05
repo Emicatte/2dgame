@@ -91,20 +91,93 @@ describe("GameSimulation", () => {
     place(a, 1300, ARENA_Y);
     sim.enqueue("a", frames("a", NET.maxQueuedInputs + 10, { mx: 1 }));
     expect(a.queue.length).toBe(NET.maxQueuedInputs);
+    // A full queue evicts its oldest frames: the newest intent is kept.
+    expect(a.inputStats.overflow).toBe(10);
+    expect(a.queue[0]!.seq).toBe(11);
     sim.step(SERVER_TICK_MS, "live");
     // One 50ms tick at 60 inputs/s permits three inputs.
-    expect(a.lastProcessedSeq).toBe(3);
+    expect(a.inputStats.processed).toBe(3);
   });
 
-  it("does not let a client bank idle time to move faster later", () => {
+  it("a flooding client never exceeds real time plus the bounded bank over any window", () => {
+    const a = addPlayer(sim, "a");
+    place(a, 1300, ARENA_Y);
+    // Idle long enough to fill the bank, then send twice the legal rate for 5 seconds.
+    for (let i = 0; i < 100; i++) sim.step(SERVER_TICK_MS, "live");
+    const ticks = 100;
+    for (let i = 0; i < ticks; i++) {
+      sim.enqueue("a", frames("a", 6, { mx: 1 }));
+      sim.step(SERVER_TICK_MS, "live");
+    }
+    const realTime = (ticks * SERVER_TICK_MS * NET.inputRate) / 1000;
+    expect(a.inputStats.processed).toBeLessThanOrEqual(realTime + NET.maxInputCreditSeconds * NET.inputRate);
+  });
+
+  it("does not let a client bank more idle time than the cap, nor spend it in one tick", () => {
     const a = addPlayer(sim, "a");
     place(a, 1300, ARENA_Y);
     // Ten seconds without inputs, then a burst of 60.
     for (let i = 0; i < 200; i++) sim.step(SERVER_TICK_MS, "live");
     sim.enqueue("a", frames("a", 60, { mx: 1 }));
     sim.step(SERVER_TICK_MS, "live");
-    // Only the capped bank (0.25 s) plus this tick's 50 ms worth may be consumed.
-    expect(a.lastProcessedSeq).toBeLessThanOrEqual(NET.maxInputCreditSeconds * NET.inputRate + 3);
+    // The backlog is consumed at most inputCatchUpRate times faster than real time.
+    expect(a.inputStats.processed).toBe(3 * NET.inputCatchUpRate);
+    let ticks = 1;
+    while (a.queue.length > 0 && ticks < 100) {
+      sim.step(SERVER_TICK_MS, "live");
+      ticks++;
+    }
+    // In total no more than the bank plus real time was consumed.
+    expect(a.inputStats.processed).toBeLessThanOrEqual(
+      NET.maxInputCreditSeconds * NET.inputRate + (ticks * SERVER_TICK_MS * NET.inputRate) / 1000,
+    );
+  });
+
+  it("applies the inputs that piled up during a network stall without a standing backlog", () => {
+    const a = addPlayer(sim, "a");
+    place(a, 1300, ARENA_Y);
+    // Client sends 60/s; the uplink stalls for 0.7 s (14 ticks), then everything arrives at once.
+    let seqSent = 0;
+    const send = (n: number) => {
+      sim.enqueue("a", frames("a", n, { mx: 1 }));
+      seqSent += n;
+    };
+    for (let i = 0; i < 20; i++) {
+      send(3);
+      sim.step(SERVER_TICK_MS, "live");
+    }
+    for (let i = 0; i < 14; i++) sim.step(SERVER_TICK_MS, "live");
+    send(42);
+    for (let i = 0; i < 40; i++) {
+      send(3);
+      sim.step(SERVER_TICK_MS, "live");
+    }
+    // Every input was applied (none trimmed or evicted) and the queue is back to steady state.
+    expect(a.inputStats.trimmed + a.inputStats.overflow).toBe(0);
+    expect(a.queue.length).toBeLessThanOrEqual(3);
+    expect(a.lastProcessedSeq).toBeGreaterThanOrEqual(seqSent - 3);
+  });
+
+  it("trims a standing backlog that real-time consumption can never drain", () => {
+    const a = addPlayer(sim, "a");
+    place(a, 1300, ARENA_Y);
+    // A 50-frame backlog arrives while the bank is empty, then the client keeps sending 60/s.
+    sim.enqueue("a", frames("a", 50, { mx: 1 }));
+    for (let i = 0; i < 60; i++) {
+      sim.enqueue("a", frames("a", 3, { mx: 1 }));
+      sim.step(SERVER_TICK_MS, "live");
+    }
+    expect(a.inputStats.trimmed).toBeGreaterThan(0);
+    expect(a.queue.length).toBeLessThanOrEqual(NET.standingQueueFrames + 3);
+  });
+
+  it("keeps a weapon switch that was inside trimmed or evicted frames", () => {
+    const a = addPlayer(sim, "a");
+    place(a, 1300, ARENA_Y);
+    const burst = frames("a", NET.maxQueuedInputs + 5, {});
+    burst[2] = { ...burst[2]!, slot: 1 };
+    sim.enqueue("a", burst);
+    expect(a.queue[0]!.slot).toBe(1);
   });
 
   it("catches up after a server stall instead of building a permanent backlog", () => {

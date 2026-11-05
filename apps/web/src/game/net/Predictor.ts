@@ -7,6 +7,7 @@ import {
   type SimEvent,
   stepPlayer,
 } from "@scrapline/shared";
+import { RollingStats } from "./metrics.ts";
 
 /**
  * Client-side prediction with server reconciliation for the local player.
@@ -27,6 +28,12 @@ export class Predictor {
   /** Diagnostics */
   lastCorrection = 0;
   corrections = 0;
+  private acked = 0;
+  private snaps = 0;
+  private staleAcks = 0;
+  private resyncs = 0;
+  private correctionMax = 0;
+  private readonly correctionSizes = new RollingStats(200);
 
   constructor(
     private world: CollisionWorld,
@@ -44,22 +51,60 @@ export class Predictor {
     return this.seq;
   }
 
+  /** Sequence number of the newest generated input. */
+  get lastSeq(): number {
+    return this.seq;
+  }
+
   get pendingCount(): number {
     return this.pending.length;
   }
 
   predict(frame: InputFrame, alive: boolean, emit: (e: SimEvent) => void): void {
     stepPlayer(this.sim, frame, { world: this.world, seed: this.seed, alive, emit });
+    // Never discard unacknowledged inputs: replaying from the ack with a gap would guarantee a
+    // misprediction. The pending list is bounded by the stall guard in the scene instead
+    // (NET.inputStallMs without an ack stops input generation).
     this.pending.push(frame);
-    if (this.pending.length > 240) this.pending.shift();
+  }
+
+  get stats() {
+    return {
+      acked: this.acked,
+      corrections: this.corrections,
+      snaps: this.snaps,
+      staleAcks: this.staleAcks,
+      resyncs: this.resyncs,
+      correctionP95: this.correctionSizes.percentile(95),
+      correctionMax: this.correctionMax,
+    };
+  }
+
+  /** Clears the diagnostic counters (not the prediction state). */
+  resetStats(): void {
+    this.acked = 0;
+    this.corrections = 0;
+    this.snaps = 0;
+    this.staleAcks = 0;
+    this.resyncs = 0;
+    this.correctionMax = 0;
+    this.correctionSizes.clear();
   }
 
   /** Applies an authoritative snapshot of the local player (owner-only fields included). */
   reconcile(ps: PlayerState, alive: boolean): void {
     const ack = ps.ack;
-    if (ack < this.lastAck) return;
+    if (ack < this.lastAck) {
+      this.staleAcks++;
+      return;
+    }
+    // The first snapshot of a stream (join, reconnect) is a synchronisation, not a correction.
+    const firstOfStream = this.lastAck === -1;
     this.lastAck = ack;
-    while (this.pending.length > 0 && this.pending[0]!.seq <= ack) this.pending.shift();
+    while (this.pending.length > 0 && this.pending[0]!.seq <= ack) {
+      this.pending.shift();
+      this.acked++;
+    }
 
     const before = { x: this.sim.x, y: this.sim.y };
     const s = this.sim;
@@ -89,8 +134,15 @@ export class Predictor {
     const dy = before.y - s.y;
     const err = Math.hypot(dx, dy);
     this.lastCorrection = err;
-    if (err > 0.01) this.corrections++;
+    if (firstOfStream) {
+      this.resyncs++;
+    } else if (err > 0.01) {
+      this.corrections++;
+      this.correctionSizes.push(err);
+      this.correctionMax = Math.max(this.correctionMax, err);
+    }
     if (err > 96) {
+      if (!firstOfStream) this.snaps++;
       // Teleport-sized difference (respawn, large desync): snap.
       this.offsetX = 0;
       this.offsetY = 0;

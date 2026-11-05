@@ -10,6 +10,8 @@ export default defineConfig({
     sourcemap: true,
     chunkSizeWarningLimit: 2000,
     rollupOptions: {
+      // bench.html: offline client benchmark (src/bench), shipped alongside the game.
+      input: { main: "index.html", bench: "bench.html" },
       output: {
         manualChunks: (id) => {
           if (id.includes("node_modules/phaser")) return "phaser";

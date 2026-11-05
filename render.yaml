@@ -31,8 +31,14 @@ services:
         fromDatabase:
           name: scrapline-db
           property: connectionString
+      # The connection string from `fromDatabase` is Render's internal URL (private network, no
+      # TLS offered). If you ever switch to the external URL, use verify-full + DATABASE_SSL_CA.
       - key: DATABASE_SSL
-        value: "false"
+        value: disable
+      # Render's load balancer is the single proxy hop in front of the service: trust exactly one
+      # X-Forwarded-For entry for per-address rate limits (more would let clients spoof it).
+      - key: TRUST_PROXY
+        value: "1"
       # Comma separated, e.g. https://game.example.com,https://scrapline.vercel.app
       - key: ALLOWED_ORIGINS
         sync: false

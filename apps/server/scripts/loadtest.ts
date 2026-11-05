@@ -5,7 +5,9 @@
  *   pnpm --filter @scrapline/server loadtest -- \
  *     --url http://localhost:2567 --bots 8 --seconds 30
  *
- * The server must run with ENABLE_DEBUG_ROUTES=true to expose tick statistics.
+ * The server must run with ENABLE_DEBUG_ROUTES=true to expose tick statistics, and with
+ * TRUST_PROXY=1 so the per-bot X-Forwarded-For addresses below get separate guest/matchmaking
+ * rate-limit buckets (never set TRUST_PROXY higher than the real number of proxies in production).
  */
 import { Client, type Room } from "@colyseus/sdk";
 import { BTN, C2S, encodeInput, MatchState, quantizeInput, ROOM_NAME } from "@scrapline/shared";
@@ -97,7 +99,7 @@ async function main() {
   const debug = (await (await fetch(`${URL}/api/debug/rooms`)).json()) as {
     roomId: string;
     tickCostMs?: { avg: number; max: number; maxIntervalMs: number };
-    players?: { name: string; droppedInputs: number; queue: number }[];
+    players?: { name: string; queue: number; inputs: Record<string, number> }[];
   }[];
   const kbps = bots.map((b) => b.bytesIn / 1024 / elapsed);
   const kills = [...bots[0]!.room.state.players.values()].reduce((s, p) => s + p.kills, 0);

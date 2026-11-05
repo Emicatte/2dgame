@@ -6,7 +6,15 @@ import { logger } from "./logger.ts";
 import { createRepository } from "./persistence/index.ts";
 
 const cfg = loadConfig();
-const repo = await createRepository(cfg, logger);
+let repo: Awaited<ReturnType<typeof createRepository>>;
+try {
+  repo = await createRepository(cfg, logger);
+} catch (err) {
+  // Fail fast with one structured line (bad credentials, TLS verification failure, unreachable
+  // database): the platform restarts the instance and the health check keeps traffic away.
+  logger.fatal({ err, ssl: cfg.DATABASE_SSL }, "database unavailable at boot");
+  process.exit(1);
+}
 const server = createGameServer({ cfg, repo, log: logger });
 
 await server.listen(cfg.PORT, cfg.HOST);

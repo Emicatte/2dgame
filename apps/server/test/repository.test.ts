@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MemoryRepository } from "../src/persistence/memoryRepository.ts";
 import { runMigrations } from "../src/persistence/migrate.ts";
 import { PgRepository } from "../src/persistence/pgRepository.ts";
+import { pgConnectionOptions } from "../src/persistence/pgSsl.ts";
 import type { MatchPlayerResult, Repository } from "../src/persistence/repository.ts";
 
 /**
@@ -152,7 +153,7 @@ if (pgUrl) {
   contract(
     "PgRepository (PostgreSQL)",
     async () => {
-      const repo = PgRepository.connect(pgUrl, false);
+      const repo = PgRepository.connect(pgConnectionOptions(pgUrl, "disable"));
       await repo.pool.query(
         "drop schema if exists public cascade; create schema public; drop schema if exists drizzle cascade;",
       );

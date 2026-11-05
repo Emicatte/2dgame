@@ -167,9 +167,17 @@ class GameSession {
     }
   }
 
-  private attach(room: Room<unknown, MatchState>) {
+  /**
+   * Offline benchmark only (bench/LocalRoom.ts): attaches an in-browser room through the same path
+   * as a joined one, so the scene and HUD run unmodified. Never stored for reconnection.
+   */
+  attachLocal(room: Room<unknown, MatchState>): void {
+    this.attach(room, false);
+  }
+
+  private attach(room: Room<unknown, MatchState>, resumable = true) {
     this.room = room;
-    this.rememberReconnect(room.reconnectionToken);
+    if (resumable) this.rememberReconnect(room.reconnectionToken);
     sessionStore.patch({ status: "connected", error: null, roomId: room.roomId, selfId: room.sessionId });
 
     room.onStateChange((state) => this.project(state));
@@ -183,7 +191,7 @@ class GameSession {
     });
     room.onDrop(() => sessionStore.patch({ status: "reconnecting" }));
     room.onReconnect(() => {
-      this.rememberReconnect(room.reconnectionToken);
+      if (resumable) this.rememberReconnect(room.reconnectionToken);
       sessionStore.patch({ status: "connected" });
     });
     room.onLeave((code) => {

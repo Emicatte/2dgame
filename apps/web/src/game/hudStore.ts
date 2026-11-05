@@ -34,14 +34,21 @@ export interface HudState {
   protected: boolean;
   ping: number;
   fps: number;
+  /** No ack for NET.inputStallMs: local input is held ("connection interrupted"). */
+  stalled: boolean;
   damageFlash: number;
   damageAngle: number;
   hitConfirm: number;
   debug: {
     tick: number;
     renderLag: number;
+    interpBuffer: number;
     jitter: number;
     pending: number;
+    pendingP95: number;
+    pendingMax: number;
+    ackAge: number;
+    snaps: number;
     correction: number;
     corrections: number;
     kbIn: number;
@@ -77,14 +84,20 @@ export const hudStore = createStore<HudState>({
   protected: false,
   ping: 0,
   fps: 0,
+  stalled: false,
   damageFlash: 0,
   damageAngle: 0,
   hitConfirm: 0,
   debug: {
     tick: 0,
     renderLag: 0,
+    interpBuffer: 0,
     jitter: 0,
     pending: 0,
+    pendingP95: 0,
+    pendingMax: 0,
+    ackAge: 0,
+    snaps: 0,
     correction: 0,
     corrections: 0,
     kbIn: 0,

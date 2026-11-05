@@ -52,16 +52,28 @@ Shared deterministic simulation (`packages/shared/src/sim/player.ts`) runs on bo
    (`seq`, movement axes, aim, buttons, weapon slot, view tick), quantized exactly as it will be
    encoded, applies it to the local predicted state immediately and queues it for sending.
    Frames are sent once per rendered frame in batches (≤ 6 per message).
-2. **Server tick, 20 Hz (configurable `NET.serverTickRate`).** Each tick consumes queued inputs
-   at most at real-time rate: credit accrues with measured elapsed time, idle time can be banked
-   only up to 0.25 s. This blocks speed hacks and lets a stalled server catch up without a
-   permanent backlog. Duplicate/out-of-order sequences are dropped; queues are bounded.
+2. **Server tick, 20 Hz (configurable `NET.serverTickRate`).** Elapsed time is measured with
+   `performance.now()` in the timestep callback (the room clock's `deltaTime` is not reliable, see
+   docs/audit/AUDIT_REPORT.md N1). Each tick consumes queued inputs at real-time rate: credit
+   accrues with elapsed time; while the queue is empty, idle time is banked up to
+   `maxInputCreditSeconds` (0.75 s, equal to the client stall guard) so the inputs that pile up
+   during a network stall are still applied; a backlog is consumed at most `inputCatchUpRate` (2×)
+   faster than real time, so other players see a short fast-forward instead of a teleport. A queue
+   that never drains below `standingQueueFrames` (2) for `standingQueueWindowSec` (1 s) is trimmed
+   from the front: that excess would otherwise be permanent input latency. Frames whose sequence
+   is not newer than the last queued one are dropped; a full queue (60) evicts its oldest frames.
+   Over any window a client can act at most real time + 0.75 s ahead (speed-hack bound).
 3. **One snapshot per tick.** Automatic patching is disabled (`patchRate = null`); the room calls
    `broadcastPatch()` at the end of every tick, so each patch corresponds to exactly one tick
    number used for timing. Owner-only fields (velocity, timers, ammo, last acknowledged input)
    are tagged `.view()` and reach only their owner via `StateView`.
 4. **Reconciliation.** On every patch the client resets its predicted state to the server's owner
-   view for the acknowledged input and replays the unacknowledged ones. Because every discrete
+   view for the acknowledged input and replays the unacknowledged ones. Unacknowledged inputs are
+   never discarded (a replay with a gap is a guaranteed misprediction). Instead, when inputs are
+   outstanding and the ack has not moved for `NET.inputStallMs` (750 ms, ~2.5× the worst ack gap
+   measured in normal play) the client stops producing inputs and the HUD shows "Connection
+   interrupted"; the same hold applies while the SDK reconnects. This bounds the burst a client
+   releases after a stall (≤ 45 one-frame messages) and the pending list. Because every discrete
    gameplay timer counts integer steps (fire interval, reload, swap, dash), float rounding on the
    wire cannot change whether a shot happens; residual position error is blended out visually.
 5. **Interpolation.** Other players are rendered 110 ms in the past by blending the two snapshots
@@ -78,6 +90,14 @@ Shared deterministic simulation (`packages/shared/src/sim/player.ts`) runs on bo
 
 Bandwidth measured with 8 bots: ~3.6 KB/s downstream per client, ~1.5 KB/s upstream.
 
+**Observability.** The server counts per player: messages, frames received, accepted, duplicate,
+overflow (evicted), trimmed, processed and the largest queue; they are logged once per session
+(`player left`) and exposed by `/api/debug/rooms` in debug builds. The client counts generated,
+sent and acknowledged frames, pending percentiles, ack age, snapshot gaps, interpolation
+starvation, corrections and stall-guard time (`NetMetrics`, debug overlay and `__scrapline.net()`
+in dev/E2E builds). `apps/server/scripts/netaudit.ts` runs the RTT/jitter/stall/reconnect matrix
+against these counters.
+
 ## Authority and security
 
 The client never decides health, damage, ammo, position, kills, XP or stats. It sends intentions;
@@ -85,8 +105,19 @@ the server simulates.
 
 - Every message is validated with Zod (`onMessage(type, schema, handler)`); a malformed message
   disconnects the sender (Colyseus `WITH_ERROR`), no seat is held for it.
-- `maxMessagesPerSecond = 90` per client; input queues bounded; view ticks clamped to the rewind
-  window; slot/axis/buttons ranges enforced by schema.
+- `maxMessagesPerSecond = 150` per client (normal play ~61; a stall releases ≤ 45 more); unknown
+  message types and oversized batches disconnect the sender; input queues bounded; view ticks
+  clamped to the rewind window; slot/axis/buttons ranges enforced by schema.
+- Matchmaking: the room's `onAuth` is static, so the identity token is verified during the
+  matchmaking HTTP request, before any room is created (an invalid token creates nothing). Matchmaking
+  requests are rate limited per address (20 burst, 30/min). The same identity cannot hold two seats
+  in one room. The reconnection token is the seat's bearer credential: a client presenting it while
+  the old socket is still open (network switch) takes the seat over instead of being kicked.
+- Client addresses for rate limits come from the socket unless `TRUST_PROXY` hops are configured;
+  then only the `X-Forwarded-For` entry appended by the trusted proxy is used.
+- PostgreSQL TLS is verified (`verify-full` / `verify-ca` with an optional CA); there is no
+  unverified TLS mode, and TLS parameters inside `DATABASE_URL` cannot override the policy.
+- Logs redact identity and reconnection tokens (also when nested inside framework errors).
 - Host-only actions (settings, start, kick) are checked server-side.
 - Identity: `POST /api/guest` creates a profile and returns `base64url(payload).HMAC-SHA256`.
   The server trusts the player id only after verifying the signature (timing-safe compare,
