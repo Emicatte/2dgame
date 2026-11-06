@@ -6,6 +6,7 @@ import {
   airWorldFor,
   BTN,
   bodyFits,
+  bossPhase,
   C2S,
   type Circle,
   type CollisionWorld,
@@ -66,6 +67,7 @@ import { gameEvents, session, sessionStore } from "../../net/session.ts";
 import { currentLoadout } from "../../state/profile.ts";
 import { renderMap } from "../art/mapRenderer.ts";
 import { TEX, TEX_SCALE } from "../art/textures.ts";
+import { score } from "../audio/score.ts";
 import { sfx } from "../audio/sfx.ts";
 import { autopilot } from "../bench/autopilot.ts";
 import { projectOntoRay, visualAim } from "../combat/aim.ts";
@@ -155,6 +157,14 @@ export class ArenaScene extends Phaser.Scene {
   private tension = 0;
   private lastHurtAt = -99;
   private stalkerNear = false;
+  /** Score and positional dread cues (PvE only). */
+  private scoreOn = false;
+  private lastBossId = "";
+  private announced = new Set<string>();
+  private lastZState = new Map<string, number>();
+  private calmSince = 0;
+  private stompTimer = 0;
+  private hordeAt = 0;
   /** Outbreak / Survival rendering (enemies, telegraphs, props, doors, hazards). */
   private pve!: PveLayer;
   /** Collision worlds with the current mission doors (null outside PvE maps with doors). */
@@ -437,6 +447,8 @@ export class ArenaScene extends Phaser.Scene {
     for (const u of this.unsubs) u();
     this.unsubs = [];
     this.cleanupRoom?.();
+    score.stop();
+    this.scoreOn = false;
     this.controls?.destroy();
     this.perf?.destroy();
     this.perf = null;
@@ -771,6 +783,17 @@ export class ArenaScene extends Phaser.Scene {
         if (this.pve.active) this.updateSight(state);
       }
       if (this.pve.active && this.pve.doorsChanged(state)) this.applyDoors(state);
+      const scoreOn = this.pve.active && inMatch;
+      if (scoreOn !== this.scoreOn) {
+        this.scoreOn = scoreOn;
+        if (scoreOn) score.start();
+        else {
+          score.stop();
+          this.lastBossId = "";
+          this.announced.clear();
+          this.lastZState.clear();
+        }
+      }
       if (phase === "lobby") this.pve.resetMatch();
       this.pve.onPatch(state, inMatch);
     }
@@ -923,12 +946,22 @@ export class ArenaScene extends Phaser.Scene {
         break;
       case "down":
         if (ev.p === self) {
+          score.stinger("downed");
           sfx.death(true);
           this.cameras.main.shake(200, 0.006 * settingsStore.get().screenShake);
         }
         break;
       case "revive":
+        if (ev.p === self) score.stinger("revive");
         if (ev.p === self || ev.by === self) sfx.spawn();
+        break;
+      case "pve":
+        if (ev.k === "wave") {
+          score.stinger("wave");
+          // The horde is heard from where it comes, once it is on its way.
+          this.hordeAt = performance.now() + 1200;
+        } else if (ev.k === "step") score.stinger("objective");
+        else if (ev.k === "bossPhase") score.stinger("boss");
         break;
       case "boom": {
         const me = this.views.get(self ?? "");
@@ -992,8 +1025,10 @@ export class ArenaScene extends Phaser.Scene {
       waveActive: state.pve.left > 0,
       sinceHurt: nowSec - this.lastHurtAt,
     });
+    const before = this.tension;
     this.tension = smoothTension(this.tension, target, dtSec);
     this.stalkerNear = stalker;
+    this.updateScore(dtSec, state, eye, before, hpFrac, !!ps?.downed, !!ps?.alive);
 
     const allies: Carrier[] = [];
     const headlights: Headlight[] = [];
@@ -1030,7 +1065,7 @@ export class ArenaScene extends Phaser.Scene {
     });
     const diff = isDifficulty(state.pve.difficulty) ? state.pve.difficulty : "veteran";
     const base = diff === "recruit" ? 0.7 : diff === "nightmare" ? 0.28 : 0.48;
-    const setting = (settingsStore.get() as { pveBrightness?: number }).pveBrightness ?? 0.5;
+    const setting = settingsStore.get().pveBrightness;
     const brightness = clamp(base + (setting - 0.5) * 0.8 + (state.pve.power ? 0.08 : 0), 0, 1);
     const danger = ps?.downed ? 1 : ps?.alive && hpFrac <= 0.35 ? 0.3 + (0.35 - hpFrac) * 2 : 0;
     this.lightmap.update({
@@ -1979,7 +2014,98 @@ export class ArenaScene extends Phaser.Scene {
       if (d < 900 && (!best || d < best.d)) best = { x: z.x, y: z.y, d };
     });
     const b = best as { x: number; y: number; d: number } | null;
-    if (b) sfx.zombieGroan(b.d, clamp((b.x - me.root.x) / 900, -1, 1));
+    if (!b) return;
+    const pan = clamp((b.x - me.root.x) / 900, -1, 1);
+    // Close and unseen: dragging feet and breath instead of a groan (worse).
+    if (b.d < 500 && this.lightmap.lightAt(b.x, b.y) < 0.3) sfx.zombieShuffle(b.d, pan);
+    else sfx.zombieGroan(b.d, pan);
+  }
+
+  /**
+   * The adaptive score and the positional dread cues: stingers when something new hunts the
+   * player, a runner's screech when it starts a chase, stomps of nearby brutes, the stalker's
+   * hiss (a fairness cue, like the flashlight flicker), the horde heard from where it comes.
+   */
+  private updateScore(
+    dtSec: number,
+    state: MatchState,
+    eye: { x: number; y: number },
+    tensionBefore: number,
+    hpFrac: number,
+    downed: boolean,
+    alive: boolean,
+  ) {
+    const bossZ = state.pve.boss ? state.zombies.get(state.pve.boss) : undefined;
+    const bossDef = bossZ ? zombieByIndex(bossZ.k) : undefined;
+    const phase = bossZ && bossDef?.boss ? bossPhase(bossDef, bossZ.hp / Math.max(1, bossZ.mhp)) + 1 : 0;
+    if (state.pve.boss && state.pve.boss !== this.lastBossId) score.stinger("boss");
+    this.lastBossId = state.pve.boss;
+    score.update(dtSec, {
+      tension: this.tension,
+      boss: !!bossZ,
+      bossPhase: phase,
+      downed,
+      lowHp: alive && hpFrac <= 0.3,
+      waveActive: state.pve.left > 0,
+      dark: state.mode === "outbreak" && !state.pve.power,
+    });
+    const now = performance.now();
+    // A sudden jump out of calm: something found you.
+    if (this.tension < 0.2) this.calmSince += dtSec;
+    else if (tensionBefore < 0.25 && this.tension > 0.45 && this.calmSince > 6) {
+      score.stinger("spotted");
+      this.calmSince = 0;
+    }
+    let brute: { d: number; pan: number } | null = null;
+    let stalker: { d: number; pan: number } | null = null;
+    let farX = 0;
+    let farN = 0;
+    state.zombies.forEach((z, id) => {
+      const def = zombieByIndex(z.k);
+      if (!def) return;
+      const at = this.pve.position(id) ?? z;
+      const d = Math.hypot(at.x - eye.x, at.y - eye.y);
+      const pan = clamp((at.x - eye.x) / 900, -1, 1);
+      const hunting = z.st === AI.CHASE || z.st === AI.ATTACK;
+      const prev = this.lastZState.get(id);
+      this.lastZState.set(id, z.st);
+      if (
+        def.kind === "runner" &&
+        hunting &&
+        prev !== undefined &&
+        prev !== AI.CHASE &&
+        prev !== AI.ATTACK &&
+        d < 1200
+      )
+        sfx.runnerScreech(d, pan);
+      if (def.kind === "brute" && d < 900 && (!brute || d < brute.d)) brute = { d, pan };
+      if (def.kind === "stalker" && hunting && d < 600 && (!stalker || d < stalker.d)) stalker = { d, pan };
+      if (hunting && d > 500) {
+        farX += pan;
+        farN++;
+      }
+      // A special that starts hunting you close by, once per enemy.
+      if (hunting && d < 650 && !this.announced.has(id) && (def.boss || def.kind !== "walker")) {
+        this.announced.add(id);
+        if (!def.boss && def.kind !== "runner") score.stinger("special");
+      }
+    });
+    if (this.lastZState.size > state.zombies.size * 2 + 32) {
+      for (const id of this.lastZState.keys()) if (!state.zombies.has(id)) this.lastZState.delete(id);
+      for (const id of this.announced) if (!state.zombies.has(id)) this.announced.delete(id);
+    }
+    this.stompTimer -= dtSec;
+    const b = brute as { d: number; pan: number } | null;
+    if (b && this.stompTimer <= 0) {
+      sfx.bruteStomp(b.d, b.pan);
+      this.stompTimer = 0.55 + Math.random() * 0.2;
+    }
+    const st = stalker as { d: number; pan: number } | null;
+    if (st) sfx.stalkerHiss(st.d, st.pan);
+    if (this.hordeAt > 0 && now >= this.hordeAt) {
+      this.hordeAt = 0;
+      sfx.hordeRoar(farN > 0 ? 700 : 900, farN > 0 ? clamp(farX / farN, -1, 1) : 0);
+    }
   }
 
   /** PvE HUD: prompts, objective marker, off-screen allies, squad. */

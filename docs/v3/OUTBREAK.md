@@ -176,6 +176,40 @@ Facility (with its vehicles).
   per enemy per contact (the 0.6 s cooldown of run-overs in PvP), although contacts are checked
   for every applied input frame.
 
+## 5b. Dread: darkness, sight and sound (client only, PvE only)
+
+Presentation only, computed from the synchronized state: nothing changes on the server, and PvP
+never builds any of it (the PvP E2E asserts that the darkness is off).
+
+- **Light map** (`game/pve/lightmap.ts`): a texture the size of the view at 1/2, 1/3 or 1/4
+  resolution (High / Medium / Low), filled with a dim ambient colour, lights added on top, drawn
+  over the world with a MULTIPLY blend. Lights: the local player's personal light and flashlight
+  (a 600 px beam where they aim, off while downed), teammates' flashlights, headlights of driven
+  vehicles, map lamps (power / alarm groups, flicker), muzzle flashes and explosions (gunfire
+  lights the dark), and faint glows on objectives, loot, supplies and acid (findable and
+  avoidable). Ambient brightness: Recruit > Veteran > Nightmare, shifted by the "Co-op
+  brightness" setting and by the mission's power.
+- **Line of sight** (`game/pve/visibility.ts`, pure, tested): visibility polygon from the local
+  player against walls, buildings, containers, machines, tanks, pillars, rocks and closed mission
+  doors (low cover, fences and water do not block sight); everything outside it is drawn back to
+  ambient with overlapping shadow quads. 0.18 ms per polygon on Halvorsen Works (184 vertices).
+- **Fairness**: attack telegraphs are drawn above the darkness, so an attack is readable even
+  from an unseen enemy; enemies in sight but unlit show glinting eyes (blinking); acid glows; a
+  stalker hunting within 450 px makes the flashlight stutter and hiss. Unseen enemies are heard.
+- **Tension** (`game/pve/tension.ts`, pure, tested): 0..1 from nearby hunting enemies (specials
+  weigh more, a boss at least 0.6), low health, recent damage, an active wave, being downed;
+  rises fast, falls slowly. Red pulsing vignette at low health and while downed.
+- **Score** (`game/audio/score.ts`, procedural Web Audio, no files): drone and air handling,
+  dissonance and a string tremolo rising with tension, a heartbeat (55→120 bpm, loud at low
+  health), boss drums by phase, muffled while downed, rare distant one-shots in calm moments;
+  stingers for being spotted, a special hunting you, a wave, a boss (and each phase), downed,
+  revived, objective. Positional cues: shuffling of unseen walkers, a runner's screech when it
+  starts a chase, brute stomps, the stalker's hiss, the horde heard from where it comes.
+  Settings: "Music volume" and "Co-op brightness".
+
+Not verifiable here: how it sounds (levels were measured in a real Chrome, nobody has listened),
+the GPU cost of the light map on real hardware.
+
 ## 6. First Contact (Halvorsen Works)
 
 Steps, each with an integrated tutorial hint:

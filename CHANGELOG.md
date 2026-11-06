@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased (branch `dread`)
+
+### Added
+- **Dread pass for co-op** (client only, PvE only): darkness as a light map with line-of-sight
+  shadows, a flashlight where you aim, teammates' flashlights, headlights, lamps, gunfire and
+  explosions lighting the dark, glinting eyes of enemies in sight but unlit, telegraphs always
+  above the dark, stalker flashlight stutter, low-health red vignette; adaptive procedural
+  score (drone, dissonance, heartbeat, boss drums, stingers) and positional dread cues;
+  settings "Music volume" and "Co-op brightness". See `docs/v3/OUTBREAK.md` §5b.
+- Tests: line of sight and shadow quads, tension and flicker (11), score mix rules (21),
+  settings migration; E2E asserts the darkness in co-op and its absence in PvP.
+
 ## 0.5.0 — 2026-11-06 (SCRAPLINE 3.0 | OUTBREAK, phases 0–6: combat visual overhaul, co-op PvE)
 
 Systems reference: `docs/v3/OUTBREAK.md`. Audit, roadmap and evidence: `docs/v3/ROADMAP.md`.
