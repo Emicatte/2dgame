@@ -61,8 +61,12 @@ export const CROSSHAIR_LIMITS = {
 export interface Settings {
   masterVolume: number;
   sfxVolume: number;
+  /** Adaptive score of the co-op modes (the only music in the game). */
+  musicVolume: number;
   uiVolume: number;
   screenShake: number;
+  /** Co-op darkness accessibility: 0 darkest (as designed), 1 easiest to see. */
+  pveBrightness: number;
   quality: GraphicsQuality;
   showDebug: boolean;
   crosshairColor: string;
@@ -84,8 +88,10 @@ const KEY = "scrapline.settings.v1";
 export const DEFAULT_SETTINGS: Settings = {
   masterVolume: 0.8,
   sfxVolume: 0.8,
+  musicVolume: 0.7,
   uiVolume: 0.6,
   screenShake: 1,
+  pveBrightness: 0.5,
   quality: "high",
   showDebug: false,
   crosshairColor: "#7dffb0",
@@ -133,8 +139,10 @@ export function migrateSettings(raw: unknown): Settings {
     ...(carried as unknown as Settings),
     masterVolume: num(p.masterVolume, d.masterVolume, 0, 1),
     sfxVolume: num(p.sfxVolume, d.sfxVolume, 0, 1),
+    musicVolume: num(p.musicVolume, d.musicVolume, 0, 1),
     uiVolume: num(p.uiVolume, d.uiVolume, 0, 1),
     screenShake: num(p.screenShake, d.screenShake, 0, 1.5),
+    pveBrightness: num(p.pveBrightness, d.pveBrightness, 0, 1),
     quality: oneOf(p.quality, GRAPHICS_QUALITIES, d.quality),
     showDebug: bool(p.showDebug, d.showDebug),
     crosshairColor:

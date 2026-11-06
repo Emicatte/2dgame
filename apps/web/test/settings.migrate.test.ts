@@ -35,6 +35,10 @@ describe("settings migration", () => {
     expect(s.crosshairThickness).toBe(2);
     expect(s.crosshairOutline).toBe(true);
     expect(s.crosshairDynamic).toBe(true);
+    expect(s.musicVolume).toBe(DEFAULT_SETTINGS.musicVolume);
+    expect(s.musicVolume).toBe(0.7);
+    expect(s.pveBrightness).toBe(DEFAULT_SETTINGS.pveBrightness);
+    expect(s.pveBrightness).toBe(0.5);
     expect(migrateSettings({ quality: "high" }).quality).toBe("high");
     expect(migrateSettings({ quality: "medium" }).quality).toBe("medium");
   });
@@ -62,6 +66,22 @@ describe("settings migration", () => {
     expect(s.masterVolume).toBe(1);
     expect(s.bindings).toEqual(DEFAULT_BINDINGS);
     expect("legacyField" in s).toBe(false);
+  });
+
+  it("music volume and co-op brightness: kept when valid, clamped to 0..1, invalid to default", () => {
+    const kept = migrateSettings({ musicVolume: 0.25, pveBrightness: 0.9 });
+    expect(kept.musicVolume).toBe(0.25);
+    expect(kept.pveBrightness).toBe(0.9);
+    const high = migrateSettings({ musicVolume: 4, pveBrightness: 1.7 });
+    expect(high.musicVolume).toBe(1);
+    expect(high.pveBrightness).toBe(1);
+    const low = migrateSettings({ musicVolume: -0.5, pveBrightness: -3 });
+    expect(low.musicVolume).toBe(0);
+    expect(low.pveBrightness).toBe(0);
+    const bad = migrateSettings({ musicVolume: "loud", pveBrightness: Number.NaN });
+    expect(bad.musicVolume).toBe(DEFAULT_SETTINGS.musicVolume);
+    expect(bad.pveBrightness).toBe(DEFAULT_SETTINGS.pveBrightness);
+    expect(migrateSettings({ pveBrightness: Number.POSITIVE_INFINITY }).pveBrightness).toBe(0.5);
   });
 
   it("is idempotent", () => {

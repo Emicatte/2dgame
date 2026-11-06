@@ -523,9 +523,23 @@ export function SettingsSheet({ onBack }: { onBack: () => void }) {
     return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, [listening]);
 
-  const slider = (key: "masterVolume" | "sfxVolume" | "uiVolume" | "screenShake", label: string, max = 1) => (
+  const slider = (
+    key: "masterVolume" | "sfxVolume" | "musicVolume" | "uiVolume" | "screenShake" | "pveBrightness",
+    label: string,
+    max = 1,
+    hint?: string,
+  ) => (
     <div className="setting-row">
-      <label htmlFor={key}>{label}</label>
+      {hint ? (
+        <div>
+          <label htmlFor={key}>{label}</label>
+          <span id={`${key}-hint`} className="field__hint" style={{ display: "block", marginTop: 2 }}>
+            {hint}
+          </span>
+        </div>
+      ) : (
+        <label htmlFor={key}>{label}</label>
+      )}
       <div className="row">
         <input
           id={key}
@@ -535,6 +549,7 @@ export function SettingsSheet({ onBack }: { onBack: () => void }) {
           max={max}
           step={0.05}
           value={s[key]}
+          aria-describedby={hint ? `${key}-hint` : undefined}
           onChange={(e) => settingsStore.patch({ [key]: Number(e.target.value) } as never)}
         />
         <span className="mono" style={{ width: 42, textAlign: "right" }}>
@@ -610,6 +625,7 @@ export function SettingsSheet({ onBack }: { onBack: () => void }) {
             <Panel title="Audio">
               {slider("masterVolume", "Master volume")}
               {slider("sfxVolume", "Effects volume")}
+              {slider("musicVolume", "Music volume", 1, "Adaptive score of the co-op missions")}
               {slider("uiVolume", "Interface volume")}
             </Panel>
             <Panel title="Graphics">
@@ -629,6 +645,12 @@ export function SettingsSheet({ onBack }: { onBack: () => void }) {
                 </fieldset>
               </div>
               {slider("screenShake", "Screen shake", 1.5)}
+              {slider(
+                "pveBrightness",
+                "Co-op brightness",
+                1,
+                "Darkness in co-op missions; higher is easier to see",
+              )}
               {check("showDebug", "dbg", "Show FPS / network overlay")}
             </Panel>
             <Panel title="Crosshair">
