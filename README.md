@@ -1,6 +1,8 @@
 # SCRAPLINE (provisional name)
 
-Top-down 2D multiplayer shooter for desktop browsers. 2–8 players on nine original maps, five
+Top-down 2D multiplayer shooter for desktop browsers. **Outbreak (3.0, branch `outbreak`):
+co-op PvE for 1–4 players with missions, waves, six infected types and a boss** (see
+[docs/v3/OUTBREAK.md](docs/v3/OUTBREAK.md)). Competitive: 2–8 players on nine original maps, five
 weapon classes, cars, off-roaders, an APC and a helicopter with seats you can shoot from, five
 modes (Deathmatch, Team Deathmatch, Domination, Capture the Flag, Vehicle Mayhem),
 server-authoritative netcode with client prediction, persistent XP to level 50 with cosmetic
@@ -25,6 +27,7 @@ unlocks and daily challenges, and private rooms you can share with a link.
 | Solo practice with training targets (never recorded) | Done |
 | Host mode: the arena creator's browser hosts the match, friends join over WebRTC; deploys on Vercel alone | Done (v0.2.0), unit + two-browser WebRTC E2E; real school networks not tested: see [docs/HOST_MODE.md](docs/HOST_MODE.md) |
 | Deployment config: Dockerfile, Render Blueprint, Vercel config, docs | Done; client deployed on Vercel by the owner; dedicated server image built and run in the audit, **not deployed** |
+| Outbreak co-op PvE: First Contact, Survival, 6 infected + boss, Wave Director, revive | Done (v0.5.0, not deployed): simulation, host-mode and dedicated-server integration tests, two-browser WebRTC E2E; full mission by human players and balance not playtested: [docs/v3/ROADMAP.md](docs/v3/ROADMAP.md) |
 | Performance | CPU cost per frame measured (small); **60 FPS on a real GPU not yet verified**: run `/bench.html` on target hardware |
 
 Details and the test record: [docs/TESTING.md](docs/TESTING.md). Open items: [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -63,7 +66,7 @@ pnpm dev:server     # migrations run automatically at boot
 | R | Reload |
 | Shift | Dash |
 | 1 / 2 / 3 | Primary / sidearm / picked-up weapon |
-| E | Pick up weapon · enter / leave a vehicle |
+| E | Pick up weapon · enter / leave a vehicle · hold: revive a teammate, use mission objects (Outbreak) |
 | F | Change seat in a vehicle |
 | W / S, A / D (driving) | Throttle / brake-reverse, steer; Shift = handbrake |
 | W A S D, mouse (flying) | Move, nose follows the mouse; Shift = take off / land |

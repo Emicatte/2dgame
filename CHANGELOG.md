@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.5.0 — 2026-11-06 (SCRAPLINE 3.0 | OUTBREAK, phases 0–6: co-op PvE)
+
+Systems reference: `docs/v3/OUTBREAK.md`. Audit, roadmap and evidence: `docs/v3/ROADMAP.md`.
+Not deployed: branch `outbreak`.
+
+### Added
+- **Outbreak (co-op, 1–4 players)**: missions with objectives, steps, doors, props, checkpoints,
+  integrated tutorial hints; **First Contact** on the new Halvorsen Works map (enter the hall,
+  restore power, hold the courtyard for 3 waves, find the keycard, open the gate, hold the
+  helipad until extraction). The other four campaign missions are listed as in development and
+  cannot be selected.
+- **Survival Endless**: waves following the design table, then a growing horde with specials;
+  supply crates; a boss every tenth wave. On Halvorsen Works, Industrial Arena, Tactical Facility.
+- **Enemies**: Walker, Runner, Brute, Spitter, Stalker, Exploder; boss **The Abomination**
+  (three phases, slam, charge, lobbed debris, summons, roar transitions). Every significant
+  attack is telegraphed (arcs, lanes, blast and landing circles).
+- **AI**: navigation grid with clearance classes, flow fields (Dial), A* with line-of-sight
+  smoothing; eight AI states; sight and hearing (gunfire, loud props, blasts); stalkers without
+  knowledge of unseen players; crowd separation; tiered decision rates; stuck handling.
+- **Wave Director**: composition scaled by squad and difficulty (density, pace, specials,
+  directions, not only health), valid out-of-sight spawns, guaranteed termination.
+- **Co-op**: downed / crawl / revive (hold E), solo self-revives, bleed-out and return at the
+  next checkpoint, mission failed when nobody is standing; squad HUD, off-screen objective and
+  ally markers, prompts, banners, feed, downed overlay; difficulty Recruit / Veteran / Nightmare.
+- Vehicles in PvE: enemies attack the hull of their target's vehicle; vehicles plough through
+  enemies; wreck blasts hurt them.
+- **PvE progression**, kept apart from PvP stats: mission records (best time per difficulty),
+  Survival records, titles, unlocks; a run is recorded once (run id).
+- Lobby: competitive and co-op modes, campaign list, briefing, difficulty, Survival maps; main
+  menu "Outbreak · co-op".
+- Tests: 28 PvE simulation tests, dedicated-server integration (real sockets), host-mode
+  integration (peer links), PvE progression, **two-browser WebRTC E2E** completing co-op
+  objectives, single-browser boss scenario.
+
+### Fixed
+- Lint failed on `docs/audit/data/netaudit-v2-phase7.json` (missing trailing newline).
+- `apps/web/test/hostmode.netcode.test.ts` failed now and then: shots were counted across a
+  counter reset (measurement race in the test); shots are now compared by input sequence.
+
 ## 0.4.0 — 2026-11-05 (SCRAPLINE 2.0, phases 2–7: vehicles, helicopters, modes, maps, progression)
 
 Systems reference: `docs/v2/SYSTEMS.md`. Phase results and measurements: `docs/v2/ROADMAP.md`.
