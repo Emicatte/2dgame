@@ -12,6 +12,7 @@ import {
   isFreeSpot,
   type MissionDef,
   type NavGrid,
+  NET,
   type NetEvent,
   PLAYER,
   type PropDef,
@@ -441,7 +442,6 @@ export class PveController implements ZombieHost {
 
   private updatePlayers(): void {
     const tick = this.sim.tick;
-    const dt = 1 / this.tickRate;
     const players = [...this.sim.players.values()];
     // Revives: a standing player holding E next to a downed teammate.
     const busy = new Set<string>();
@@ -463,7 +463,7 @@ export class PveController implements ZombieHost {
       if (best.pve.reviver !== r.id || tick - best.pve.lastReviveTick > grace) best.pve.reviveProg = 0;
       best.pve.reviver = r.id;
       best.pve.lastReviveTick = tick;
-      best.pve.reviveProg += dt / DOWNED.reviveSec;
+      best.pve.reviveProg += holdTime(r) / DOWNED.reviveSec;
       if (best.pve.reviveProg >= 1) this.revive(best, r);
     }
     for (const p of players) {
@@ -512,7 +512,8 @@ export class PveController implements ZombieHost {
       if (spot) return spot;
     }
     const taken = [...this.sim.players.values()].filter((o) => o !== p && o.alive);
-    for (const s of this.sim.map.spawns) {
+    // Test-only fixed spawns (dev / E2E builds and debug routes) take precedence, like in PvP.
+    for (const s of this.sim.spawnOverride ?? this.sim.map.spawns) {
       if (!taken.some((o) => Math.hypot(o.sim.x - s.x, o.sim.y - s.y) < PLAYER.radius * 3))
         return { x: s.x, y: s.y };
     }
@@ -552,7 +553,6 @@ export class PveController implements ZombieHost {
   }
 
   private updateProps(players: ServerPlayer[], busy: Set<string>): void {
-    const dt = 1 / this.tickRate;
     const held = new Set<string>();
     for (const p of players) {
       if (!this.standing(p) || !p.interact || p.vehicle || busy.has(p.id)) continue;
@@ -571,7 +571,7 @@ export class PveController implements ZombieHost {
       if (best.by && best.by !== p.id && held.has(best.def.id)) continue;
       held.add(best.def.id);
       best.by = p.id;
-      best.prog = Math.min(1, best.prog + dt / Math.max(0.05, best.def.holdSec));
+      best.prog = Math.min(1, best.prog + holdTime(p) / Math.max(0.05, best.def.holdSec));
       if (best.def.noise && this.sim.tick - best.lastNoiseTick >= this.secTicks(1)) {
         best.lastNoiseTick = this.sim.tick;
         this.zw.noise(best.def.x, best.def.y, best.def.noise);
@@ -613,7 +613,6 @@ export class PveController implements ZombieHost {
   }
 
   private updateLoot(): void {
-    const dt = 1 / this.tickRate;
     for (const [id, l] of this.loot) {
       if (l.until > 0 && this.sim.tick >= l.until) {
         this.loot.delete(id);
@@ -624,7 +623,7 @@ export class PveController implements ZombieHost {
         const d = Math.hypot(l.x - p.sim.x, l.y - p.sim.y);
         if (l.kind === "supply") {
           if (d > PROP_REACH || !p.interact || l.takenBy.has(p.id)) continue;
-          const prog = (l.prog.get(p.id) ?? 0) + dt / SUPPLY_HOLD_SEC;
+          const prog = (l.prog.get(p.id) ?? 0) + holdTime(p) / SUPPLY_HOLD_SEC;
           l.prog.set(p.id, prog);
           if (prog < 1) continue;
           l.takenBy.add(p.id);
@@ -991,6 +990,11 @@ export class PveController implements ZombieHost {
     };
     return { result, xp };
   }
+}
+
+/** Seconds of interact held this tick, measured in input frames (60 per second). */
+function holdTime(p: ServerPlayer): number {
+  return p.interactFrames / NET.inputRate;
 }
 
 /** Adds a fraction of every carried weapon's full reserve (loot drops). */

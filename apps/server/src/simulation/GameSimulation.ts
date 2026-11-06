@@ -115,6 +115,12 @@ export interface ServerPlayer {
   queueFloor: number;
   queueFloorTicks: number;
   interact: boolean;
+  /**
+   * Input frames (1/60 s each) this tick in which interact was held. Holds (revives, mission props)
+   * advance by input time, not by server ticks, so bursty delivery at low frame rates or on a
+   * jittery link neither slows nor speeds them up.
+   */
+  interactFrames: number;
   connected: boolean;
   joinedTick: number;
   /** Buttons of the previous applied frame (edge detection for enter / exit / seat change). */
@@ -438,6 +444,7 @@ export class GameSimulation {
       queueFloor: Number.POSITIVE_INFINITY,
       queueFloorTicks: 0,
       interact: false,
+      interactFrames: 0,
       connected: true,
       joinedTick: this.tick,
       prevButtons: 0,
@@ -546,6 +553,7 @@ export class GameSimulation {
 
     for (const p of this.players.values()) {
       p.interact = false;
+      p.interactFrames = 0;
       // Inputs are consumed at real-time rate. Credit accrues with real elapsed time (so a stalled
       // server catches up); idle time is banked only while the queue is empty and only up to
       // maxInputCreditSeconds, which is what stops a modified client from moving faster than real
@@ -645,7 +653,10 @@ export class GameSimulation {
     });
     let entered = false;
     if (canAct && !downed && (pressed & BTN.INTERACT) !== 0) entered = this.tryEnter(p);
-    if (canAct && !downed && !entered && (frame.buttons & BTN.INTERACT) !== 0) p.interact = true;
+    if (canAct && !downed && !entered && (frame.buttons & BTN.INTERACT) !== 0) {
+      p.interact = true;
+      p.interactFrames++;
+    }
     p.lastProcessedSeq = frame.seq;
     p.inputStats.processed++;
     for (const s of shots) this.resolveShot(p, s.shot, s.view, false);

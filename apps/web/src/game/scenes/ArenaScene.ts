@@ -325,6 +325,67 @@ export class ArenaScene extends Phaser.Scene {
         ammo: this.predictor.sim.slots.map((sl) => ({ mag: sl.mag, reserve: sl.reserve })),
       }),
       perf: () => this.perf?.snapshot() ?? null,
+      pve: () => {
+        const st = this.room?.state;
+        const me = st?.players.get(this.room?.sessionId ?? "");
+        if (!st) return null;
+        return {
+          mode: st.mode,
+          mission: st.pve.mission,
+          step: st.pve.step,
+          doors: st.pve.doors,
+          flags: st.pve.flags,
+          power: st.pve.power,
+          alarm: st.pve.alarm,
+          status: st.pve.status,
+          wave: st.pve.wave,
+          left: st.pve.left,
+          zombies: st.zombies.size,
+          rendered: this.pve.enemyCount,
+          downed: !!me?.downed,
+          hp: me?.hp ?? 0,
+        };
+      },
+      /**
+       * Test-only co-op bot (dev and E2E builds): walks the waypoints, shoots the nearest infected
+       * within range, holds E at the last waypoint when asked. Uses the benchmark autopilot path, so
+       * inputs go through the normal prediction and network pipeline.
+       */
+      walkTo: (points: { x: number; y: number }[], opts: { fire?: boolean; interact?: boolean } = {}) => {
+        const path = points.map((p) => ({ ...p }));
+        this.autoDone = false;
+        autopilot.set((_step, me) => {
+          let mx = 0;
+          let my = 0;
+          while (path.length > 0 && Math.hypot(path[0]!.x - me.x, path[0]!.y - me.y) < 22) path.shift();
+          const wp = path[0];
+          if (wp) {
+            const dx = wp.x - me.x;
+            const dy = wp.y - me.y;
+            mx = Math.abs(dx) > 8 ? Math.sign(dx) : 0;
+            my = Math.abs(dy) > 8 ? Math.sign(dy) : 0;
+          } else {
+            this.autoDone = true;
+          }
+          let aim = wp ? Math.atan2(wp.y - me.y, wp.x - me.x) : 0;
+          let buttons = 0;
+          if (opts.fire) {
+            let best: { x: number; y: number; d: number } | null = null;
+            for (const t of this.pve.targets()) {
+              const d = Math.hypot(t.x - me.x, t.y - me.y);
+              if (d < 520 && (!best || d < best.d)) best = { x: t.x, y: t.y, d };
+            }
+            if (best) {
+              aim = Math.atan2(best.y - me.y, best.x - me.x);
+              buttons |= BTN.FIRE;
+            }
+          }
+          if (opts.interact && !wp) buttons |= BTN.INTERACT;
+          return { mx, my, aim, buttons };
+        });
+      },
+      autoDone: () => this.autoDone,
+      stopAuto: () => autopilot.set(null),
       perfReset: () => this.perf?.reset(),
       createDebugRoom: (
         spawns: { x: number; y: number }[],
@@ -1761,6 +1822,7 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private groanTimer = 0;
+  private autoDone = false;
   /** Occasional groans from the nearest infected (positional). */
   private updateAmbience(dt: number, state: MatchState) {
     this.groanTimer -= dt;
