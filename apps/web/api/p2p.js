@@ -169,13 +169,18 @@ const DEFAULT_STUN = [
   { urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] }
 ];
 async function iceServersFromEnv(env, fetchImpl = fetch) {
+  return (await iceConfig(env, fetchImpl)).servers;
+}
+async function iceConfig(env, fetchImpl = fetch) {
   const servers = [...DEFAULT_STUN];
+  let turn = "none";
   if (env.TURN_URLS) {
     servers.push({
       urls: env.TURN_URLS.split(",").map((s) => s.trim()).filter(Boolean),
       ...env.TURN_USERNAME ? { username: env.TURN_USERNAME } : {},
       ...env.TURN_CREDENTIAL ? { credential: env.TURN_CREDENTIAL } : {}
     });
+    turn = "static";
   }
   if (env.CLOUDFLARE_TURN_KEY_ID && env.CLOUDFLARE_TURN_API_TOKEN) {
     try {
@@ -193,15 +198,25 @@ async function iceServersFromEnv(env, fetchImpl = fetch) {
       if (res.ok) {
         const body = await res.json();
         const list = Array.isArray(body.iceServers) ? body.iceServers : body.iceServers ? [body.iceServers] : [];
+        let added = 0;
         for (const s of list) {
           const urls = (Array.isArray(s.urls) ? s.urls : [s.urls]).filter((u) => /^turns?:/.test(u));
-          if (urls.length > 0) servers.push({ ...s, urls });
+          if (urls.length > 0) {
+            servers.push({ ...s, urls });
+            added++;
+          }
         }
+        turn = added > 0 ? "cloudflare" : "cloudflare-error:no-relays";
+      } else {
+        turn = `cloudflare-error:${res.status}`;
+        console.warn(`[p2p] Cloudflare TURN credentials refused: HTTP ${res.status}`);
       }
     } catch {
+      turn = "cloudflare-unreachable";
+      console.warn("[p2p] Cloudflare TURN unreachable");
     }
   }
-  return servers;
+  return { servers, turn };
 }
 const ok = (body) => ({ status: 200, body });
 const fail = (status, error) => ({ status, body: { error } });
@@ -330,7 +345,8 @@ async function handleHttp(request, deps) {
         storage = "unreachable";
       }
     }
-    return new Response(JSON.stringify({ service: "scrapline-signaling", storage }), {
+    const { turn } = await iceConfig(deps.env ?? {}, deps.fetchImpl);
+    return new Response(JSON.stringify({ service: "scrapline-signaling", storage, turn }), {
       status: 200,
       headers: JSON_HEADERS
     });
@@ -401,6 +417,7 @@ export {
   stdin_default as default,
   handleHttp,
   handleSignal,
+  iceConfig,
   iceServersFromEnv,
   upstashFromEnv
 };

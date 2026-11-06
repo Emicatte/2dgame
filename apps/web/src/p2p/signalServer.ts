@@ -238,7 +238,22 @@ export const DEFAULT_STUN: IceServer[] = [
  * TURN short-lived credentials (CLOUDFLARE_TURN_KEY_ID, CLOUDFLARE_TURN_API_TOKEN).
  */
 export async function iceServersFromEnv(env: Env, fetchImpl: typeof fetch = fetch): Promise<IceServer[]> {
+  return (await iceConfig(env, fetchImpl)).servers;
+}
+
+/**
+ * Relay availability without secrets, for the health endpoint: "none" (STUN only), "static"
+ * (TURN_URLS), "cloudflare" (credentials issued), "cloudflare-error:<status>" or
+ * "cloudflare-unreachable". A misconfigured relay used to fall back to STUN silently.
+ */
+export type TurnStatus = string;
+
+export async function iceConfig(
+  env: Env,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ servers: IceServer[]; turn: TurnStatus }> {
   const servers: IceServer[] = [...DEFAULT_STUN];
+  let turn: TurnStatus = "none";
   if (env.TURN_URLS) {
     servers.push({
       urls: env.TURN_URLS.split(",")
@@ -247,6 +262,7 @@ export async function iceServersFromEnv(env: Env, fetchImpl: typeof fetch = fetc
       ...(env.TURN_USERNAME ? { username: env.TURN_USERNAME } : {}),
       ...(env.TURN_CREDENTIAL ? { credential: env.TURN_CREDENTIAL } : {}),
     });
+    turn = "static";
   }
   if (env.CLOUDFLARE_TURN_KEY_ID && env.CLOUDFLARE_TURN_API_TOKEN) {
     try {
@@ -269,16 +285,26 @@ export async function iceServersFromEnv(env: Env, fetchImpl: typeof fetch = fetc
             ? [body.iceServers]
             : [];
         // Only the relays: STUN is already listed above.
+        let added = 0;
         for (const s of list) {
           const urls = (Array.isArray(s.urls) ? s.urls : [s.urls]).filter((u) => /^turns?:/.test(u));
-          if (urls.length > 0) servers.push({ ...s, urls });
+          if (urls.length > 0) {
+            servers.push({ ...s, urls });
+            added++;
+          }
         }
+        turn = added > 0 ? "cloudflare" : "cloudflare-error:no-relays";
+      } else {
+        turn = `cloudflare-error:${res.status}`;
+        console.warn(`[p2p] Cloudflare TURN credentials refused: HTTP ${res.status}`);
       }
     } catch {
       // TURN is optional: direct connections still work on most networks.
+      turn = "cloudflare-unreachable";
+      console.warn("[p2p] Cloudflare TURN unreachable");
     }
   }
-  return servers;
+  return { servers, turn };
 }
 
 // ------------------------------------------------------------------------------------- handler
@@ -458,7 +484,9 @@ export async function handleHttp(
         storage = "unreachable";
       }
     }
-    return new Response(JSON.stringify({ service: "scrapline-signaling", storage }), {
+    // Relay status (no credentials in the reply): tells "not configured" from "refused".
+    const { turn } = await iceConfig(deps.env ?? {}, deps.fetchImpl);
+    return new Response(JSON.stringify({ service: "scrapline-signaling", storage, turn }), {
       status: 200,
       headers: JSON_HEADERS,
     });
