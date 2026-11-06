@@ -171,6 +171,15 @@ const DEFAULT_STUN = [
 async function iceServersFromEnv(env, fetchImpl = fetch) {
   return (await iceConfig(env, fetchImpl)).servers;
 }
+function cleanSecret(v) {
+  return (v ?? "").trim().replace(/^["']|["']$/g, "").trim();
+}
+function turnKeyShape(env) {
+  const raw = env.CLOUDFLARE_TURN_KEY_ID;
+  if (!raw) return null;
+  const id = cleanSecret(raw);
+  return { length: id.length, hex32: /^[0-9a-f]{32}$/i.test(id), cleaned: id !== raw };
+}
 async function iceConfig(env, fetchImpl = fetch) {
   const servers = [...DEFAULT_STUN];
   let turn = "none";
@@ -182,14 +191,16 @@ async function iceConfig(env, fetchImpl = fetch) {
     });
     turn = "static";
   }
-  if (env.CLOUDFLARE_TURN_KEY_ID && env.CLOUDFLARE_TURN_API_TOKEN) {
+  const keyId = cleanSecret(env.CLOUDFLARE_TURN_KEY_ID);
+  const apiToken = cleanSecret(env.CLOUDFLARE_TURN_API_TOKEN);
+  if (keyId && apiToken) {
     try {
       const res = await fetchImpl(
-        `https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(env.CLOUDFLARE_TURN_KEY_ID)}/credentials/generate-ice-servers`,
+        `https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(keyId)}/credentials/generate-ice-servers`,
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${env.CLOUDFLARE_TURN_API_TOKEN}`,
+            Authorization: `Bearer ${apiToken}`,
             "Content-Type": "application/json"
           },
           body: JSON.stringify({ ttl: 6 * 3600 })
@@ -346,10 +357,11 @@ async function handleHttp(request, deps) {
       }
     }
     const { turn } = await iceConfig(deps.env ?? {}, deps.fetchImpl);
-    return new Response(JSON.stringify({ service: "scrapline-signaling", storage, turn }), {
-      status: 200,
-      headers: JSON_HEADERS
-    });
+    const turnKey = turnKeyShape(deps.env ?? {});
+    return new Response(
+      JSON.stringify({ service: "scrapline-signaling", storage, turn, ...turnKey ? { turnKey } : {} }),
+      { status: 200, headers: JSON_HEADERS }
+    );
   }
   if (request.method !== "POST") {
     return new Response(JSON.stringify({ error: "method not allowed" }), {
@@ -419,5 +431,6 @@ export {
   handleSignal,
   iceConfig,
   iceServersFromEnv,
+  turnKeyShape,
   upstashFromEnv
 };

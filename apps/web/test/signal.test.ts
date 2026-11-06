@@ -11,6 +11,7 @@ import {
   MemoryStore,
   ROOM_TTL_SEC,
   type SignalStore,
+  turnKeyShape,
   UpstashStore,
   upstashFromEnv,
 } from "../src/p2p/signalServer.ts";
@@ -256,6 +257,28 @@ describe("relay status (health endpoint, no secrets)", () => {
     expect((await iceConfig(keys, offline)).turn).toBe("cloudflare-unreachable");
     // Nothing secret in the status.
     expect(JSON.stringify(r)).not.toContain("Bearer");
+  });
+
+  it("strips spaces, newlines and quotes pasted with the keys, and reports the id's shape", async () => {
+    let url = "";
+    let auth = "";
+    const spy = (async (u: string, init: RequestInit) => {
+      url = u;
+      auth = String((init.headers as Record<string, string>).Authorization);
+      return new Response(JSON.stringify({ iceServers: [{ urls: ["turn:turn.cloudflare.com:3478"] }] }));
+    }) as unknown as typeof fetch;
+    const id = "0123456789abcdef0123456789abcdef";
+    const env = { CLOUDFLARE_TURN_KEY_ID: ` "${id}"\n`, CLOUDFLARE_TURN_API_TOKEN: " tok \n" };
+    expect((await iceConfig(env, spy)).turn).toBe("cloudflare");
+    expect(url).toContain(`/turn/keys/${id}/credentials/generate-ice-servers`);
+    expect(auth).toBe("Bearer tok");
+    expect(turnKeyShape(env)).toEqual({ length: 32, hex32: true, cleaned: true });
+    expect(turnKeyShape({ CLOUDFLARE_TURN_KEY_ID: "my-account" })).toEqual({
+      length: 10,
+      hex32: false,
+      cleaned: false,
+    });
+    expect(turnKeyShape({})).toBeNull();
   });
 });
 
