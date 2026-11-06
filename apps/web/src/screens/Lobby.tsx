@@ -42,7 +42,9 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
   const others = s.players.filter((p) => p.id !== s.hostId);
   const allReady = others.every((p) => p.ready);
   const startsIn = s.phaseEndTick > 0 ? (s.phaseEndTick - s.tick) / (s.tickRate || 20) : null;
-  const inviteUrl = `${location.origin}${location.pathname}?join=${s.code}`;
+  const origin =
+    typeof __PUBLIC_ORIGIN__ === "string" && __PUBLIC_ORIGIN__ ? __PUBLIC_ORIGIN__ : location.origin;
+  const inviteUrl = `${origin}${location.pathname}?join=${s.code}`;
   const myTeam = self?.team === 1 || self?.team === 2 ? self.team : null;
   const canHost = isHost && isPrivate;
 

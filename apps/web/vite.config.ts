@@ -45,6 +45,13 @@ export default defineConfig({
   define: {
     // Host and guests must run the same build (see src/p2p/wire.ts).
     __BUILD_ID__: JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.BUILD_ID ?? "dev"),
+    // Invite links of production builds always point at the public production domain: the
+    // deployment and team URLs are behind Vercel Authentication, friends could not open them.
+    __PUBLIC_ORIGIN__: JSON.stringify(
+      process.env.VERCEL_ENV === "production" && process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : "",
+    ),
   },
   server: { port: 5173, host: true },
   preview: { port: 4173, host: true },
