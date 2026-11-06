@@ -13,6 +13,7 @@ import { MOUNTAIN_OUTPOST } from "./mountain.ts";
 import { NEON_DISTRICT } from "./neon.ts";
 import { type MapDef, type MapId, SHOOT_THROUGH, TALL_SOLIDS } from "./types.ts";
 import { URBAN_WARFARE } from "./urban.ts";
+import { HALVORSEN_WORKS } from "./works.ts";
 
 export * from "./types.ts";
 
@@ -26,9 +27,12 @@ export const MAPS: Record<MapId, MapDef> = {
   downtown: DOWNTOWN,
   mountain: MOUNTAIN_OUTPOST,
   facility: TACTICAL_FACILITY,
+  works: HALVORSEN_WORKS,
 };
 
 export const MAP_IDS = Object.keys(MAPS) as MapId[];
+/** Maps offered to competitive modes (PvE maps excluded). */
+export const PVP_MAP_IDS = MAP_IDS.filter((id) => !MAPS[id].pve);
 export const DEFAULT_MAP: MapId = "industrial";
 
 export function isMapId(v: unknown): v is MapId {

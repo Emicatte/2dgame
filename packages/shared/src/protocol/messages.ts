@@ -2,6 +2,7 @@ import { z } from "zod";
 import { MATCH_LIMITS, NICKNAME } from "../config/game.ts";
 import { GAME_MODES, type GameMode, TEAM_SIZE } from "../config/modes.ts";
 import { PRIMARY_WEAPONS, type WeaponId } from "../config/weapons.ts";
+import { DIFFICULTIES, type Difficulty } from "../config/zombies.ts";
 import { MAP_IDS, type MapId } from "../maps/index.ts";
 import type { MatchPhase } from "../state.ts";
 
@@ -71,6 +72,12 @@ export const settingsSchema = z.object({
   /** Team modes: players per team (1v1 … 4v4). */
   teamSize: z.number().int().min(TEAM_SIZE.min).max(TEAM_SIZE.max).optional(),
   friendlyFire: z.boolean().optional(),
+  /** PvE: mission id (Outbreak) and difficulty. Validated against the mission list by the room. */
+  mission: z
+    .string()
+    .regex(/^[a-z0-9-]{1,32}$/)
+    .optional(),
+  difficulty: z.enum(DIFFICULTIES as [Difficulty, ...Difficulty[]]).optional(),
 });
 export type MatchSettings = z.infer<typeof settingsSchema>;
 
@@ -116,7 +123,30 @@ export type NetEvent =
       o: string;
       team: number;
       p: string;
-    };
+    }
+  // ----- PvE (Outbreak / Survival). Enemy ids are "z<n>"; a player hit by an enemy gets a "hit"
+  // event whose `p` is the enemy id.
+  /** Damage to an enemy. `c` precision hit, `a` armored (brute front, boss plates), `k` lethal. */
+  | { t: "zhit"; p: string; z: string; dmg: number; x: number; y: number; k: boolean; c?: 1; a?: 1 }
+  /** Enemy eliminated (`p` = credited player or ""), `k` = ZOMBIES index. */
+  | { t: "zdie"; z: string; p: string; x: number; y: number; k: number }
+  /** An enemy attack lands (sound and impact): melee, spit, pounce, charge, explode. */
+  | { t: "zatk"; z: string; k: string; x: number; y: number }
+  /** Acid projectile launched (`id`), flying in a straight line until "projx". */
+  | { t: "proj"; id: number; x: number; y: number; vx: number; vy: number }
+  | { t: "projx"; id: number; x: number; y: number }
+  /** Blast (exploder): centre and radius. */
+  | { t: "boom"; x: number; y: number; r: number }
+  /** A player is downed (`by` = enemy kind name or ""), revived (`by` = reviver, "" = self), bled out. */
+  | { t: "down"; p: string; by: string }
+  | { t: "revive"; p: string; by: string }
+  | { t: "bleed"; p: string }
+  /**
+   * Mission flow: "step" (n = step index), "wave" (n = wave, s = label), "clear" (wave cleared),
+   * "hint" (s = text), "door" (s = door id opened), "supply" (crate dropped), "checkpoint",
+   * "complete", "failed" (s = reason).
+   */
+  | { t: "pve"; k: string; n?: number; s?: string };
 
 export interface NoticeMessage {
   text: string;
@@ -164,7 +194,50 @@ export interface PersonalResult {
     flagCaptures?: number;
     flagReturns?: number;
     vehicleKills?: number;
+    /** PvE run, recorded once per `runId` by the receiving player's browser. */
+    pve?: PveRecord;
   };
+}
+
+/** What one player's profile records from a PvE run. */
+export interface PveRecord {
+  runId: string;
+  mode: "outbreak" | "survival";
+  mission: string;
+  difficulty: string;
+  completed: boolean;
+  kills: number;
+  revives: number;
+  downs: number;
+  /** Survival: waves cleared. Outbreak: steps completed. */
+  progress: number;
+  timeSec: number;
+}
+
+export interface PveSquadRow {
+  id: string;
+  name: string;
+  kills: number;
+  damage: number;
+  revives: number;
+  downs: number;
+  accuracy: number | null;
+}
+
+/** End-of-run summary for the whole squad. */
+export interface PveResult {
+  mode: "outbreak" | "survival";
+  mission: string;
+  difficulty: string;
+  completed: boolean;
+  /** Failed: why ("squad wiped", "host left"…). */
+  reason?: string;
+  timeSec: number;
+  /** Survival: waves cleared; Outbreak: steps completed of `steps`. */
+  progress: number;
+  steps: number;
+  kills: number;
+  squad: PveSquadRow[];
 }
 
 export interface ResultsMessage {
@@ -173,6 +246,8 @@ export interface ResultsMessage {
   winnerTeam?: number;
   teamScores?: [number, number];
   rows: ResultRow[];
+  /** PvE modes: the squad's run. */
+  pve?: PveResult;
   personal: PersonalResult | null;
 }
 

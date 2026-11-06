@@ -11,7 +11,9 @@ export type MapId =
   | "harbor"
   | "downtown"
   | "mountain"
-  | "facility";
+  | "facility"
+  /** PvE (Outbreak) maps: never offered to competitive modes. */
+  | "works";
 
 /** Visual style of a solid block; collision is always the rectangle itself. */
 export type SolidKind =
@@ -76,6 +78,11 @@ export interface LightDef extends Vec2 {
   intensity: number;
   /** Flicker amount 0..1 (visual only). */
   flicker?: number;
+  /**
+   * PvE: lights that follow mission state (visual only). "power" lights are off until the power
+   * is restored, "alarm" lights pulse red while the alarm sounds.
+   */
+  group?: "power" | "alarm";
 }
 
 export type PickupKind = "health" | "ammo" | "weapon";
@@ -133,6 +140,8 @@ export interface MapDef {
   vehicleSpawns?: readonly VehicleSpawnDef[];
   /** Large maps: shown in the map picker as "vehicles" maps, sized for bigger matches. */
   large?: boolean;
+  /** PvE map (Outbreak missions and Survival): hidden from competitive map pickers. */
+  pve?: boolean;
   /** Authored objective positions (otherwise derived from the team spawns, see objectivesFor). */
   objectives?: {
     points: { id: string; label: string; x: number; y: number }[];

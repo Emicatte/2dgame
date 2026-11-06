@@ -1,9 +1,13 @@
 import {
+  formatIdList,
+  HazardState,
   type MatchState,
   NO_WEAPON,
   ObjectiveState,
   type PlayerState,
+  PropState,
   VehicleState,
+  ZombieState,
 } from "@scrapline/shared";
 import type { GameSimulation, ServerPlayer } from "./GameSimulation.ts";
 
@@ -116,5 +120,126 @@ export function syncObjectives(state: MatchState, sim: GameSimulation): void {
     o.y = f.y;
     o.carrier = f.carrier ?? "";
     o.home = f.home;
+  }
+}
+
+/**
+ * Mirrors the PvE runtime (enemies, hazards, props, loot, mission progress) into the synchronized
+ * state. Shared by ArenaRoom and the host-mode room. Positions are whole pixels and the facing
+ * angle a byte: dozens of enemies move every tick, so every field is kept small.
+ */
+export function syncPve(state: MatchState, sim: GameSimulation): void {
+  const pve = sim.pve;
+  if (!pve) {
+    if (state.zombies.size > 0) state.zombies.clear();
+    if (state.hazards.size > 0) state.hazards.clear();
+    if (state.props.size > 0) state.props.clear();
+    return;
+  }
+  const zs = state.zombies;
+  for (const id of [...zs.keys()]) {
+    const z = pve.zw.zombies.get(id);
+    if (!z || z.dead) zs.delete(id);
+  }
+  for (const z of pve.zw.zombies.values()) {
+    if (z.dead) continue;
+    let s = zs.get(z.id);
+    if (!s) {
+      s = new ZombieState();
+      s.k = z.def.index;
+      s.mhp = Math.min(65535, z.maxHp);
+      zs.set(z.id, s);
+    }
+    const x = Math.round(z.x);
+    const y = Math.round(z.y);
+    if (s.x !== x) s.x = x;
+    if (s.y !== y) s.y = y;
+    const a = ((Math.round((z.angle / (Math.PI * 2)) * 256) % 256) + 256) % 256;
+    if (s.a !== a) s.a = a;
+    if (s.hp !== z.hp) s.hp = Math.min(65535, z.hp);
+    if (s.st !== z.state) s.st = z.state;
+    if (s.act !== z.act) {
+      s.act = z.act;
+      s.at = z.actTick;
+      s.tx = Math.round(z.actX);
+      s.ty = Math.round(z.actY);
+    }
+  }
+  const hs = state.hazards;
+  for (const id of [...hs.keys()]) if (!pve.zw.hazards.has(id)) hs.delete(id);
+  for (const h of pve.zw.hazards.values()) {
+    if (hs.has(h.id)) continue;
+    const s = new HazardState();
+    s.x = Math.round(h.x);
+    s.y = Math.round(h.y);
+    s.r = Math.min(255, Math.round(h.r));
+    s.until = h.until;
+    hs.set(h.id, s);
+  }
+  const ps = state.props;
+  const live = new Set<string>([...pve.props.keys(), ...pve.loot.keys()]);
+  for (const id of [...ps.keys()]) if (!live.has(id)) ps.delete(id);
+  for (const pr of pve.props.values()) {
+    let s = ps.get(pr.def.id);
+    if (!s) {
+      s = new PropState();
+      s.kind = pr.def.kind;
+      s.x = Math.round(pr.def.x);
+      s.y = Math.round(pr.def.y);
+      ps.set(pr.def.id, s);
+    }
+    const usable = pr.active && !pr.used && (!pr.def.requires || pve.flags.has(pr.def.requires));
+    if (s.active !== usable) s.active = usable;
+    if (s.used !== pr.used) s.used = pr.used;
+    const prog = Math.round(pr.prog * 100) / 100;
+    if (s.prog !== prog) s.prog = prog;
+    if (s.by !== pr.by) s.by = pr.by;
+  }
+  for (const l of pve.loot.values()) {
+    let s = ps.get(l.id);
+    if (!s) {
+      s = new PropState();
+      s.kind = l.kind;
+      s.x = Math.round(l.x);
+      s.y = Math.round(l.y);
+      s.active = true;
+      ps.set(l.id, s);
+    }
+    const used = l.kind === "supply" ? l.takenBy.size > 0 : false;
+    if (s.used !== used) s.used = used;
+  }
+  const st = state.pve;
+  st.mission = pve.mission?.id ?? "";
+  st.difficulty = pve.difficultyId;
+  st.step = pve.stepIndex;
+  const prog = Math.round(pve.stepProg * 100) / 100;
+  if (st.prog !== prog) st.prog = prog;
+  st.count = pve.count;
+  st.countMax = pve.countMax;
+  st.wave = pve.waveNumber;
+  st.left = Math.min(65535, pve.waves.run ? pve.waves.remaining : 0);
+  st.nextWave = pve.nextWaveTick;
+  st.status = pve.status;
+  st.power = pve.power;
+  st.alarm = pve.alarm;
+  const doors = pve.doorList;
+  if (st.doors !== doors) st.doors = doors;
+  const flags = formatIdList(pve.flags);
+  if (st.flags !== flags) st.flags = flags;
+  st.selfRevives = pve.selfRevives;
+  st.kills = Math.min(65535, pve.kills);
+  st.startTick = pve.startTick;
+  st.boss = pve.bossId;
+  for (const [id, p] of sim.players) {
+    const s = state.players.get(id);
+    if (!s) continue;
+    if (s.downed !== p.pve.downed) s.downed = p.pve.downed;
+    const bleed = p.pve.downed
+      ? Math.max(0, Math.round(((p.pve.bleedUntil - sim.tick) / sim.tickRateHz) * 10))
+      : 0;
+    if (s.bleed !== bleed) s.bleed = Math.min(65535, bleed);
+    const rv = Math.round(p.pve.reviveProg * 100) / 100;
+    if (s.revive !== rv) s.revive = rv;
+    if (s.revives !== p.pve.revives) s.revives = Math.min(255, p.pve.revives);
   }
 }

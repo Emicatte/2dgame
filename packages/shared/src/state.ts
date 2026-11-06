@@ -34,6 +34,14 @@ export const PlayerState = schema(
     /** Vehicle the player is in ("" on foot) and the seat index in it. */
     vehicle: t.string().default(""),
     seat: t.int8().default(-1),
+    /** PvE: down but not out (crawls, cannot fire; a teammate holds E to revive). */
+    downed: t.boolean().default(false),
+    /** PvE: tenths of a second left before a downed player bleeds out. */
+    bleed: t.uint16().default(0),
+    /** PvE: revive progress 0..1 while somebody holds E on this player. */
+    revive: t.float32().default(0),
+    /** PvE: teammates revived this mission. */
+    revives: t.uint8().default(0),
 
     // ----- owner-only reconciliation fields -----
     ack: t.uint32().default(0).view(),
@@ -131,6 +139,102 @@ export const ObjectiveState = schema(
 );
 export type ObjectiveState = SchemaType<typeof ObjectiveState>;
 
+/**
+ * PvE enemy. Compact on purpose (dozens move every tick): positions in whole pixels, the facing
+ * angle in 1/256 turns. The client interpolates them like remote players.
+ */
+export const ZombieState = schema(
+  {
+    /** ZOMBIES index. */
+    k: t.uint8().default(0),
+    x: t.int16().default(0),
+    y: t.int16().default(0),
+    /** Facing, angle * 256 / 2π. */
+    a: t.uint8().default(0),
+    hp: t.uint16().default(0),
+    mhp: t.uint16().default(0),
+    /** AI state (AI.*), for animation. */
+    st: t.uint8().default(0),
+    /** Attack phase (ACT.*) and the tick it began: the client draws the telegraph from it. */
+    act: t.uint8().default(0),
+    at: t.uint32().default(0),
+    /** Telegraph target (charge end point, spit target, blast centre). */
+    tx: t.int16().default(0),
+    ty: t.int16().default(0),
+  },
+  "ZombieState",
+);
+export type ZombieState = SchemaType<typeof ZombieState>;
+
+/** PvE area hazard (acid puddle): damages players standing in it until `until` (tick). */
+export const HazardState = schema(
+  {
+    x: t.int16().default(0),
+    y: t.int16().default(0),
+    r: t.uint8().default(0),
+    until: t.uint32().default(0),
+  },
+  "HazardState",
+);
+export type HazardState = SchemaType<typeof HazardState>;
+
+/**
+ * PvE world object: a mission prop (generator, keycard, gate panel), a supply crate or a loot drop.
+ * `kind` "generator" | "keycard" | "panel" | "terminal" | "supply" | "ammo" | "health".
+ */
+export const PropState = schema(
+  {
+    kind: t.string().default(""),
+    x: t.int16().default(0),
+    y: t.int16().default(0),
+    /** Can be used right now (mission step active, requirement met). */
+    active: t.boolean().default(false),
+    used: t.boolean().default(false),
+    /** Hold progress 0..1 and who is holding (session id, "" = nobody). */
+    prog: t.float32().default(0),
+    by: t.string().default(""),
+  },
+  "PropState",
+);
+export type PropState = SchemaType<typeof PropState>;
+
+export const PVE_STATUS = { RUNNING: 0, COMPLETE: 1, FAILED: 2 } as const;
+
+/** PvE match: mission progress, waves and world flags. */
+export const PveState = schema(
+  {
+    /** Mission id (Outbreak) or "" (Survival). */
+    mission: t.string().default(""),
+    difficulty: t.string().default("veteran"),
+    /** Current mission step index. */
+    step: t.uint8().default(0),
+    /** Step progress 0..1 (hold, extraction) and counters (collected / waves). */
+    prog: t.float32().default(0),
+    count: t.uint8().default(0),
+    countMax: t.uint8().default(0),
+    /** Current wave (1-based, 0 = none) and enemies of it still to defeat. */
+    wave: t.uint16().default(0),
+    left: t.uint16().default(0),
+    /** Tick the next wave starts (intermission countdown), 0 = none pending. */
+    nextWave: t.uint32().default(0),
+    status: t.uint8().default(0),
+    power: t.boolean().default(false),
+    alarm: t.boolean().default(false),
+    /** Open mission doors, comma separated (rarely changes). */
+    doors: t.string().default(""),
+    /** Mission flags set by props ("keycard"), comma separated. */
+    flags: t.string().default(""),
+    /** Solo: self-revives left. */
+    selfRevives: t.uint8().default(0),
+    kills: t.uint16().default(0),
+    startTick: t.uint32().default(0),
+    /** Boss enemy id ("" = none) for the boss health bar. */
+    boss: t.string().default(""),
+  },
+  "PveState",
+);
+export type PveState = SchemaType<typeof PveState>;
+
 export type MatchPhase = "lobby" | "countdown" | "playing" | "results";
 
 export const MatchState = schema(
@@ -164,6 +268,11 @@ export const MatchState = schema(
     scoreB: t.uint16().default(0),
     /** Team that won the last match: 0 = none or draw. */
     winnerTeam: t.uint8().default(0),
+    /** PvE (Outbreak, Survival): enemies, hazards, props and mission progress. */
+    zombies: t.map(ZombieState),
+    hazards: t.map(HazardState),
+    props: t.map(PropState),
+    pve: t.ref(PveState),
   },
   "MatchState",
 );

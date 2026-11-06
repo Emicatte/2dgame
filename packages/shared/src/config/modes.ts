@@ -4,8 +4,28 @@
  */
 import { MATCH_DEFAULTS } from "./game.ts";
 
-export type GameMode = "deathmatch" | "tdm" | "dom" | "ctf" | "mayhem";
-export const GAME_MODES: readonly GameMode[] = ["deathmatch", "tdm", "dom", "ctf", "mayhem"];
+export type GameMode = "deathmatch" | "tdm" | "dom" | "ctf" | "mayhem" | "outbreak" | "survival";
+export const GAME_MODES: readonly GameMode[] = [
+  "deathmatch",
+  "tdm",
+  "dom",
+  "ctf",
+  "mayhem",
+  "outbreak",
+  "survival",
+];
+/** Competitive modes (the PvP lobby picker). */
+export const PVP_MODES: readonly GameMode[] = ["deathmatch", "tdm", "dom", "ctf", "mayhem"];
+/** Cooperative PvE modes: Outbreak missions and Survival Endless. */
+export const PVE_MODES: readonly GameMode[] = ["outbreak", "survival"];
+
+/** 1 to 4 humans against the infected; all humans are on one side (team 1), no friendly fire. */
+export function isPveMode(mode: string): boolean {
+  return mode === "outbreak" || mode === "survival";
+}
+
+/** Co-op squad size limits. */
+export const PVE_SQUAD = { min: 1, max: 4 } as const;
 
 export const MODE_NAMES: Record<GameMode, string> = {
   deathmatch: "Deathmatch",
@@ -13,6 +33,8 @@ export const MODE_NAMES: Record<GameMode, string> = {
   dom: "Domination",
   ctf: "Capture the Flag",
   mayhem: "Vehicle Mayhem",
+  outbreak: "Outbreak",
+  survival: "Survival",
 };
 
 /** One-line rules shown in the lobby. */
@@ -22,6 +44,8 @@ export const MODE_BLURBS: Record<GameMode, string> = {
   dom: "Hold capture points A, B and C. Each held point scores every few seconds.",
   ctf: "Take the enemy flag to your base while your own flag is home.",
   mayhem: "Team fight on vehicle maps. Eliminations score 1, wrecking a crewed enemy vehicle scores 2.",
+  outbreak: "Co-op campaign: 1-4 players, mission objectives, infected, bosses.",
+  survival: "Co-op endless waves. How long can the squad hold?",
 };
 
 /** What the score limit counts, per mode (lobby badges, HUD). */
@@ -31,6 +55,8 @@ export const MODE_SCORE_UNIT: Record<GameMode, string> = {
   dom: "points",
   ctf: "captures",
   mayhem: "team points",
+  outbreak: "objectives",
+  survival: "waves",
 };
 
 /** Modes that only make sense on maps with vehicles. */
@@ -129,6 +155,24 @@ export const MODE_DEFAULTS: Record<GameMode, ModeRules> = {
     maxPlayers: 4,
     durationSec: 6 * 60,
     scoreLimit: 30,
+    friendlyFire: false,
+  },
+  // PvE: the mission (or the squad's survival) ends the match, not a clock or a score. The
+  // duration is a safety cap only.
+  outbreak: {
+    mode: "outbreak",
+    teamSize: 0,
+    maxPlayers: 4,
+    durationSec: 60 * 60,
+    scoreLimit: 0,
+    friendlyFire: false,
+  },
+  survival: {
+    mode: "survival",
+    teamSize: 0,
+    maxPlayers: 4,
+    durationSec: 90 * 60,
+    scoreLimit: 0,
     friendlyFire: false,
   },
 };

@@ -35,6 +35,8 @@ import {
   type PickupDef,
   PLAYER,
   type PlayerSim,
+  PRECISION_DAMAGE_MULT,
+  PRECISION_RADIUS_FRACTION,
   RAM_COOLDOWN_SEC,
   RAM_CREDIT_SEC,
   refillAmmo,
@@ -61,6 +63,13 @@ import {
   type WeaponSlotState,
   weaponByIndex,
 } from "@scrapline/shared";
+import {
+  emptyPvePlayer,
+  type PveConfig,
+  PveController,
+  type PvePlayer,
+  shotNoise,
+} from "../pve/PveController.ts";
 
 export interface PlayerMatchStats {
   kills: number;
@@ -119,6 +128,8 @@ export interface ServerPlayer {
   /** Input pipeline counters (diagnostics; never affect the simulation). */
   inputStats: InputStats;
   stats: PlayerMatchStats;
+  /** PvE: downed / revive state and co-op counters. */
+  pve: PvePlayer;
 }
 
 /** Per-player input pipeline counters, cumulative since the player joined the room. */
@@ -183,6 +194,8 @@ interface HistoryFrame {
   tick: number;
   pos: Map<string, { x: number; y: number; alive: boolean }>;
   vehicles: Map<string, VehiclePose>;
+  /** PvE enemies (lag compensation of shots at them). */
+  zombies: Map<string, { x: number; y: number }> | null;
 }
 
 export interface VehiclePose {
@@ -322,10 +335,12 @@ export class GameSimulation {
   spawnOverride: { x: number; y: number }[] | null = null;
   /** Test-only vehicle placement replacing the map's (same gate). */
   private vehicleOverride: VehicleSpawnDef[] | null = null;
+  /** PvE runtime (Outbreak, Survival); null in competitive modes. */
+  pve: PveController | null = null;
   private events: NetEvent[] = [];
   private readonly history: HistoryFrame[] = [];
   private readonly tickRate: number;
-  private readonly rng: () => number;
+  readonly rng: () => number;
 
   constructor(map: MapDef, opts: SimOptions) {
     this.map = map;
@@ -336,6 +351,22 @@ export class GameSimulation {
     this.rng = opts.rng ?? Math.random;
     this.resetPickups();
     this.resetVehicles();
+  }
+
+  get tickRateHz(): number {
+    return this.tickRate;
+  }
+
+  /**
+   * Turns the PvE runtime on (mission or Survival) or off. The room calls it when the match
+   * starts; the next resetForMatch() prepares the run.
+   */
+  setPve(cfg: PveConfig | null): void {
+    this.pve = cfg ? new PveController(this, cfg) : null;
+    if (!cfg) {
+      this.world = collisionWorldFor(this.map);
+      this.shotWorld = shotWorldFor(this.map);
+    }
   }
 
   get maxRewindTicks(): number {
@@ -416,6 +447,7 @@ export class GameSimulation {
       stashSlot: 0,
       inputStats: emptyInputStats(),
       stats: emptyStats(),
+      pve: emptyPvePlayer(),
     };
     this.players.set(p.id, p);
     return p;
@@ -484,6 +516,7 @@ export class GameSimulation {
     this.resetVehicles();
     this.resetObjectives();
     this.history.length = 0;
+    this.pve?.reset();
     for (const p of this.players.values()) {
       p.stats = emptyStats();
       p.joinedTick = this.tick;
@@ -552,13 +585,16 @@ export class GameSimulation {
       this.updatePickups();
       this.updateVehicleLifecycle();
       this.updateObjectives();
+      this.pve?.step();
     }
+    if (this.pve) for (const e of this.pve.drainEvents()) this.events.push(e);
     this.recordHistory();
     return this.events;
   }
 
   private applyInput(p: ServerPlayer, frame: InputFrame, live: boolean): void {
     const canAct = live && p.alive;
+    const downed = p.pve.downed;
     const pressed = frame.buttons & ~p.prevButtons;
     p.prevButtons = frame.buttons;
     const shots: { shot: ShotIntent; view: number }[] = [];
@@ -605,10 +641,11 @@ export class GameSimulation {
       alive: canAct,
       emit,
       obstacles: this.groundObstacles(null),
+      downed,
     });
     let entered = false;
-    if (canAct && (pressed & BTN.INTERACT) !== 0) entered = this.tryEnter(p);
-    if (canAct && !entered && (frame.buttons & BTN.INTERACT) !== 0) p.interact = true;
+    if (canAct && !downed && (pressed & BTN.INTERACT) !== 0) entered = this.tryEnter(p);
+    if (canAct && !downed && !entered && (frame.buttons & BTN.INTERACT) !== 0) p.interact = true;
     p.lastProcessedSeq = frame.seq;
     p.inputStats.processed++;
     for (const s of shots) this.resolveShot(p, s.shot, s.view, false);
@@ -652,7 +689,12 @@ export class GameSimulation {
         ready: v.status === VEHICLE_READY,
       });
     }
-    this.history.push({ tick: this.tick, pos, vehicles });
+    let zombies: Map<string, { x: number; y: number }> | null = null;
+    if (this.pve) {
+      zombies = new Map();
+      for (const z of this.pve.zw.zombies.values()) if (!z.dead) zombies.set(z.id, { x: z.x, y: z.y });
+    }
+    this.history.push({ tick: this.tick, pos, vehicles, zombies });
     const keep = this.maxRewindTicks + 4;
     if (this.history.length > keep) this.history.splice(0, this.history.length - keep);
   }
@@ -710,7 +752,10 @@ export class GameSimulation {
       });
     }
 
-    const damageByTarget = new Map<string, { dmg: number; x: number; y: number }>();
+    // PvE enemies, where the shooter saw them (same rewind as players).
+    if (this.pve) targets.push(...this.pve.shotTargets((z) => this.zombiePoseAt(z.id, viewTick) ?? z));
+
+    const damageByTarget = new Map<string, { dmg: number; x: number; y: number; precise: boolean }>();
     const angles: number[] = [];
     const dists: number[] = [];
     const opts = { airWorld: this.airWorld, shooterAir };
@@ -729,10 +774,27 @@ export class GameSimulation {
       dists.push(Math.round(r.dist));
       if (r.targetId) {
         const prev = damageByTarget.get(r.targetId);
-        const dmg = damageAtDistance(weapon, r.dist);
+        let dmg = damageAtDistance(weapon, r.dist);
         const hx = shot.ox + Math.cos(angle) * r.dist;
         const hy = shot.oy + Math.sin(angle) * r.dist;
-        damageByTarget.set(r.targetId, { dmg: (prev?.dmg ?? 0) + dmg, x: hx, y: hy });
+        let precise = false;
+        if (r.targetId.startsWith("z:")) {
+          // Precision: the pellet passes close to the enemy's centre.
+          const t = targets.find((x) => x.id === r.targetId);
+          if (t) {
+            const off = Math.abs((t.x - shot.ox) * Math.sin(angle) - (t.y - shot.oy) * Math.cos(angle));
+            if (off <= t.r * PRECISION_RADIUS_FRACTION) {
+              precise = true;
+              dmg *= PRECISION_DAMAGE_MULT;
+            }
+          }
+        }
+        damageByTarget.set(r.targetId, {
+          dmg: (prev?.dmg ?? 0) + dmg,
+          x: hx,
+          y: hy,
+          precise: precise || !!prev?.precise,
+        });
       }
     }
     this.events.push({
@@ -747,7 +809,12 @@ export class GameSimulation {
     });
 
     if (damageByTarget.size > 0) shooter.stats.shotsHit += 1;
+    if (this.pve) this.pve.zw.noise(shot.ox, shot.oy, shotNoise(weapon));
     for (const [targetId, hit] of damageByTarget) {
+      if (targetId.startsWith("z:")) {
+        this.pve?.damageZombie(targetId.slice(2), hit.dmg, shooter, hit.precise, hit.x, hit.y);
+        continue;
+      }
       if (targetId.startsWith("veh:")) {
         const v = this.vehicles.get(targetId.slice(4));
         if (v) this.damageVehicle(v, hit.dmg * v.def.bulletArmor, shooter, hit.x, hit.y);
@@ -787,7 +854,50 @@ export class GameSimulation {
       y: Math.round(y),
       k: lethal,
     });
+    if (lethal && this.pve) {
+      this.pve.onLethal(target, attacker?.name ?? (weapon === KILL_BY_EXPLOSION ? "Explosion" : ""));
+      return;
+    }
     if (lethal) this.kill(target, attacker && attacker !== target ? attacker : null, weapon);
+  }
+
+  /** PvE: damage from an enemy or a hazard (`attackerId` "z:<id>" or ""). */
+  damagePlayerFrom(
+    target: ServerPlayer,
+    raw: number,
+    attackerId: string,
+    cause: string,
+    x: number,
+    y: number,
+  ): void {
+    if (!target.alive) return;
+    const shielded = target.protectedUntil > this.tick;
+    const dmg = shielded ? 0 : Math.max(1, Math.round(raw));
+    target.hp = Math.max(0, target.hp - dmg);
+    const lethal = target.hp === 0;
+    this.events.push({
+      t: "hit",
+      p: attackerId,
+      v: target.id,
+      dmg,
+      x: Math.round(x),
+      y: Math.round(y),
+      k: lethal,
+    });
+    if (lethal) this.pve?.onLethal(target, cause);
+  }
+
+  /** PvE enemy position as a client rendering `viewTick` saw it (interpolated history). */
+  zombiePoseAt(id: string, viewTick: number): { x: number; y: number } | null {
+    if (this.history.length === 0) return null;
+    const newest = this.history[this.history.length - 1]!.tick;
+    const t = clamp(viewTick, newest - this.maxRewindTicks, newest);
+    const t0 = Math.floor(t);
+    const frac = t - t0;
+    const a = this.historyAt(t0)?.zombies?.get(id);
+    if (!a) return null;
+    const b = this.historyAt(t0 + 1)?.zombies?.get(id) ?? a;
+    return { x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac };
   }
 
   private kill(victim: ServerPlayer, killer: ServerPlayer | null, weapon: number): void {
@@ -866,7 +976,8 @@ export class GameSimulation {
   }
 
   spawn(p: ServerPlayer, freshMatch: boolean): void {
-    const pos = this.chooseSpawn(p.id);
+    const pos = this.pve ? this.pve.spawnPoint(p) : this.chooseSpawn(p.id);
+    p.pve.downed = false;
     const keepAim = p.sim.aim;
     p.sim = createPlayerSim(pos.x, pos.y, p.primary);
     p.sim.aim = keepAim;
@@ -885,7 +996,7 @@ export class GameSimulation {
         continue;
       }
       for (const p of this.players.values()) {
-        if (!p.alive || p.vehicle) continue;
+        if (!p.alive || p.vehicle || p.pve.downed) continue;
         const reach = pk.def.kind === "weapon" ? PLAYER.interactRadius : PICKUP_RADIUS;
         if (distSq(p.sim.x, p.sim.y, pk.def.x, pk.def.y) > reach * reach) continue;
         let taken = false;
@@ -1098,6 +1209,7 @@ export class GameSimulation {
     }
     if (v.status !== VEHICLE_READY || v.sim.alt > 0.1) return;
     this.runOver(v, credit);
+    this.pve?.vehicleContacts(v, credit);
   }
 
   private vehicleInContact(v: ServerVehicle): ServerVehicle | null {
@@ -1226,6 +1338,7 @@ export class GameSimulation {
       .map((id) => (id ? this.players.get(id) : undefined))
       .filter((p): p is ServerPlayer => !!p);
     for (const p of occupants) this.leaveVehicle(p, true);
+    this.pve?.blast(v.sim.x, v.sim.y, EXPLOSION_RADIUS, EXPLOSION_DAMAGE * 2, attacker);
     for (const p of occupants) {
       this.damagePlayer(
         p,

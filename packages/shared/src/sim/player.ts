@@ -1,5 +1,6 @@
 import { NET, PLAYER, STEP_DT } from "../config/game.ts";
 import { NO_WEAPON, WEAPONS, type WeaponDef, type WeaponId, weaponByIndex } from "../config/weapons.ts";
+import { DOWNED } from "../config/zombies.ts";
 import { BTN, type InputFrame } from "../protocol/input.ts";
 import { type CollisionWorld, resolveCircle } from "./collision.ts";
 import { approach2, DEG } from "./math.ts";
@@ -95,6 +96,11 @@ export interface StepContext {
   mounted?: boolean;
   /** Bodies a walking player cannot pass through (vehicles). */
   obstacles?: readonly Circle[];
+  /**
+   * PvE: the player is downed. They crawl (slow, no dash) and cannot fire, reload or switch
+   * weapons until revived. Synchronized (PlayerState.downed) so the prediction applies it too.
+   */
+  downed?: boolean;
 }
 
 export function emptySlot(): WeaponSlotState {
@@ -146,11 +152,22 @@ export function currentSpreadDeg(s: PlayerSim, w: WeaponDef): number {
 
 export function stepPlayer(s: PlayerSim, input: InputFrame, ctx: StepContext): void {
   s.aim = input.aim;
+  if (ctx.downed) {
+    // Crawl: movement only, at a fraction of the speed; weapons hold still.
+    const crawl: InputFrame = { ...input, buttons: 0, slot: -1 };
+    s.dash = 0;
+    stepMovement(s, crawl, ctx, STEP_DT, DOWNED.speedMult);
+    if (s.cooldown > 0) s.cooldown -= 1;
+    if (s.swap > 0) s.swap -= 1;
+    s.reload = 0;
+    s.trigger = false;
+    return;
+  }
   stepMovement(s, input, ctx, STEP_DT);
   stepWeapons(s, input, ctx, STEP_DT);
 }
 
-function stepMovement(s: PlayerSim, input: InputFrame, ctx: StepContext, dt: number): void {
+function stepMovement(s: PlayerSim, input: InputFrame, ctx: StepContext, dt: number, speedMult = 1): void {
   let mx = input.mx;
   let my = input.my;
   const len = Math.sqrt(mx * mx + my * my);
@@ -191,7 +208,7 @@ function stepMovement(s: PlayerSim, input: InputFrame, ctx: StepContext, dt: num
     s.dash -= 1;
   } else {
     const w = activeWeapon(s);
-    const maxSpeed = PLAYER.maxSpeed * (w?.moveSpeedMult ?? 1);
+    const maxSpeed = PLAYER.maxSpeed * (w?.moveSpeedMult ?? 1) * speedMult;
     const rate = len > 0 ? PLAYER.acceleration : PLAYER.deceleration;
     [s.vx, s.vy] = approach2(s.vx, s.vy, mx * maxSpeed, my * maxSpeed, rate * dt);
   }
