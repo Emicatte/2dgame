@@ -27,7 +27,7 @@ unlocks and daily challenges, and private rooms you can share with a link.
 | Solo practice with training targets (never recorded) | Done |
 | Host mode: the arena creator's browser hosts the match, friends join over WebRTC; deploys on Vercel alone | Done (v0.2.0), unit + two-browser WebRTC E2E; real school networks not tested: see [docs/HOST_MODE.md](docs/HOST_MODE.md) |
 | Deployment config: Dockerfile, Render Blueprint, Vercel config, docs | Done; client deployed on Vercel by the owner; dedicated server image built and run in the audit, **not deployed** |
-| Outbreak co-op PvE: First Contact, Survival, 6 infected + boss, Wave Director, revive | Done (v0.5.0, not deployed): simulation, host-mode and dedicated-server integration tests, two-browser WebRTC E2E; full mission by human players and balance not playtested: [docs/v3/ROADMAP.md](docs/v3/ROADMAP.md) |
+| Outbreak co-op PvE: First Contact, Survival, 6 infected + boss, Wave Director, revive | Done (v0.5.0, deployed 2026-11-06 at https://2dgame-8ds5.vercel.app): simulation, host-mode and dedicated-server integration tests, two-browser WebRTC E2E; full mission by human players and balance not playtested: [docs/v3/ROADMAP.md](docs/v3/ROADMAP.md) |
 | Performance | CPU cost per frame measured (small); **60 FPS on a real GPU not yet verified**: run `/bench.html` on target hardware |
 
 Details and the test record: [docs/TESTING.md](docs/TESTING.md). Open items: [docs/ROADMAP.md](docs/ROADMAP.md).

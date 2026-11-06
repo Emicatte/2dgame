@@ -1,6 +1,6 @@
 # SCRAPLINE 3.0 | OUTBREAK: audit, roadmap and results
 
-Branch `outbreak` (not deployed; the public Vercel deployment is untouched). Systems reference:
+Released as 0.5.0: merged into `main` and deployed to production (https://2dgame-8ds5.vercel.app, host mode) on 2026-11-06, after the host-mode E2E passed against the production build. Systems reference:
 [OUTBREAK.md](OUTBREAK.md).
 
 ## Phase 0: audit of the existing project (2026-11-06)
@@ -40,7 +40,7 @@ input sequence. Both fixes are in the first commit of the branch.
 | 8 | Black Site and miniboss | not started |
 | 9 | Final Breach, Subject Zero | not started |
 | 10 | Progression polish, balance, optimisation | PvE progression done (records, titles, unlocks, dedupe); balance needs playtests |
-| 11 | Release preparation | needs your devices and your go |
+| 11 | Release preparation | 0.5.0 deployed on your go (2026-11-06); checks on real devices and GPUs still to do |
 
 ## Acceptance criteria and evidence
 

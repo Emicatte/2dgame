@@ -3,7 +3,7 @@
 ## 0.5.0 — 2026-11-06 (SCRAPLINE 3.0 | OUTBREAK, phases 0–6: combat visual overhaul, co-op PvE)
 
 Systems reference: `docs/v3/OUTBREAK.md`. Audit, roadmap and evidence: `docs/v3/ROADMAP.md`.
-Not deployed: branch `outbreak`.
+Deployed to production (Vercel project `2dgame-8ds5`, host mode) on 2026-11-06 from `main` at `7264341`, after the E2E suite passed against the production build.
 
 ### Added
 - **Combat Visual Overhaul** (client only, no gameplay value changed): crosshair styles dot /
