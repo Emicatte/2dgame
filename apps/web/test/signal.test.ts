@@ -5,6 +5,7 @@ import {
   CODE_LENGTH,
   handleHttp,
   handleSignal,
+  iceConfig,
   iceServersFromEnv,
   MAILBOX_TTL_SEC,
   MemoryStore,
@@ -121,7 +122,7 @@ describe("host-mode signaling", () => {
       405,
     );
     const health = await handleHttp(new Request("http://x/api/p2p"), { store: null });
-    expect(await health.json()).toEqual({ service: "scrapline-signaling", storage: "missing" });
+    expect(await health.json()).toEqual({ service: "scrapline-signaling", storage: "missing", turn: "none" });
     const res = await handleHttp(new Request("http://x/api/p2p?op=create", { method: "POST" }), {
       store: null,
     });
@@ -233,6 +234,31 @@ describe("ICE servers", () => {
   });
 });
 
+describe("relay status (health endpoint, no secrets)", () => {
+  const keys = { CLOUDFLARE_TURN_KEY_ID: "k", CLOUDFLARE_TURN_API_TOKEN: "t" };
+  it("tells not configured, static, issued, refused and unreachable apart", async () => {
+    expect((await iceConfig({})).turn).toBe("none");
+    expect((await iceConfig({ TURN_URLS: "turn:t.example:3478" })).turn).toBe("static");
+    const issued = (async () =>
+      new Response(
+        JSON.stringify({
+          iceServers: { urls: ["turn:turn.cloudflare.com:3478"], username: "u", credential: "c" },
+        }),
+      )) as unknown as typeof fetch;
+    expect((await iceConfig(keys, issued)).turn).toBe("cloudflare");
+    const refused = (async () => new Response("", { status: 401 })) as unknown as typeof fetch;
+    const r = await iceConfig(keys, refused);
+    expect(r.turn).toBe("cloudflare-error:401");
+    expect(r.servers).toHaveLength(1);
+    const offline = (async () => {
+      throw new Error("down");
+    }) as unknown as typeof fetch;
+    expect((await iceConfig(keys, offline)).turn).toBe("cloudflare-unreachable");
+    // Nothing secret in the status.
+    expect(JSON.stringify(r)).not.toContain("Bearer");
+  });
+});
+
 describe("deployed function (api/p2p.js)", () => {
   it("is up to date with src/p2p/signalServer.ts", async () => {
     // @ts-expect-error: plain ESM build script without type declarations
@@ -248,7 +274,7 @@ describe("deployed function (api/p2p.js)", () => {
     // @ts-expect-error: generated JavaScript, typed by its TypeScript source
     const mod = (await import("../api/p2p.js")) as { default: { fetch(r: Request): Promise<Response> } };
     const health = await mod.default.fetch(new Request("https://x/api/p2p"));
-    expect(await health.json()).toEqual({ service: "scrapline-signaling", storage: "missing" });
+    expect(await health.json()).toEqual({ service: "scrapline-signaling", storage: "missing", turn: "none" });
     const op = await mod.default.fetch(
       new Request("https://x/api/p2p?op=create", { method: "POST", body: "{}" }),
     );
