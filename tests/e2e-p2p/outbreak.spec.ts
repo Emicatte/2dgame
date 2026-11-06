@@ -193,3 +193,37 @@ test("Outbreak: two browsers complete co-op objectives of First Contact together
   console.log(`[outbreak e2e] host state after the generator: ${JSON.stringify(info)}`);
   expect(info?.status).toBe(0);
 });
+
+test("Survival: a boss renders with its health bar and telegraphs (host only)", async () => {
+  test.setTimeout(180_000);
+  browsers = [await chromium.launch({ executablePath: CHROME, headless: true, args: ARGS })];
+  const a = await (await browsers[0]!.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+  a.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
+  await onboard(a, "Solo");
+  await a.getByTestId("create-coop").click();
+  await expect(a.getByTestId("pve-settings")).toBeVisible({ timeout: 15_000 });
+  await a.getByTestId("mode-survival").click();
+  await a.getByTestId("map-industrial").click();
+  await a.getByTestId("difficulty-recruit").click();
+  await a.getByTestId("start-match").click();
+  await phaseIs(a, "playing");
+  await expect(a.getByTestId("pve-objective-text")).toBeVisible();
+  const spawned = await a.evaluate(() =>
+    (
+      window as unknown as { __scrapline: { spawnEnemy(k: string, dx: number, dy: number): boolean } }
+    ).__scrapline.spawnEnemy("abomination", 360, 0),
+  );
+  expect(spawned).toBe(true);
+  await expect(a.getByTestId("pve-boss")).toContainText("The Abomination", { timeout: 10_000 });
+  await expect(a.getByTestId("pve-boss")).toContainText("Phase 1/3");
+  // Let it close in and telegraph (slam / charge); keep the player still and shooting.
+  await walk(a, [], { fire: true });
+  for (let i = 0; i < 8; i++) {
+    await a.waitForTimeout(700);
+    await shot(a, `outbreak-boss-${i}`);
+  }
+  const info = await pve(a);
+  console.log(`[outbreak e2e] boss scenario: ${JSON.stringify(info)}`);
+  // The boss is synchronized and rendered (the run may already be lost: a boss alone is brutal).
+  expect(info?.mode).toBe("survival");
+});

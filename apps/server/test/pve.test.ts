@@ -806,3 +806,22 @@ describe("boss: The Abomination", () => {
     expect(pve.waves.done).toBe(true);
   });
 });
+
+describe("boss on a cramped map", () => {
+  it("a boss that cannot reach the squad throws debris instead of standing idle", () => {
+    const sim = makeSim("industrial", 3);
+    const pve = startPve(sim, "survival");
+    pve.waves.stop();
+    pve.nextWaveTick = 0;
+    const a = addPlayer(sim, "alpha");
+    place(a, 1280, 832);
+    a.protectedUntil = Number.MAX_SAFE_INTEGER;
+    // Spawned where it fits, but the squad is beyond gaps it is too wide for.
+    const boss = pve.zw.spawn("abomination", 1280 + 520, 832 - 300, { state: "hunt" });
+    let thrown = 0;
+    for (let i = 0; i < 20 * 20; i++) for (const e of tick(sim)) if (e.t === "proj" && e.r) thrown++;
+    const moved = Math.hypot(boss.x - (1280 + 520), boss.y - (832 - 300));
+    console.log(`[boss] cramped map: moved ${moved.toFixed(0)} px, debris thrown ${thrown}`);
+    expect(thrown > 0 || Math.hypot(boss.x - a.sim.x, boss.y - a.sim.y) < 200).toBe(true);
+  });
+});

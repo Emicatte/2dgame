@@ -518,7 +518,17 @@ export class PveController implements ZombieHost {
     }
     const taken = [...this.sim.players.values()].filter((o) => o !== p && o.alive);
     // Test-only fixed spawns (dev / E2E builds and debug routes) take precedence, like in PvP.
-    for (const s of this.sim.spawnOverride ?? this.sim.map.spawns) {
+    // Survival on a competitive map starts the squad near the middle, not in a corner.
+    const cx = this.sim.map.width / 2;
+    const cy = this.sim.map.height / 2;
+    const list = this.sim.spawnOverride
+      ? [...this.sim.spawnOverride]
+      : this.mission
+        ? [...this.sim.map.spawns]
+        : [...this.sim.map.spawns].sort(
+            (p1, p2) => Math.hypot(p1.x - cx, p1.y - cy) - Math.hypot(p2.x - cx, p2.y - cy),
+          );
+    for (const s of list) {
       if (!taken.some((o) => Math.hypot(o.sim.x - s.x, o.sim.y - s.y) < PLAYER.radius * 3))
         return { x: s.x, y: s.y };
     }

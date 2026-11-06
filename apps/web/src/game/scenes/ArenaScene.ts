@@ -385,6 +385,18 @@ export class ArenaScene extends Phaser.Scene {
         });
       },
       autoDone: () => this.autoDone,
+      /** Host-mode test scenario: spawns an enemy near the local player (authoritative sim). */
+      spawnEnemy: (kind: string, dx: number, dy: number) => {
+        const room = session.room as unknown as {
+          debugSim?: () => {
+            pve: { zw: { spawn(k: string, x: number, y: number, o: object): unknown } } | null;
+          } | null;
+        };
+        const pve = room.debugSim?.()?.pve;
+        if (!pve) return false;
+        pve.zw.spawn(kind, this.predictor.sim.x + dx, this.predictor.sim.y + dy, { state: "hunt" });
+        return true;
+      },
       stopAuto: () => autopilot.set(null),
       perfReset: () => this.perf?.reset(),
       createDebugRoom: (
@@ -1909,7 +1921,11 @@ export class ArenaScene extends Phaser.Scene {
       const v = this.views.get(id);
       allies.push(project(v?.root.x ?? p.x, v?.root.y ?? p.y, p.name, p.downed));
     });
-    pveHud.update(state, self, serverTick, { prompt, marker, allies });
+    const mine = this.views.get(self);
+    const msx = mine ? (mine.root.x - cam.worldView.x) * cam.zoom : 9999;
+    const msy = mine ? (mine.root.y - cam.worldView.y) * cam.zoom : 9999;
+    const fadeLeft = msx < 420 && msy < 380;
+    pveHud.update(state, self, serverTick, { prompt, marker, allies, fadeLeft });
   }
 
   private objectiveHud(state: MatchState): HudObjective[] {

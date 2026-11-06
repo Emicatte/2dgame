@@ -309,6 +309,11 @@ export class HostRoom {
     this.handlers.clear();
   }
 
+  /** Dev and E2E builds only: the authoritative simulation, for scripted test scenarios. */
+  debugSim(): GameSimulation | null {
+    return import.meta.env.DEV || import.meta.env.VITE_E2E === "true" ? this.sim : null;
+  }
+
   /** Connected and held guests (for the lobby and diagnostics). */
   get guestCount(): number {
     return this.seats.size;

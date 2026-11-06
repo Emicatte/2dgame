@@ -76,6 +76,8 @@ export interface PveHudState {
   hint: { text: string; id: number } | null;
   banner: { text: string; tone: "wave" | "good" | "bad" | "info"; id: number } | null;
   feed: { id: number; text: string; tone: "good" | "bad" | "info"; at: number }[];
+  /** The local player is under the top-left panels: they fade so nothing hides the player. */
+  fadeLeft: boolean;
   /** Boss health bar (name, health, phase 1-based of `phases`). */
   boss: { name: string; hp: number; mhp: number; phase: number; phases: number } | null;
 }
@@ -106,6 +108,7 @@ const initial: PveHudState = {
   banner: null,
   feed: [],
   boss: null,
+  fadeLeft: false,
 };
 
 export const pveHudStore = createStore<PveHudState>({ ...initial });
@@ -215,7 +218,7 @@ export const pveHud = {
     state: MatchState,
     self: string,
     serverTick: number,
-    extra: Pick<PveHudState, "prompt" | "marker" | "allies">,
+    extra: Pick<PveHudState, "prompt" | "marker" | "allies" | "fadeLeft">,
   ): void {
     const mode = state.mode === "survival" ? "survival" : "outbreak";
     const mission = mode === "outbreak" ? missionById(state.pve.mission) : undefined;

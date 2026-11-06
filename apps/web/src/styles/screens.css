@@ -1631,3 +1631,11 @@
   background: var(--text);
   opacity: 0.6;
 }
+.pve-objective,
+.pve-squad {
+  transition: opacity var(--t-med) var(--ease-out);
+}
+.pve-hud.is-fade-left .pve-objective,
+.pve-hud.is-fade-left .pve-squad {
+  opacity: 0.3;
+}

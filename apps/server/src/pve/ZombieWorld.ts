@@ -20,6 +20,7 @@ import {
   findPath,
   flowSteer,
   hasLineOfSight,
+  NAV_CLASS_RADIUS,
   NAV_INF,
   type NavClass,
   type NavGrid,
@@ -700,6 +701,13 @@ export class ZombieWorld {
     const d = Math.hypot(t.x - z.x, t.y - z.y);
     const order = ["slam", "throw", "charge", "summon"];
     const attacks = [...phase.attacks].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+    // Cannot reach the squad (cramped map, cut off): it keeps throwing debris from where it is,
+    // so it stays a threat and the fight still ends.
+    const stuck = tick - z.progressTick > this.secTicks(1.5) || !Number.isFinite(this.pathDistance(z, t.id));
+    if (stuck && !attacks.some((a) => a.kind === "throw")) {
+      const fallback = z.def.boss!.phases.flatMap((p) => p.attacks).find((a) => a.kind === "throw");
+      if (fallback) attacks.unshift({ ...fallback, minRange: 0 });
+    }
     for (const a of attacks) {
       if (tick < (z.cooldowns.get(a.id) ?? 0)) continue;
       if (d < a.minRange || d > a.maxRange) continue;
@@ -1118,7 +1126,13 @@ export class ZombieWorld {
         const pathTo = (s: number) => {
           if (direct) return toward(t.x, t.y, s);
           const f = this.fieldFor(t.id, z.cls);
-          const steer = f ? flowSteer(this.host.nav(), world, f, z.x, z.y, z.def.radius) : null;
+          let steer = f ? flowSteer(this.host.nav(), world, f, z.x, z.y, z.def.radius) : null;
+          if (!steer && z.cls === 3) {
+            // A boss on a map without lanes its size: follow the large-body field and let the
+            // collision resolver slide it along walls (it may still get wedged; then it throws).
+            const f2 = this.fieldFor(t.id, 2);
+            steer = f2 ? flowSteer(this.host.nav(), world, f2, z.x, z.y, NAV_CLASS_RADIUS[2]) : null;
+          }
           if (steer) return toward(steer.x, steer.y, s);
           // No field yet / unreachable: plan an A* path to the last known position.
           if (!z.path || Math.hypot(z.pathGoalX - t.x, z.pathGoalY - t.y) > 120) this.planPath(z, t.x, t.y);

@@ -41,7 +41,7 @@ export function PveHud() {
         : null;
 
   return (
-    <div className="pve-hud" data-testid="pve-hud">
+    <div className={`pve-hud ${h.fadeLeft ? "is-fade-left" : ""}`} data-testid="pve-hud">
       <section className="pve-objective hud-box" aria-label="Objective" data-testid="pve-objective">
         <header>
           <span className="pve-objective__mission">{h.missionName}</span>
