@@ -69,6 +69,8 @@ export interface PveHudState {
     reviver: string;
     selfReviveSec: number | null;
     dead: boolean;
+    /** Joined the run in progress (never went down): waits for the next checkpoint. */
+    late: boolean;
   } | null;
   prompt: { text: string; progress: number; blocked?: boolean } | null;
   marker: ScreenMarker | null;
@@ -277,6 +279,7 @@ export const pveHud = {
             reviver: "",
             selfReviveSec: solo && me.downed && state.pve.selfRevives > 0 ? null : null,
             dead: !me.alive && state.pve.status === PVE_STATUS.RUNNING,
+            late: !me.alive && me.deaths === 0 && state.pve.status === PVE_STATUS.RUNNING,
           }
         : null,
       boss,

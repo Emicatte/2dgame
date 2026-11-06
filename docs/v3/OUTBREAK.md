@@ -31,9 +31,13 @@ steps and rewards are decided there only. Clients render, interpolate, animate a
   centre: class 1 = bodies up to 16 px (walker, runner, spitter, stalker), class 2 = up to 26 px
   (brute, exploder). A brute never plans through a gap only a walker fits.
 - **Flow fields**: multi-source Dijkstra with Dial's bucket queue (integer costs 10/14,
-  8-connected, no corner cutting). One field per chased player and class; rebuilt only when that
-  player changes cell, at most two rebuilds per tick, round-robin. Measured: 134 × 94 cells
-  (Halvorsen Works) in about 1.4 ms per field (Node in this container).
+  8-connected, no corner cutting). One field per player and per clearance class **of the enemies
+  alive** (a wave of walkers needs one per player; class 2 only with brutes or exploders, class 3
+  only with a boss, which also uses class 2 as its fallback); rebuilt when that player changes
+  cell, at most every 3 ticks per player and two players per tick, round-robin. The build has no
+  allocation or callback per neighbour: 134 × 94 cells (Halvorsen Works) in 0.26–0.45 ms per
+  field (1.3–1.5 ms before that rewrite); a test compares it cell by cell with a plain Dijkstra on
+  every map and class.
 - **Steering along a field**: walk downhill up to 5 cells and head for the farthest cell the
   body reaches in a straight line (three parallel rays at the full radius: solids are ≥ 24 px
   thick, so none slips between the rays).
@@ -65,7 +69,8 @@ Stunned, Dead.
   lighter ones). Enemies never push players (no client misprediction from crowds); attacks do
   (knockback goes through reconciliation like run-overs).
 - **Stuck handling**: no progress for 2 s → repath and jitter. Wave enemies that stayed more
-  than 1200 px from every player for 22 s are culled (waves always end).
+  than 1200 px from every player for 22 s are culled (waves always end). A boss is never culled:
+  outrunning it brings it back into play at a valid spawn out of sight, at full strength.
 
 ### Telegraphed attacks
 
@@ -89,7 +94,8 @@ the radius from the centre) deal ×1.5 and show as critical.
 Bosses are data: health thresholds split the fight into phases, each with its own attack set,
 speed and windup multiplier (windups get shorter, never disappear). The boss picks the first
 ready attack whose distance band fits; attacks have per-attack cooldowns; a phase transition is
-a roar (shove, no damage; the boss takes 10 % damage meanwhile).
+a roar (shove within 230 px, no damage; the boss takes 10 % damage meanwhile). The roar's reach
+is synchronized as its telegraph radius and drawn as a ring.
 
 | Phase | Health | Attacks (windup) | Changes |
 |---|---|---|---|
@@ -112,7 +118,10 @@ kind, windup length and radius. It leads every tenth Survival wave; the wave end
   player. Specials are spread through the queue, never front-loaded.
 - Batches every `1.8 s × squad pace × difficulty pace`, `1 + fronts + players/2` enemies per
   batch, each from a different zone of the `fronts` (1 for one player, 3 for four).
-- Simultaneous cap: squad table × difficulty density, never above 48 (performance budget).
+- Simultaneous cap: squad table × difficulty density, never above 48 (performance budget; boss
+  summons count too). Placed and ambient enemies count towards the cap but are never culled, so a
+  wave always keeps a minimum presence of `2 + fronts` enemies (within the hard cap of 48):
+  they cannot starve it.
 - Valid spawns: a cell the body fits, at least 480 px from every player and out of their line of
   sight unless 1050 px away, not on another enemy; mission zones first, then generic candidates.
 - Termination: stragglers culled (above); after `45 s + 2.5 s × enemies` the survivors are
@@ -120,12 +129,15 @@ kind, windup length and radius. It leads every tenth Survival wave; the wave end
 
 Squad scaling (health grows only a little; pressure comes from numbers, pace and directions):
 
-| Players | Density | Max alive | Pace | Enemy HP | Specials | Supplies | Fronts |
-|---|---|---|---|---|---|---|---|
-| 1 | 1 | 18 | 1 | 1 | +0 | 1 | 1 |
-| 2 | 1.55 | 26 | 0.82 | 1 | +0.04 | 1.3 | 2 |
-| 3 | 2.05 | 34 | 0.7 | 1.05 | +0.08 | 1.6 | 2 |
-| 4 | 2.5 | 42 | 0.62 | 1.1 | +0.12 | 1.9 | 3 |
+| Players | Density | Max alive | Pace | Enemy HP | Specials | Fronts |
+|---|---|---|---|---|---|---|
+| 1 | 1 | 18 | 1 | 1 | +0 | 1 |
+| 2 | 1.55 | 26 | 0.82 | 1 | +0.04 | 2 |
+| 3 | 2.05 | 34 | 0.7 | 1.05 | +0.08 | 2 |
+| 4 | 2.5 | 42 | 0.62 | 1.1 | +0.12 | 3 |
+
+Loot needs no squad factor of its own: drops are per kill, and kills already grow with the
+squad's density; supply crates refill every player once.
 
 Difficulty: Recruit (damage ×0.7, HP ×0.85, density ×0.8, bleed-out 40 s, 2 solo self-revives),
 Veteran (×1, 30 s, 1), Nightmare (damage ×1.35, HP ×1.2, density ×1.25, bleed-out 20 s, none).
@@ -141,17 +153,28 @@ Facility (with its vehicles).
 - All humans are on one side (team 1); shots pass through teammates. No practice targets.
 - **Downed** instead of dead: crawl at 28 % speed, cannot fire, reload or switch; hits while
   downed shorten the bleed-out. A teammate holds E within 60 px for 3.2 s (a 0.35 s release
-  resets it) → back up with 40 HP (Veteran) and 1.5 s of protection.
+  resets it) → back up with 40 HP (Veteran) and 1.5 s of protection. One reviver at a time: a
+  second teammate holding E does not reset the first one's progress.
 - **Solo**: one self-revive on Veteran (two on Recruit, none on Nightmare), 6 s after going down.
+  It applies to the last player of a squad too (a teammate left while they were down), and while
+  it is pending hits shorten the bleed-out but cannot end it first.
 - Bled-out players return at the next checkpoint (mission step completed, wave cleared), next to
-  a standing teammate or at the step's checkpoint.
-- **Mission failed** when nobody is standing for 1.5 s (a pending self-revive keeps the run).
+  a standing teammate or at the step's checkpoint. **Players who join a run in progress** enter
+  the same way ("Joining the squad"): leaving and joining again under a new seat is not a revive.
+- **Mission failed** when nobody is standing for 1.5 s (a pending self-revive keeps the run). A
+  standing player whose connection dropped keeps their seat (20 s) and still counts, while
+  enemies ignore them: a brief disconnect does not fail the run.
+- Co-op rooms are 1–4 players: a lobby with more humans cannot switch to a co-op mode, and length,
+  score limit and room size settings do not apply (dedicated server and host mode alike).
+- The run's clock starts at the first live tick, after the countdown (opening grace, run times).
 - Holds (revive, generator, keycard, gate panel, supply crates) advance by input frames
   (1/60 s), so a low frame rate or bursty link neither slows nor speeds them.
-- Loot: enemies drop ammo (7 %) and health (3.5 %) × supply factor; supply crates refill
+- Loot: enemies drop ammo (7 %) and health (3.5 %) × the difficulty's supply factor; supply crates refill
   ammo and health once per player.
 - Vehicles: enemies attack the hull of the vehicle their target sits in; vehicles plough through
-  enemies (credited to the driver), a brute dents the hull; wreck explosions hurt enemies.
+  enemies (credited to the driver), a brute dents the hull; wreck explosions hurt enemies. One ram
+  per enemy per contact (the 0.6 s cooldown of run-overs in PvP), although contacts are checked
+  for every applied input frame.
 
 ## 6. First Contact (Halvorsen Works)
 
@@ -184,22 +207,32 @@ All additions use the existing channels (state patches, event batch per tick):
   `proj` / `projx` (acid or lobbed debris: flight and landing; debris carries its landing point
   and radius `tx`/`ty`/`r`, drawn as a warning circle during the flight), `boom`,
   `down`, `revive`, `bleed`, `pve` (step, wave, clear, hint, door, prop, supply, bossPhase,
-  complete, failed). A player hit by an enemy gets the usual `hit` with `p = "z:<id>"`.
+  complete, failed). A player hit by an enemy gets the usual `hit` with `p = "z:<id>"`, downed
+  or not (the damage direction indicator uses it).
 - Settings: `mission`, `difficulty` (host only, validated: unknown missions are refused).
 - Results: `ResultsMessage.pve` (squad summary) and `PersonalResult.record.pve` with a `runId`.
   The receiving browser records a run once per id; PvP stats (kills, deaths, wins, career) are
-  not touched by PvE.
+  not touched by PvE, including when a player leaves a run in the middle (the dedicated server
+  records leavers of PvP matches only).
+- Back in the lobby (no PvE controller), the synced `downed`, `bleed`, `revive` and `revives`
+  are cleared: the client feeds `downed` into its prediction in every mode.
 - Measured: 40 moving enemies ≈ 288 B per tick, 5.6 KB/s per client.
 
 ## 8. Budgets and measurements (this container, Node 22, not real devices)
 
 | Metric | Budget | Measured |
 |---|---|---|
-| Authoritative tick, 4 players, 40 enemies chasing | p99 < 25 ms | avg 0.47 ms, p99 3.5 ms |
-| Same, 10 / 20 / 30 / 40 / 48 enemies | p99 < 25 ms | avg 0.34–0.48 ms, p99 1.2–7.1 ms (first runs include JIT warm-up) |
-| Flow field, whole mission map | < 25 ms | 1.4 ms |
+| Authoritative tick, 4 players **strafing**, 40 enemies chasing (fields rebuilt ≈ 1.3 per tick) | p99 < 25 ms | avg 1.3–2.2 ms, p99 2.9–5.7 ms (the higher figures are first runs with JIT warm-up) |
+| Same with a boss alive (class-3 fields too) | p99 < 25 ms | avg 1.5–1.6 ms, p99 3.0–3.8 ms |
+| Same, 10 / 20 / 30 / 40 / 48 enemies | p99 < 25 ms | avg 1.06–1.31 ms, p99 2.4–3.9 ms |
+| Flow field, whole mission map | < 25 ms | 0.26–0.45 ms per class |
 | Downstream per client, 40 moving enemies | < 20 KB/s | 5.6 KB/s |
 | Simultaneous enemies | ≤ 48 | enforced |
+
+Earlier figures (avg 0.47 ms, p99 3.5 ms) were measured with the players standing still, so the
+fields were built once and cached; the independent review found it. With moving players the old
+code cost avg 4.8 ms, p99 12.5 ms: fixed by building only the classes in use and by the faster
+field build above.
 
 Not measured here: rendering cost on real GPUs (the test browser renders in software, its FPS is
 not representative), WebRTC on school networks, a full First Contact run by human players.

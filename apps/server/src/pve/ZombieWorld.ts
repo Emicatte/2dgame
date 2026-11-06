@@ -20,6 +20,7 @@ import {
   findPath,
   flowSteer,
   hasLineOfSight,
+  MAX_ZOMBIES,
   NAV_CLASS_RADIUS,
   NAV_INF,
   type NavClass,
@@ -138,6 +139,8 @@ export interface Zombie {
   lungeVx: number;
   lungeVy: number;
   lungeUntil: number;
+  /** Tick until which a vehicle cannot ram this enemy again (one hit per contact, as in PvP). */
+  ramUntil: number;
   lungeHits: Set<string>;
   homeX: number;
   homeY: number;
@@ -196,6 +199,8 @@ export interface SpawnOptions {
 }
 
 const FIELD_BUILDS_PER_TICK = 2;
+/** Minimum ticks between two rebuilds of one player's fields while they move. */
+const FIELD_MIN_TICKS = 3;
 const ASTAR_PER_TICK = 4;
 const SEPARATION_CELL = 64;
 const MELEE_GRACE = 14;
@@ -203,6 +208,9 @@ const ALERT_SEC = 0.55;
 const LOOK_AROUND_SEC = 2;
 const STUCK_SEC = 2;
 const STRAGGLER_SEC = 22;
+/** Phase-transition roar: reach (sent as the telegraph radius) and push. */
+const ROAR_RADIUS = 230;
+const ROAR_KNOCKBACK = 460;
 
 export class ZombieWorld {
   readonly zombies = new Map<string, Zombie>();
@@ -295,6 +303,7 @@ export class ZombieWorld {
       lungeVx: 0,
       lungeVy: 0,
       lungeUntil: 0,
+      ramUntil: 0,
       lungeHits: new Set(),
       homeX: x,
       homeY: y,
@@ -367,14 +376,18 @@ export class ZombieWorld {
       if (cell !== f.cell) f.dirty = true;
     }
     for (const id of [...this.targetFields.keys()]) if (!live.has(id)) this.targetFields.delete(id);
+    // Only the clearance classes of living enemies (a boss also uses the class-2 field as a
+    // fallback): a wave of walkers needs one field per player, not three.
+    const classes = this.classesInUse();
+    if (classes.length === 0) return;
     const ids = [...this.targetFields.keys()];
     let builds = 0;
     for (let k = 0; k < ids.length && builds < FIELD_BUILDS_PER_TICK; k++) {
       const id = ids[(this.fieldCursor + k) % ids.length]!;
       const f = this.targetFields.get(id)!;
-      if (!f.dirty || this.host.tick - f.builtTick < 3) continue;
+      const missing = classes.some((c) => !f.fields[c]);
+      if (!missing && (!f.dirty || this.host.tick - f.builtTick < FIELD_MIN_TICKS)) continue;
       const a = actors.find((x) => x.id === id)!;
-      const classes: NavClass[] = this.hasHuge() ? [1, 2, 3] : [1, 2];
       for (const cls of classes) {
         const src = nearestWalkable(nav, a.x, a.y, cls, 4);
         f.fields[cls] = buildFlowField(nav, cls, src >= 0 ? [src] : [], NAV_INF, f.fields[cls] ?? undefined);
@@ -388,9 +401,13 @@ export class ZombieWorld {
     this.fieldCursor = ids.length > 0 ? (this.fieldCursor + 1) % ids.length : 0;
   }
 
-  private hasHuge(): boolean {
-    for (const z of this.zombies.values()) if (!z.dead && z.cls === 3) return true;
-    return false;
+  private classesInUse(): NavClass[] {
+    let mask = 0;
+    for (const z of this.zombies.values()) if (!z.dead) mask |= 1 << z.cls;
+    if (mask & (1 << 3)) mask |= 1 << 2;
+    const out: NavClass[] = [];
+    for (const c of [1, 2, 3] as const) if (mask & (1 << c)) out.push(c);
+    return out;
   }
 
   private fieldFor(targetId: string, cls: NavClass): FlowField | null {
@@ -814,7 +831,7 @@ export class ZombieWorld {
     switch (def.kind) {
       case "slam":
       case "roar": {
-        const radius = def.kind === "roar" ? 230 : (def.radius ?? 160);
+        const radius = def.radius ?? (def.kind === "roar" ? ROAR_RADIUS : 160);
         const edge = def.edgeFactor ?? 0.5;
         this.host.emit({ t: "zatk", z: z.id, k: def.kind, x: Math.round(z.x), y: Math.round(z.y) });
         for (const a of actors) {
@@ -822,7 +839,7 @@ export class ZombieWorld {
           const d = Math.hypot(a.x - z.x, a.y - z.y);
           if (d > radius + PLAYER.radius) continue;
           const ang = Math.atan2(a.y - z.y, a.x - z.x);
-          const k = def.kind === "roar" ? 460 : (def.knockback ?? 0);
+          const k = def.knockback ?? 0;
           const knock = { x: Math.cos(ang) * k, y: Math.sin(ang) * k };
           // The roar only pushes (a breather between phases).
           const amount = def.kind === "roar" ? 0 : dmg * (1 - (1 - edge) * clamp(d / radius, 0, 1));
@@ -874,7 +891,9 @@ export class ZombieWorld {
         this.host.emit({ t: "zatk", z: z.id, k: "summon", x: Math.round(z.x), y: Math.round(z.y) });
         if (!sm) return;
         const nav = this.host.nav();
-        for (let i = 0; i < sm.count; i++) {
+        // Summons respect the global enemy cap like every other spawn.
+        const n = Math.min(sm.count, Math.max(0, MAX_ZOMBIES - this.alive));
+        for (let i = 0; i < n; i++) {
           const a = (i / sm.count) * Math.PI * 2;
           const at = randomWalkableNear(nav, 1, z.x + Math.cos(a) * 120, z.y + Math.sin(a) * 120, 60, () =>
             this.host.rng(),
@@ -1018,6 +1037,8 @@ export class ZombieWorld {
           windupSec: z.def.boss.transitionSec,
           recoverSec: 0.3,
           damage: 0,
+          radius: ROAR_RADIUS,
+          knockback: ROAR_KNOCKBACK,
         });
         z.curId = "";
       }
@@ -1069,7 +1090,8 @@ export class ZombieWorld {
   ): { vx: number; vy: number; face: number | null } {
     const tick = this.host.tick;
     const world = this.host.world();
-    const speed = z.def.speed * z.speedMult * (z.enraged ? 1.25 : 1);
+    const phaseMult = z.def.boss ? (z.def.boss.phases[z.phase]?.speedMult ?? 1) : 1;
+    const speed = z.def.speed * z.speedMult * phaseMult * (z.enraged ? 1.25 : 1);
     const toward = (tx: number, ty: number, s: number) => {
       const dx = tx - z.x;
       const dy = ty - z.y;
@@ -1362,6 +1384,19 @@ export class ZombieWorld {
       z.progressTick = tick;
       if (z.state === AI.WANDER) this.setState(z, AI.IDLE, 1);
     }
+  }
+
+  /** Moves an enemy (a boss left far behind) and resets its navigation and progress timers. */
+  relocate(z: Zombie, x: number, y: number): void {
+    z.x = x;
+    z.y = y;
+    z.vx = 0;
+    z.vy = 0;
+    z.path = null;
+    z.progressX = x;
+    z.progressY = y;
+    z.progressTick = this.host.tick;
+    z.lastNearTick = this.host.tick;
   }
 
   /** Wave safety: enemies that stayed far from every player for a long time. */

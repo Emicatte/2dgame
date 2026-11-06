@@ -158,10 +158,15 @@ export class WaveDirector {
     const tick = this.host.tick;
     const cap = Math.min(MAX_ZOMBIES, Math.round(squad.maxAlive * diff.density));
     if (r.queue.length > 0 && tick >= r.nextBatchTick) {
+      // Placed and ambient enemies count towards the cap but are never culled, so they must not
+      // starve a wave: the wave always keeps a minimum presence (within the hard cap).
+      let waveAlive = 0;
+      for (const z of this.zw.zombies.values()) if (!z.dead && z.wave === r.number) waveAlive++;
+      const floor = Math.min(MAX_ZOMBIES - this.zw.alive, Math.max(0, 2 + squad.fronts - waveAlive));
       const batch = Math.min(
         r.queue.length,
         1 + squad.fronts + Math.floor(players / 2),
-        Math.max(0, cap - this.zw.alive),
+        Math.max(0, cap - this.zw.alive, floor),
       );
       // Each front is a different zone: four players get pressure from several directions.
       const order = [...r.zones].sort(() => this.host.rng() - 0.5);
@@ -188,6 +193,12 @@ export class WaveDirector {
     }
     for (const z of this.zw.stragglers()) {
       if (z.wave !== r.number) continue;
+      if (z.def.boss) {
+        // A boss is never deleted for being outrun: it comes back into play out of sight instead.
+        const at = this.findSpawn(z.def.kind, r.zones);
+        if (at) this.zw.relocate(z, at.x, at.y);
+        continue;
+      }
       this.zw.remove(z);
       r.culled++;
     }

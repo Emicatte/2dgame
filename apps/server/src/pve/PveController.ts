@@ -20,6 +20,7 @@ import {
   type PveResult,
   type PveSquadRow,
   pveWorlds,
+  RAM_COOLDOWN_SEC,
   type Rect,
   randomWalkableNear,
   type SquadScale,
@@ -134,6 +135,8 @@ export class PveController implements ZombieHost {
   selfRevives = 0;
   kills = 0;
   startTick = 0;
+  /** reset() runs when the countdown starts; the run's clocks start at the first live tick. */
+  private live = false;
   endTick = 0;
   /** Waves cleared (Survival) / steps completed (Outbreak). */
   progress = 0;
@@ -232,7 +235,8 @@ export class PveController implements ZombieHost {
       p.pve.bleedUntil -= Math.round(dmg * DOWNED.bleedPerDamage * this.tickRate);
       this.emit({
         t: "hit",
-        p: from?.id ?? "",
+        // Same attacker id format as hits on a standing player, so the damage direction shows.
+        p: from ? `z:${from.id}` : "",
         v: p.id,
         dmg: Math.max(1, Math.round(dmg)),
         x: Math.round(x),
@@ -350,6 +354,7 @@ export class PveController implements ZombieHost {
     this.checkpoint = null;
     this.wipeSince = 0;
     this.startTick = this.sim.tick;
+    this.live = false;
     this.endTick = 0;
     this.bossId = "";
     this.selfRevives = this.diff.selfRevives;
@@ -372,6 +377,17 @@ export class PveController implements ZombieHost {
   /** One live tick (called by the simulation after the players' inputs). */
   step(): void {
     if (this.status !== PVE_STATUS.RUNNING) return;
+    if (!this.live) {
+      // The countdown froze the run: move its clocks so the opening grace and the run time
+      // (personal bests) start now, not when the countdown began.
+      this.live = true;
+      const d = this.sim.tick - this.startTick;
+      if (d > 0) {
+        this.startTick += d;
+        if (this.nextWaveTick > 0) this.nextWaveTick += d;
+        this.nextAmbientTick += d;
+      }
+    }
     this.zw.hpMult = this.squad.enemyHp;
     this.updatePlayers();
     if (this.mission) this.updateMission();
@@ -420,6 +436,18 @@ export class PveController implements ZombieHost {
     return true;
   }
 
+  /**
+   * A player who joins a run in progress enters at the next checkpoint, like a bled-out teammate:
+   * leaving and joining again under a new seat must not be a free revive.
+   */
+  lateJoin(p: ServerPlayer): void {
+    this.sim.leaveVehicle(p, true);
+    p.alive = false;
+    p.hp = 0;
+    p.respawnTick = 0;
+    p.pve = emptyPvePlayer();
+  }
+
   private revive(p: ServerPlayer, by: ServerPlayer | null): void {
     p.pve.downed = false;
     p.pve.reviveProg = 0;
@@ -445,6 +473,14 @@ export class PveController implements ZombieHost {
     return p.alive && p.connected && !p.pve.downed;
   }
 
+  /**
+   * Still in the fight for the wipe check: a standing player whose link dropped keeps their seat
+   * (and enemies ignore them) until the seat expires, so a brief disconnect does not fail the run.
+   */
+  private holdsOn(p: ServerPlayer): boolean {
+    return p.alive && !p.pve.downed;
+  }
+
   private updatePlayers(): void {
     const tick = this.sim.tick;
     const players = [...this.sim.players.values()];
@@ -465,6 +501,9 @@ export class PveController implements ZombieHost {
       if (!best) continue;
       busy.add(r.id);
       const grace = this.secTicks(DOWNED.reviveGraceSec);
+      // One reviver at a time: a second teammate holding E does not reset the first one's progress.
+      const other = best.pve.reviver;
+      if (other && other !== r.id && tick - best.pve.lastReviveTick <= grace) continue;
       if (best.pve.reviver !== r.id || tick - best.pve.lastReviveTick > grace) best.pve.reviveProg = 0;
       best.pve.reviver = r.id;
       best.pve.lastReviveTick = tick;
@@ -477,11 +516,17 @@ export class PveController implements ZombieHost {
         p.pve.reviver = "";
         p.pve.reviveProg = 0;
       }
-      if (p.pve.selfReviveAt > 0 && tick >= p.pve.selfReviveAt && this.selfRevives > 0) {
+      // Self-revive is decided while downed, not only when going down: a squad that shrinks to one
+      // player (a teammate left) gives the last one the solo rule.
+      if (p.pve.selfReviveAt === 0 && this.selfRevives > 0 && this.squadSize === 1 && p.connected)
+        p.pve.selfReviveAt = tick + this.secTicks(DOWNED.selfReviveSec);
+      const selfPending = p.pve.selfReviveAt > 0 && this.selfRevives > 0;
+      if (selfPending && tick >= p.pve.selfReviveAt) {
         this.revive(p, null);
         continue;
       }
-      if (tick >= p.pve.bleedUntil) this.bleedOut(p);
+      // A pending self-revive is a promise: hits shorten the bleed-out, but not below it.
+      if (tick >= p.pve.bleedUntil && !selfPending) this.bleedOut(p);
     }
     this.updateProps(players, busy);
   }
@@ -489,7 +534,7 @@ export class PveController implements ZombieHost {
   private checkWipe(): void {
     const players = [...this.sim.players.values()];
     if (players.length === 0) return;
-    const anyStanding = players.some((p) => this.standing(p));
+    const anyStanding = players.some((p) => this.holdsOn(p));
     // A pending self-revive keeps the run alive.
     const pendingSelf = this.selfRevives > 0 && players.some((p) => p.pve.downed && p.pve.selfReviveAt > 0);
     if (anyStanding || pendingSelf) {
@@ -909,6 +954,9 @@ export class PveController implements ZombieHost {
       z.y = c.y + ny * (z.def.radius + 1);
       const closing = v.sim.vx * nx + v.sim.vy * ny;
       if (closing < v.def.ramMinSpeed || speed < v.def.ramMinSpeed) continue;
+      // Contacts run once per applied input frame: one ram per enemy per cooldown, as for players.
+      if (this.sim.tick < z.ramUntil) continue;
+      z.ramUntil = this.sim.tick + Math.max(1, this.secTicks(RAM_COOLDOWN_SEC));
       const dmg = ((closing - v.def.ramMinSpeed) * v.def.ramFactor * 3) / Math.sqrt(z.def.mass);
       z.vx += nx * closing * 0.6;
       z.vy += ny * closing * 0.6;

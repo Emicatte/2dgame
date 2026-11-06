@@ -45,7 +45,7 @@ export class MatchRules {
     return isPveMode(this.state.mode);
   }
 
-  private humans(): ServerPlayer[] {
+  humans(): ServerPlayer[] {
     return [...this.sim.players.values()].filter((p) => !this.isBot(p.id));
   }
 

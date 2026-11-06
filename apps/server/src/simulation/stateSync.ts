@@ -135,6 +135,13 @@ export function syncPve(state: MatchState, sim: GameSimulation): void {
     if (state.zombies.size > 0) state.zombies.clear();
     if (state.hazards.size > 0) state.hazards.clear();
     if (state.props.size > 0) state.props.clear();
+    // The downed flag drives client prediction in every mode: never let it outlive the run.
+    for (const s of state.players.values()) {
+      if (s.downed) s.downed = false;
+      if (s.bleed !== 0) s.bleed = 0;
+      if (s.revive !== 0) s.revive = 0;
+      if (s.revives !== 0) s.revives = 0;
+    }
     return;
   }
   const zs = state.zombies;

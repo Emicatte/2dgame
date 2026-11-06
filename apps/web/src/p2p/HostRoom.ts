@@ -5,6 +5,7 @@ import {
   hashString,
   type InputBatch,
   inputBatchSchema,
+  isPveMode,
   isSkinUnlocked,
   isVehicleKind,
   kickSchema,
@@ -19,6 +20,7 @@ import {
   type PersonalResult,
   PickupState,
   PlayerState,
+  PVE_SQUAD,
   type ResultsMessage,
   readySchema,
   S2C,
@@ -410,7 +412,11 @@ export class HostRoom {
     this.bindLink(seat, link);
     link.send(encodeFrame(["welcome", { sessionId: id, token: seat.token, code: this.opts.code }]));
     const p = this.sim.players.get(id);
-    if (p && (this.state.phase === "countdown" || this.state.phase === "playing")) this.sim.spawnLater(p, 1);
+    if (p && this.state.phase === "playing" && this.sim.pve) {
+      this.sim.pve.lateJoin(p);
+      this.notice("You join the squad at the next checkpoint", "info", id);
+    } else if (p && (this.state.phase === "countdown" || this.state.phase === "playing"))
+      this.sim.spawnLater(p, 1);
     this.notice(`${hello.name} joined`, "info", id);
     this.syncPracticeTargets();
   }
@@ -612,6 +618,15 @@ export class HostRoom {
 
   private handleSettings(id: string, s: z.infer<typeof settingsSchema>) {
     if (id !== this.sessionId || this.state.phase !== "lobby") return;
+    if (
+      s.mode &&
+      s.mode !== this.state.mode &&
+      isPveMode(s.mode) &&
+      this.rules.humans().length > PVE_SQUAD.max
+    ) {
+      this.notice(`Co-op is for up to ${PVE_SQUAD.max} players`, "warn", undefined, id);
+      return;
+    }
     // Mode first: it resets length, score limit and size to the mode's defaults.
     if (s.mode && s.mode !== this.state.mode) {
       this.rules.setMode(s.mode);

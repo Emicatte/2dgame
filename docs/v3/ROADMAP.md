@@ -30,7 +30,7 @@ input sequence. Both fixes are in the first commit of the branch.
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Audit, baseline, fixes | ✅ |
-| 1 | Combat Visual Overhaul: crosshair, aim, shot effects, damage feedback, weapon animations, quality levels | see "Phase 1" below |
+| 1 | Combat Visual Overhaul: crosshair, aim, shot effects, damage feedback, weapon animations, quality levels | ✅ (see "Phase 1 results") |
 | 2 | Enemy AI architecture, navigation, first enemy types | ✅ (all six types) |
 | 3 | Wave Director, first waves, Survival | ✅ |
 | 4 | Co-op: shared missions, downed/revive, failure, two-browser test | ✅ |
@@ -60,8 +60,8 @@ input sequence. Both fixes are in the first commit of the branch.
 | Vehicles vs enemies | car ploughs through a walker; a walker damages the hull of its target's car | pass |
 | Rewards once per run | `pveProgress.test.ts`: a repeated run id changes nothing; stored data validated | pass |
 | Host mode: sync, revive across the link, results | `hostmode.pve.test.ts` | pass |
-| **Two independent browsers complete a co-op objective** | `tests/e2e-p2p/outbreak.spec.ts` (two Chrome processes, WebRTC): both reach the hall (objective 1), host restores power while the guest covers (objective 2); both screens show the mission advancing | pass (2.9 min in software rendering) |
-| No PvP regressions | full unit/integration suites; PvP E2E (see TESTING) | see below |
+| **Two independent browsers complete a co-op objective** | `tests/e2e-p2p/outbreak.spec.ts` (two Chrome processes, WebRTC): both reach the hall (objective 1), host restores power while the guest covers (objective 2); both screens show the mission advancing | pass (2.3–2.9 min in software rendering; rerun after the Phase 1 merge) |
+| No PvP regressions | full unit/integration suites; host-mode E2E: TDM (invite, reload, host close) and vehicles (guest drives, host shoots from the window, fight on foot) | pass; the vehicle spec first failed here on this branch **and on the untouched v0.4.0 tree** because of the test itself (empty rifle after the ride, car between the two players): fixed in the spec, see TESTING "Results 0.5.0" |
 | Performance budget | tick cost by enemy count, bandwidth | see OUTBREAK.md §8 |
 | Boss changes phase, can be defeated, telegraphs every attack | `pve.test.ts` "boss" (phases at 66/33 % with roar, defeat, slam damage only after its windup, debris aimed at the player, summons, Survival wave 10 ends only when it falls, ranged fallback on a cramped map); boss E2E scenario with screenshots | pass |
 
@@ -71,8 +71,53 @@ once; a "fat" line-of-sight check that let paths graze corners; holds advancing 
 
 ## Phase 1 results
 
-Filled in after the Combat Visual Overhaul branch is merged (see the commit message and
-`docs/TESTING.md`).
+Built on a separate branch (`combat-visuals`, commit `f1f7b57`) and merged into `outbreak` in
+`45a4513`. Client-only: no simulation, netcode or gameplay value changed, so PvP balance and the
+server are untouched.
+
+| Criterion | Evidence | Result |
+|---|---|---|
+| Crosshair styles dot / cross / circle / tactical / minimal; size, colour, opacity, thickness, outline, dynamic | `combat.crosshair.test.ts` (pure model, 20 tests); settings panel with a live preview drawn by the same geometry; screenshots of every style | pass |
+| The crosshair shows the real spread | the gap is the weapon's current spread cone (`currentSpreadDeg`) plus a cosmetic kick, never smaller than the cone | pass |
+| Crosshair aligned with the server trajectory | **bug found and fixed**: the camera zoom scaled the screen-space crosshair about the screen centre, drawing it up to 80 px off the cursor (and off the shot ray) at the edge of a 1280×720 window; verified by screenshot before and after, test on the transform | pass |
+| Weapon, tracer and ray agree | weapon sprite on the aim axis (3 px offset removed); tracers start on the real ray at the point nearest the drawn barrel tip (`combat.weapons.test.ts`) | pass, sub-step residue documented in `combat/aim.ts` |
+| Shot feedback: tracers per family, muzzle flash variants, impacts by surface (metal sparks, masonry dust and chips, map-edge dust), hull sparks | `combat.surfaces.test.ts` classifies impacts with real hitscan on real maps (6 tests); screenshots | pass |
+| Hit / crit / armour / kill markers, merged damage numbers | `registerHit(kind)` API used by PvP and by enemy hits in Outbreak | pass |
+| Weapon animations per category (recoil, shotgun pump, sniper bolt with casing, reload dip, swap raise) | `combat.weapons.test.ts` (15 tests); screenshots | pass |
+| Quality Low / Medium / High, particle caps, pooling | `combat.budget.test.ts` (11 tests: one cap table, coalescing of impacts per frame, allocation-free bursts); live counts in the debug overlay | pass |
+| Old settings keep working | `settings.migrate.test.ts` (4 tests: validated, clamped, legacy values) | pass |
+| No PvP regressions after the merge | full suites; PvP host-mode E2E (TDM, invite link, reload, host close) | pass |
+
+61 new tests in 5 files. Not verifiable here: how the effects look and cost on a real GPU (the
+budgets are measured in software rendering only).
+
+## Independent review of the PvE code
+
+A separate agent, which had not written the code, reviewed the server-side PvE (read-only) and
+reproduced each finding with scripts against the real `GameSimulation` (and, for one, the real
+dedicated server). All 13 findings were confirmed and fixed; each fix has a regression test that
+fails on the code before the fix and passes after it (checked by reverting the sources).
+
+| # | Finding | Severity | Fix | Test |
+|---|---|---|---|---|
+| 1 | `downed` stayed set in the synced state after a failed run, so the next PvP match predicted a crawl and no shots | high | cleared when no PvE controller runs | `pve.test` + host-mode test (wipe → lobby → Deathmatch) |
+| 2 | Two teammates holding E reset each other's revive | medium-high | one reviver at a time | `pve.test` |
+| 3 | Dedicated server recorded PvE leavers as PvP matches (zombie kills into PvP stats and XP) | medium | leavers recorded for PvP only | `pve.integration.test` (real sockets) |
+| 4 | The boss could be deleted by outrunning it | medium | bosses are relocated, never culled | `pve.test` |
+| 5 | A brief disconnect failed the run in 1.5 s | medium | a seated, standing player still counts | `pve.test` |
+| 6 | Leaving and rejoining was a free revive | low-medium | mid-run joiners enter at the next checkpoint | `pve.test` + host-mode test |
+| 7 | Placed / ambient enemies at the cap could starve a wave | low-medium | minimum wave presence within the hard cap | `pve.test` |
+| 8 | A vehicle rammed an enemy once per input frame (≈ 2.5× damage) | low-medium | per-enemy ram cooldown | `pve.test` |
+| 9 | Last downed player of a shrinking squad got no self-revive; hits could beat a pending self-revive | low | decided while downed; bleed-out waits for it | `pve.test` (2) |
+| 10 | Code vs doc: boss phase speed unused, squad supply factor unused, summons above 48, downed hits without attacker id, roar radius 0 | low | applied / removed from the doc / capped / fixed / synced | `pve.test`: summon cap, roar radius, attacker id (the phase speed multiplier has no test of its own) |
+| 11 | Tick cost measured with standing players (fields cached): 4.8 ms avg, p99 12.5 ms with moving players | low | fields only for classes in use, allocation-free build (3–4× faster) | perf tests now strafe; flow fields vs reference Dijkstra on every map |
+| 12 | Dedicated server applied room size and length to co-op rooms | low | ignored in PvE; co-op refused with more than 4 humans | `pve.integration.test` |
+| 13 | Countdown used up Survival's start grace and counted in run times | low | run clocks start at the first live tick | `pve.test` |
+
+The reviewer also confirmed as sound: settings validation against malicious guests, holds that
+cannot be sped up by input bursts, identical door worlds on authority and clients, one kill
+credit per enemy (chains, same-tick double hits), PvP paths with no PvE controller, reachability
+of every spawn zone under every door state.
 
 ## Not verifiable here
 

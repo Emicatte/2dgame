@@ -160,4 +160,58 @@ describe("host mode: Outbreak co-op", () => {
     expect(host.state.phase).toBe("lobby");
     expect(host.state.zombies.size).toBe(0);
   }, 30_000);
+
+  it("rejoining under a new seat is no free revive; after a wipe the next PvP match has nobody downed", async () => {
+    const host = new HostRoom({ code: "OUTB2", map: "industrial", host: HOST, headless: true });
+    rooms.push(host);
+    host.send(C2S.SETTINGS, { mode: "survival" });
+    await ticks(host, 1);
+    const g1 = await join(host, 2);
+    g1.send(C2S.READY, { ready: true });
+    await ticks(host, 3);
+    host.send(C2S.START, {});
+    await ticks(host, 5 * 20 + 2);
+    expect(host.state.phase).toBe("playing");
+    const sim = simOf(host);
+    const p1 = sim.players.get(g1.sessionId)!;
+    sim.pve!.hurtPlayer(g1.sessionId, 999, null, p1.sim.x, p1.sim.y);
+    await ticks(host, 2);
+    expect(p1.pve.downed).toBe(true);
+
+    // The downed guest leaves and comes back as a "new" player.
+    rooms.splice(rooms.indexOf(g1), 1);
+    await g1.leave();
+    await ticks(host, 5);
+    const g2 = await join(host, 3);
+    let gstate: MatchState | null = null;
+    g2.onStateChange((st) => {
+      gstate = st;
+    });
+    await ticks(host, 20 * 3);
+    const p2 = sim.players.get(g2.sessionId)!;
+    expect(p2.alive).toBe(false);
+    expect((gstate as MatchState | null)?.players.get(g2.sessionId)?.alive).toBe(false);
+
+    // The host goes down too: nobody stands, the run fails, back to the lobby.
+    const hp = sim.players.get(host.sessionId)!;
+    hp.protectedUntil = 0;
+    sim.pve!.hurtPlayer(host.sessionId, 999, null, hp.sim.x, hp.sim.y);
+    await ticks(host, 20 * 3);
+    expect(host.state.phase).toBe("results");
+    expect(host.state.players.get(host.sessionId)?.downed).toBe(true);
+    await ticks(host, 15 * 20);
+    expect(host.state.phase).toBe("lobby");
+
+    // Deathmatch next: no stale downed flag reaches the guest's prediction.
+    host.send(C2S.SETTINGS, { mode: "deathmatch" });
+    g2.send(C2S.READY, { ready: true });
+    await ticks(host, 3);
+    host.send(C2S.START, {});
+    await ticks(host, 5 * 20 + 5);
+    expect(host.state.phase).toBe("playing");
+    expect(sim.pve).toBeNull();
+    const g = gstate as MatchState | null;
+    expect(g?.players.get(host.sessionId)?.downed).toBe(false);
+    expect(g?.players.get(g2.sessionId)?.downed).toBe(false);
+  }, 40_000);
 });

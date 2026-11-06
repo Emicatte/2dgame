@@ -166,6 +166,21 @@ test("host mode: the guest drives, the host rides and shoots while moving, then 
   // Out, and a fight on foot: the host shoots the guest.
   expect(await pressUntil(a, async () => !(await hooks(a, (h) => h.mount()))?.vehicle)).toBe(true);
   expect(await pressUntil(b, async () => !(await hooks(b, (h) => h.mount()))?.vehicle)).toBe(true);
+  // At software-rendering frame rates the burst from the window lasts long enough to empty the
+  // rifle and its reserve (seen as 0 / 0 in the HUD): fight with the sidearm, whose reserve is
+  // infinite, so this step measures the fight and not the ammo left over from the ride.
+  await a.keyboard.press("2");
+  // Driver and passenger leave the car on opposite sides, so the car stands between them and
+  // takes every shot: both step out of its shadow, same direction, same time.
+  await Promise.all([hold(a, "d", 900), hold(b, "d", 900)]);
+  const car = await vehicle(a, "dbg-0");
+  const [ha, hb] = await Promise.all([
+    hooks(a, (h) => h.players()).then((l) => l.find((p) => p.id !== bId)!),
+    hooks(a, (h) => h.players()).then((l) => l.find((p) => p.id === bId)!),
+  ]);
+  console.log(
+    `[p2p vehicles] on foot: host ${ha.x.toFixed(0)},${ha.y.toFixed(0)} guest ${hb.x.toFixed(0)},${hb.y.toFixed(0)} car ${car.x.toFixed(0)},${car.y.toFixed(0)}`,
+  );
   const deadline = Date.now() + 25_000;
   let hurt = false;
   while (Date.now() < deadline && !hurt) {

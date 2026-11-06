@@ -26,6 +26,7 @@ import {
   type NoticeMessage,
   PickupState,
   PlayerState,
+  PVE_SQUAD,
   type ResultsMessage,
   type RoomKind,
   type RoomMetadata,
@@ -259,7 +260,10 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
 
     if (!this.state.hostId || !this.state.players.has(this.state.hostId))
       this.state.hostId = client.sessionId;
-    if (this.state.phase === "countdown" || this.state.phase === "playing") this.sim.spawnLater(p, 1);
+    if (this.state.phase === "playing" && this.sim.pve) {
+      this.sim.pve.lateJoin(p);
+      this.notice("You join the squad at the next checkpoint", "info", client);
+    } else if (this.state.phase === "countdown" || this.state.phase === "playing") this.sim.spawnLater(p, 1);
     this.lastInputTick.set(client.sessionId, this.state.tick);
     this.touchActivity();
     this.notice(`${auth.nickname} joined`, "info", client);
@@ -314,7 +318,8 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     this.state.players.delete(client.sessionId);
     this.views.delete(client.sessionId);
     this.lastInputTick.delete(client.sessionId);
-    if (p && this.state.phase === "playing") {
+    // PvE runs are never recorded as PvP matches (zombie kills must not reach PvP stats).
+    if (p && this.state.phase === "playing" && !this.rules.pveMode) {
       const [r] = computeResults([p], {
         tickRate: NET.serverTickRate,
         minParticipationTicks: 1,
@@ -413,6 +418,15 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     if (client.sessionId !== this.state.hostId || this.kind !== "private") return;
     if (this.state.phase !== "lobby") return;
     // Mode first: it resets length, score limit and size to the mode's defaults.
+    if (
+      s.mode &&
+      s.mode !== this.state.mode &&
+      isPveMode(s.mode) &&
+      this.rules.humans().length > PVE_SQUAD.max
+    ) {
+      this.notice(`Co-op is for up to ${PVE_SQUAD.max} players`, "warn", undefined, client);
+      return;
+    }
     if (s.mode && s.mode !== this.state.mode) {
       this.rules.setMode(s.mode);
       this.applyCapacity();
@@ -443,11 +457,14 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
         );
       }
     }
-    if (s.durationSec) this.state.durationSec = s.durationSec;
-    if (s.killLimit) this.state.killLimit = s.killLimit;
-    if (s.maxPlayers && !this.rules.teamMode) {
-      this.state.maxPlayers = s.maxPlayers;
-      this.applyCapacity();
+    // Co-op has no length, score limit or room size to choose (1–4 players, as in host mode).
+    if (!this.rules.pveMode) {
+      if (s.durationSec) this.state.durationSec = s.durationSec;
+      if (s.killLimit) this.state.killLimit = s.killLimit;
+      if (s.maxPlayers && !this.rules.teamMode) {
+        this.state.maxPlayers = s.maxPlayers;
+        this.applyCapacity();
+      }
     }
     this.touchActivity();
     void this.updateMetadata();

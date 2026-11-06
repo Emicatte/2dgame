@@ -29,6 +29,8 @@ export const NAV_INF = 0x3fffffff;
 const ORTHO = 10;
 const DIAG = 14;
 const BUCKETS = DIAG + 1;
+/** Dial's bucket queue, reused by every field build (the simulation is single-threaded). */
+const FIELD_BUCKETS: number[][] = Array.from({ length: BUCKETS }, () => []);
 
 export interface NavGrid {
   cell: number;
@@ -184,13 +186,20 @@ export function buildFlowField(
   into?: FlowField,
 ): FlowField {
   const n = grid.clear.length;
+  const cols = grid.cols;
+  const lastCol = cols - 1;
+  const lastRow = grid.rows - 1;
+  const clear = grid.clear;
   const dist = into && into.dist.length === n ? into.dist : new Int32Array(n);
   dist.fill(NAV_INF);
-  const buckets: number[][] = Array.from({ length: BUCKETS }, () => []);
+  // Built several times per second while players move: no allocation and no callback per
+  // neighbour (this loop is the dominant cost of enemy navigation).
+  const buckets = FIELD_BUCKETS;
+  for (const b of buckets) b.length = 0;
   let pending = 0;
   const srcs: number[] = [];
   for (const s of sources) {
-    if (s < 0 || s >= n || grid.clear[s]! < cls || dist[s] === 0) continue;
+    if (s < 0 || s >= n || clear[s]! < cls || dist[s] === 0) continue;
     dist[s] = 0;
     buckets[0]!.push(s);
     srcs.push(s);
@@ -203,14 +212,62 @@ export function buildFlowField(
       const u = bucket.pop()!;
       pending--;
       if (dist[u] !== d) continue;
-      forNeighbours(grid, u, cls, (v, cost) => {
-        const nd = d + cost;
-        if (nd < dist[v]! && nd <= maxCost) {
-          dist[v] = nd;
-          buckets[nd % BUCKETS]!.push(v);
+      const c = u % cols;
+      const r = (u - c) / cols;
+      const w = c > 0 && clear[u - 1]! >= cls;
+      const e = c < lastCol && clear[u + 1]! >= cls;
+      const nn = r > 0 && clear[u - cols]! >= cls;
+      const ss = r < lastRow && clear[u + cols]! >= cls;
+      const o = d + ORTHO;
+      if (o <= maxCost) {
+        if (w && o < dist[u - 1]!) {
+          dist[u - 1] = o;
+          buckets[o % BUCKETS]!.push(u - 1);
           pending++;
         }
-      });
+        if (e && o < dist[u + 1]!) {
+          dist[u + 1] = o;
+          buckets[o % BUCKETS]!.push(u + 1);
+          pending++;
+        }
+        if (nn && o < dist[u - cols]!) {
+          dist[u - cols] = o;
+          buckets[o % BUCKETS]!.push(u - cols);
+          pending++;
+        }
+        if (ss && o < dist[u + cols]!) {
+          dist[u + cols] = o;
+          buckets[o % BUCKETS]!.push(u + cols);
+          pending++;
+        }
+      }
+      const g = d + DIAG;
+      if (g > maxCost) continue;
+      // Diagonals only when both orthogonal neighbours are open (no corner cutting).
+      const ne = u - cols + 1;
+      if (nn && e && clear[ne]! >= cls && g < dist[ne]!) {
+        dist[ne] = g;
+        buckets[g % BUCKETS]!.push(ne);
+        pending++;
+      }
+      const nw = u - cols - 1;
+      if (nn && w && clear[nw]! >= cls && g < dist[nw]!) {
+        dist[nw] = g;
+        buckets[g % BUCKETS]!.push(nw);
+        pending++;
+      }
+      const se = u + cols + 1;
+      if (ss && e && clear[se]! >= cls && g < dist[se]!) {
+        dist[se] = g;
+        buckets[g % BUCKETS]!.push(se);
+        pending++;
+      }
+      const sw = u + cols - 1;
+      if (ss && w && clear[sw]! >= cls && g < dist[sw]!) {
+        dist[sw] = g;
+        buckets[g % BUCKETS]!.push(sw);
+        pending++;
+      }
     }
     d++;
   }

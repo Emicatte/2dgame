@@ -209,8 +209,8 @@ export function PveHud() {
       {me?.dead && (
         <div className="center-msg">
           <div className="death" role="status">
-            <span className="death__title">Bled out</span>
-            <span>Back with the squad at the next checkpoint or wave</span>
+            <span className="death__title">{me.late ? "Joining the squad" : "Bled out"}</span>
+            <span>{me.late ? "You join" : "Back with the squad"} at the next checkpoint or wave</span>
           </div>
         </div>
       )}

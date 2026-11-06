@@ -1,3 +1,4 @@
+import { matchMaker } from "@colyseus/core";
 import { Client, type Room } from "@colyseus/sdk";
 import {
   C2S,
@@ -38,7 +39,7 @@ beforeAll(async () => {
   const cfg = loadConfig({ NODE_ENV: "test", PORT: String(PORT), LOG_LEVEL: "warn" } as NodeJS.ProcessEnv);
   server = createGameServer({ cfg, repo, log: logger });
   await server.listen(PORT, "127.0.0.1");
-  for (const name of ["Medic", "Scout", "Quick"]) {
+  for (const name of ["Medic", "Scout", "Quick", "Farmer"]) {
     const res = await fetch(`${URL}/api/guest`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -99,6 +100,39 @@ describe("Outbreak over real sockets (dedicated server)", () => {
     await guest.leave();
     await host.leave();
   }, 20_000);
+
+  it("co-op ignores room size and length settings; leaving mid-run is not recorded as a PvP match", async () => {
+    const room = await new Client(URL).create(
+      ROOM_NAME,
+      { token: guests[3]!.token, kind: "private", mode: "survival" },
+      MatchState,
+    );
+    await until(() => room.state.mode === "survival", 3000, "mode");
+    const duration = room.state.durationSec;
+    room.send(C2S.SETTINGS, { maxPlayers: 8, durationSec: 120, killLimit: 5 });
+    await wait(300);
+    expect(room.state.maxPlayers).toBe(4);
+    expect(room.state.durationSec).toBe(duration);
+    room.send(C2S.READY, { ready: true });
+    await wait(100);
+    room.send(C2S.START, {});
+    await until(() => room.state.phase === "playing", 10_000, "playing");
+    // biome-ignore lint/suspicious/noExplicitAny: test access to the live room instance
+    const inst = matchMaker.getLocalRoomById(room.roomId) as any;
+    await until(() => inst.sim.pve.zw.alive > 0, 12_000, "first wave");
+    const me = inst.sim.players.get(room.sessionId);
+    for (const z of [...inst.sim.pve.zw.zombies.values()])
+      inst.sim.pve.damageZombie(z.id, 99_999, me, false, z.x, z.y);
+    expect(me.stats.kills).toBeGreaterThan(0);
+    const before = repo.matches.length;
+    await room.leave();
+    await wait(1500);
+    // The room is gone and nothing reached the PvP match history, stats or XP.
+    expect(repo.matches.length).toBe(before);
+    const rec = await repo.getPlayer(guests[3]!.profile.id);
+    expect(rec?.stats.kills ?? 0).toBe(0);
+    expect(rec?.stats.matchesPlayed ?? 0).toBe(0);
+  }, 30_000);
 
   it("quick matchmaking never creates a PvE room", async () => {
     const q = await new Client(URL).joinOrCreate(

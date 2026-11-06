@@ -1,6 +1,7 @@
 import {
   ACT,
   AI,
+  ATTACK_KINDS,
   BTN,
   buildFlowField,
   buildNavGrid,
@@ -19,6 +20,7 @@ import {
   NET,
   nearestWalkable,
   PLAYER,
+  PlayerState,
   PVE_STATUS,
   pveWorlds,
   quantizeInput,
@@ -76,6 +78,16 @@ function frames(id: string, n: number, f: Partial<InputFrame>, viewTick = 0): In
 function tick(sim: GameSimulation, input: Record<string, Partial<InputFrame>> = {}) {
   for (const p of sim.players.values()) sim.enqueue(p.id, frames(p.id, 3, input[p.id] ?? {}, sim.tick));
   return sim.step(TICK_MS, "live");
+}
+
+/** Four players strafing in circles: they change nav cell constantly, so fields are rebuilt. */
+function strafe(i: number, ids = ["a1", "a2", "a3", "a4"]): Record<string, Partial<InputFrame>> {
+  const out: Record<string, Partial<InputFrame>> = {};
+  ids.forEach((id, k) => {
+    const a = i / 15 + k;
+    out[id] = { mx: Math.cos(a), my: Math.sin(a) };
+  });
+  return out;
 }
 
 function startPve(
@@ -276,7 +288,7 @@ describe("zombie AI", () => {
     expect(a.hp).toBe(PLAYER.maxHealth);
   });
 
-  it("40 enemies chasing: none inside a wall, tick cost measured", () => {
+  it("40 enemies chasing moving players: none inside a wall, tick cost measured", () => {
     const sim = makeSim();
     const pve = startPve(sim, "survival");
     pve.waves.stop();
@@ -299,7 +311,7 @@ describe("zombie AI", () => {
     const costs: number[] = [];
     for (let i = 0; i < 20 * 20; i++) {
       const t0 = performance.now();
-      tick(sim);
+      tick(sim, strafe(i));
       costs.push(performance.now() - t0);
       for (const z of pve.zw.zombies.values()) {
         expect(isFreeSpot(sim.world, z, z.def.radius - 0.75)).toBe(true);
@@ -312,6 +324,8 @@ describe("zombie AI", () => {
       `[ai] 40 enemies, 4 players: tick avg ${avg.toFixed(2)} ms, p99 ${p99.toFixed(2)} ms, max ${costs.at(-1)!.toFixed(2)} ms; ` +
         `fields ${pve.zw.stats.fieldsBuilt}, A* ${pve.zw.stats.astarRuns} (${pve.zw.stats.astarNodes} nodes)`,
     );
+    // The players moved, so the fields were rebuilt throughout (not built once and cached).
+    expect(pve.zw.stats.fieldsBuilt).toBeGreaterThan(200);
     expect(p99).toBeLessThan(25);
   });
 });
@@ -649,7 +663,7 @@ describe("combat edge cases", () => {
 });
 
 describe("performance budget", () => {
-  it("authoritative tick cost grows gently with the number of enemies (4 players)", () => {
+  it("authoritative tick cost grows gently with the number of enemies (4 moving players)", () => {
     const rows: string[] = [];
     for (const n of [10, 20, 30, 40, MAX_ZOMBIES]) {
       const sim = makeSim("works", 5);
@@ -680,15 +694,16 @@ describe("performance budget", () => {
       }
       const costs: number[] = [];
       for (let i = 0; i < 20 * 15; i++) {
-        // Keep the count constant: enemies that reach the squad are replaced far away.
         const t0 = performance.now();
-        tick(sim);
+        tick(sim, strafe(i));
         costs.push(performance.now() - t0);
       }
       costs.sort((x, y) => x - y);
       const avg = costs.reduce((s, c) => s + c, 0) / costs.length;
       const p99 = costs[Math.floor(costs.length * 0.99)]!;
-      rows.push(`${String(n).padStart(2)} enemies: avg ${avg.toFixed(2)} ms, p99 ${p99.toFixed(2)} ms`);
+      rows.push(
+        `${String(n).padStart(2)} enemies: avg ${avg.toFixed(2)} ms, p99 ${p99.toFixed(2)} ms, fields ${pve.zw.stats.fieldsBuilt}`,
+      );
       // Budget: the host's browser also renders; the simulation must stay a small part of a 50 ms tick.
       expect(p99).toBeLessThan(25);
     }
@@ -823,5 +838,258 @@ describe("boss on a cramped map", () => {
     const moved = Math.hypot(boss.x - (1280 + 520), boss.y - (832 - 300));
     console.log(`[boss] cramped map: moved ${moved.toFixed(0)} px, debris thrown ${thrown}`);
     expect(thrown > 0 || Math.hypot(boss.x - a.sim.x, boss.y - a.sim.y) < 200).toBe(true);
+  });
+});
+
+/** Defects found by the independent review of the PvE code, each reproduced first. */
+describe("review regressions", () => {
+  function quiet(
+    mode: "outbreak" | "survival" = "survival",
+    difficulty: "recruit" | "veteran" | "nightmare" = "veteran",
+  ) {
+    const sim = makeSim();
+    const pve = startPve(sim, mode, difficulty);
+    pve.waves.stop();
+    pve.nextWaveTick = 0;
+    return { sim, pve };
+  }
+
+  it("the downed flag never outlives the run in the synced state (next PvP match)", () => {
+    const { sim, pve } = quiet();
+    const a = addPlayer(sim, "alpha");
+    place(a, 1500, 1100);
+    const state = new MatchState();
+    state.players.set("alpha", new PlayerState());
+    pve.hurtPlayer("alpha", 500, null, a.sim.x, a.sim.y);
+    syncPve(state, sim);
+    expect(state.players.get("alpha")!.downed).toBe(true);
+    sim.setPve(null);
+    syncPve(state, sim);
+    const ps = state.players.get("alpha")!;
+    expect(ps.downed).toBe(false);
+    expect(ps.bleed).toBe(0);
+    expect(ps.revive).toBe(0);
+  });
+
+  it("two teammates holding E on the same downed player still revive them", () => {
+    const { sim, pve } = quiet();
+    const a = addPlayer(sim, "alpha");
+    const b = addPlayer(sim, "bravo");
+    const c = addPlayer(sim, "charlie");
+    place(a, 1500, 1100);
+    place(b, 1540, 1100);
+    place(c, 1460, 1100);
+    pve.hurtPlayer("alpha", 500, null, a.sim.x, a.sim.y);
+    let at = -1;
+    for (let i = 0; i < 20 * 5 && at < 0; i++) {
+      const ev = tick(sim, { bravo: { buttons: BTN.INTERACT }, charlie: { buttons: BTN.INTERACT } });
+      if (ev.some((e) => e.t === "revive" && e.p === "alpha")) at = i;
+    }
+    expect(a.pve.downed).toBe(false);
+    // One reviver's pace (3.2 s), not reset by the second one.
+    expect(at / 20).toBeLessThan(3.6);
+  });
+
+  it("a boss is never deleted for being outrun: it is brought back into play instead", () => {
+    const sim = makeSim("works", 4);
+    const pve = startPve(sim, "survival");
+    const a = addPlayer(sim, "alpha");
+    place(a, 1500, 1100);
+    a.protectedUntil = Number.MAX_SAFE_INTEGER;
+    pve.waves.start(
+      survivalWave(10),
+      10,
+      [...FIRST_CONTACT.spawnZones],
+      1,
+      squadScale(1),
+      DIFFICULTY.veteran,
+    );
+    let boss = "";
+    for (let i = 0; i < 20 * 20 && !boss; i++) {
+      tick(sim);
+      boss = pve.bossId;
+    }
+    const z = pve.zw.zombies.get(boss)!;
+    // Far from everybody for longer than the straggler limit (as if the squad kept running).
+    z.lastNearTick = sim.tick - 20 * 30;
+    const before = { x: z.x, y: z.y };
+    tick(sim);
+    expect(z.dead).toBe(false);
+    expect(z.hp).toBe(z.maxHp);
+    expect(pve.zw.zombies.has(boss)).toBe(true);
+    expect(Math.hypot(z.x - before.x, z.y - before.y)).toBeGreaterThan(0);
+    expect(isFreeSpot(sim.world, z, z.def.radius - 0.75)).toBe(true);
+    expect(pve.waves.done).toBe(false);
+  });
+
+  it("a brief disconnect does not fail the run, and enemies ignore the absent player", () => {
+    const { sim, pve } = quiet();
+    const a = addPlayer(sim, "alpha");
+    place(a, 1500, 1100);
+    const w = pve.zw.spawn("walker", 1560, 1100, { state: "hunt" });
+    a.connected = false;
+    for (let i = 0; i < 20 * 4; i++) tick(sim);
+    expect(pve.status).toBe(PVE_STATUS.RUNNING);
+    expect(a.hp).toBe(PLAYER.maxHealth);
+    expect(w.target).not.toBe("alpha");
+  });
+
+  it("a teammate leaving gives the last downed player the solo self-revive", () => {
+    const { sim, pve } = quiet();
+    const a = addPlayer(sim, "alpha");
+    const b = addPlayer(sim, "bravo");
+    place(a, 1500, 1100);
+    place(b, 1900, 1100);
+    pve.hurtPlayer("alpha", 500, null, a.sim.x, a.sim.y);
+    expect(a.pve.selfReviveAt).toBe(0);
+    sim.removePlayer("bravo");
+    for (let i = 0; i < 20 * 7; i++) tick(sim);
+    expect(a.pve.downed).toBe(false);
+    expect(pve.status).toBe(PVE_STATUS.RUNNING);
+  });
+
+  it("hits while downed cannot bleed a solo player out before a pending self-revive", () => {
+    const { sim, pve } = quiet();
+    const a = addPlayer(sim, "alpha");
+    place(a, 1500, 1100);
+    pve.hurtPlayer("alpha", 500, null, a.sim.x, a.sim.y);
+    for (let i = 0; i < 20 * 7; i++) {
+      pve.hurtPlayer("alpha", 60, null, a.sim.x, a.sim.y);
+      tick(sim);
+      if (!a.pve.downed) break;
+    }
+    expect(a.alive).toBe(true);
+    expect(a.pve.downed).toBe(false);
+    expect(pve.status).toBe(PVE_STATUS.RUNNING);
+  });
+
+  it("a player joining a run in progress waits for the next checkpoint (no free revive by rejoining)", () => {
+    const { sim, pve } = quiet();
+    const a = addPlayer(sim, "alpha");
+    place(a, 1500, 1100);
+    const b = addPlayer(sim, "bravo");
+    pve.lateJoin(b);
+    for (let i = 0; i < 20 * 3; i++) tick(sim);
+    expect(b.alive).toBe(false);
+    pve.waves.start(
+      { enemies: { walker: 1 } },
+      1,
+      [{ x: 300, y: 300 }],
+      2,
+      squadScale(2),
+      DIFFICULTY.veteran,
+    );
+    for (let i = 0; i < 20 * 3; i++) tick(sim);
+    for (const z of pve.zw.zombies.values()) pve.damageZombie(z.id, 9999, a, false, z.x, z.y);
+    for (let i = 0; i < 10; i++) tick(sim);
+    expect(b.alive).toBe(true);
+    expect(Math.hypot(b.sim.x - a.sim.x, b.sim.y - a.sim.y)).toBeLessThan(300);
+  });
+
+  it("placed and ambient enemies at the cap cannot starve a wave", () => {
+    const { sim, pve } = quiet("survival", "recruit");
+    const a = addPlayer(sim, "alpha");
+    place(a, 1500, 1100);
+    a.protectedUntil = Number.MAX_SAFE_INTEGER;
+    const cap = Math.round(squadScale(1).maxAlive * DIFFICULTY.recruit.density);
+    for (let i = 0; i < cap; i++) {
+      const z = pve.zw.spawn("walker", 300 + (i % 5) * 40, 300 + Math.floor(i / 5) * 40, { state: "idle" });
+      z.speedMult = 0;
+    }
+    pve.waves.start(
+      { enemies: { walker: 6 } },
+      1,
+      [...FIRST_CONTACT.spawnZones],
+      1,
+      squadScale(1),
+      DIFFICULTY.recruit,
+    );
+    for (let i = 0; i < 20 * 10; i++) tick(sim);
+    const waveAlive = [...pve.zw.zombies.values()].filter((z) => !z.dead && z.wave === 1).length;
+    expect(waveAlive).toBeGreaterThan(0);
+    expect(pve.zw.alive).toBeLessThanOrEqual(MAX_ZOMBIES);
+  });
+
+  it("a vehicle rams each enemy once per contact, not once per input frame", () => {
+    const sim = makeSim("facility");
+    const pve = startPve(sim, "survival");
+    pve.waves.stop();
+    pve.nextWaveTick = 0;
+    const a = addPlayer(sim, "alpha");
+    const v = [...sim.vehicles.values()].find((x) => x.def.kind === "car")!;
+    place(a, v.sim.x, v.sim.y);
+    (sim as unknown as { takeSeat(p: ServerPlayer, v: unknown, s: number): void }).takeSeat(a, v, 0);
+    const front = { x: v.sim.x + Math.cos(v.sim.angle) * 52, y: v.sim.y + Math.sin(v.sim.angle) * 52 };
+    const z = pve.zw.spawn("brute", front.x, front.y, { state: "idle" });
+    const hits: number[] = [];
+    for (let k = 0; k < 3; k++) {
+      v.sim.vx = Math.cos(v.sim.angle) * 450;
+      v.sim.vy = Math.sin(v.sim.angle) * 450;
+      z.x = front.x;
+      z.y = front.y;
+      const hp = z.hp;
+      pve.vehicleContacts(v, a);
+      hits.push(hp - z.hp);
+    }
+    expect(hits[0]).toBeGreaterThan(0);
+    expect(hits[1]).toBe(0);
+    expect(hits[2]).toBe(0);
+  });
+
+  it("boss summons respect the global enemy cap", () => {
+    const sim = makeSim("works", 9);
+    const pve = startPve(sim, "survival");
+    pve.waves.stop();
+    pve.nextWaveTick = 0;
+    const a = addPlayer(sim, "alpha");
+    place(a, 1600, 1100);
+    a.protectedUntil = Number.MAX_SAFE_INTEGER;
+    const boss = pve.zw.spawn("abomination", 1600, 800, { state: "hunt" });
+    pve.damageZombie(boss.id, boss.maxHp * 0.4, a, false, boss.x, boss.y);
+    for (let i = 0; pve.zw.alive < MAX_ZOMBIES - 1; i++) {
+      const z = pve.zw.spawn("walker", 200 + (i % 10) * 40, 200 + Math.floor(i / 10) * 40, { state: "idle" });
+      z.speedMult = 0;
+    }
+    let summoned = false;
+    for (let i = 0; i < 20 * 30; i++) {
+      const ev = tick(sim);
+      if (ev.some((e) => e.t === "zatk" && e.k === "summon")) summoned = true;
+      expect(pve.zw.alive).toBeLessThanOrEqual(MAX_ZOMBIES);
+    }
+    expect(summoned).toBe(true);
+  });
+
+  it("the roar telegraph carries its real reach; hits on a downed player name the enemy", () => {
+    const sim = makeSim("works", 9);
+    const pve = startPve(sim, "survival");
+    pve.waves.stop();
+    pve.nextWaveTick = 0;
+    const a = addPlayer(sim, "alpha");
+    place(a, 1600, 1100);
+    const boss = pve.zw.spawn("abomination", 1600, 800, { state: "hunt" });
+    pve.damageZombie(boss.id, boss.maxHp * 0.4, a, false, boss.x, boss.y);
+    const state = new MatchState();
+    syncPve(state, sim);
+    const zs = state.zombies.get(boss.id)!;
+    expect(ATTACK_KINDS[zs.ak]).toBe("roar");
+    expect(zs.ar).toBe(230);
+    pve.hurtPlayer("alpha", 500, boss, a.sim.x, a.sim.y);
+    expect(a.pve.downed).toBe(true);
+    pve.hurtPlayer("alpha", 10, boss, a.sim.x, a.sim.y);
+    const ev = tick(sim).find((e) => e.t === "hit" && e.v === "alpha");
+    expect(ev && "p" in ev ? ev.p : "").toBe(`z:${boss.id}`);
+  });
+
+  it("the countdown does not eat the opening grace, and the run time starts when play does", () => {
+    const sim = makeSim();
+    sim.setPve({ mode: "survival", difficulty: "veteran" });
+    sim.resetForMatch();
+    const pve = sim.pve!;
+    addPlayer(sim, "alpha");
+    for (let i = 0; i < 20 * 5; i++) sim.step(TICK_MS, "frozen");
+    tick(sim);
+    expect(pve.startTick).toBe(sim.tick);
+    expect((pve.nextWaveTick - sim.tick) / 20).toBeGreaterThan(3.5);
+    expect(pve.zw.alive).toBe(0);
   });
 });

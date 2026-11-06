@@ -1,11 +1,17 @@
 # Changelog
 
-## 0.5.0 — 2026-11-06 (SCRAPLINE 3.0 | OUTBREAK, phases 0–6: co-op PvE)
+## 0.5.0 — 2026-11-06 (SCRAPLINE 3.0 | OUTBREAK, phases 0–6: combat visual overhaul, co-op PvE)
 
 Systems reference: `docs/v3/OUTBREAK.md`. Audit, roadmap and evidence: `docs/v3/ROADMAP.md`.
 Not deployed: branch `outbreak`.
 
 ### Added
+- **Combat Visual Overhaul** (client only, no gameplay value changed): crosshair styles dot /
+  cross / circle / tactical / minimal with size, colour, opacity, thickness, outline and dynamic
+  spread (the gap is the real spread cone), live preview in the settings; hit / crit / armour /
+  kill markers; tracers per weapon family, muzzle flash variants, impacts by surface (metal,
+  masonry, map edge), hull sparks; weapon animations (recoil, shotgun pump, sniper bolt, reload
+  dip, swap raise); graphics quality Low / Medium / High with one particle and pool budget.
 - **Outbreak (co-op, 1–4 players)**: missions with objectives, steps, doors, props, checkpoints,
   integrated tutorial hints; **First Contact** on the new Halvorsen Works map (enter the hall,
   restore power, hold the courtyard for 3 waves, find the keycard, open the gate, hold the
@@ -30,11 +36,32 @@ Not deployed: branch `outbreak`.
   Survival records, titles, unlocks; a run is recorded once (run id).
 - Lobby: competitive and co-op modes, campaign list, briefing, difficulty, Survival maps; main
   menu "Outbreak · co-op".
-- Tests: 28 PvE simulation tests, dedicated-server integration (real sockets), host-mode
-  integration (peer links), PvE progression, **two-browser WebRTC E2E** completing co-op
-  objectives, single-browser boss scenario.
+- Tests: 40 PvE simulation tests (12 of them regressions from the independent review),
+  dedicated-server integration (real sockets), host-mode integration (peer links), PvE
+  progression, flow fields against a reference Dijkstra on every map, 61 combat visual tests,
+  **two-browser WebRTC E2E** completing co-op objectives, single-browser boss scenario.
 
 ### Fixed
+- The crosshair was drawn off the cursor and off the shot ray when the camera zoomed (up to
+  80 px at the edge of a 1280×720 window).
+- Found by an independent review of the PvE code (each reproduced before the fix, see
+  `docs/v3/ROADMAP.md`): the downed flag stayed set in the next PvP match after a failed co-op
+  run (client mispredicted a crawl); two revivers cancelled each other; the dedicated server
+  recorded players leaving a PvE run as PvP matches (zombie kills in PvP stats); the boss could
+  be culled by outrunning it; a brief disconnect failed the run; leaving and rejoining was a free
+  revive; placed and ambient enemies could starve a wave; vehicles rammed an enemy once per input
+  frame; the last downed player of a shrinking squad got no self-revive, and hits could bleed a
+  player out before a pending self-revive; boss phase speeds unused; summons above the 48-enemy
+  cap; downed hits without the attacker id; roar telegraph without its radius; tick cost measured
+  with standing players only (4.8 ms avg with moving players, now 1.3–2.2 ms); the dedicated
+  server applied room size and length to co-op rooms; the countdown used up Survival's opening
+  grace and counted in run times.
+- `tests/e2e-p2p/vehicles.spec.ts` failed at its last step in software rendering (on this branch
+  and on the untouched v0.4.0 tree, three runs out of three) for two reasons in the test, not in
+  the game: the burst fired from the car emptied the rifle and its reserve (0 / 0), and driver
+  and passenger left the car on opposite sides, so the car stood between them and took every
+  shot. The spec now switches to the sidearm and steps both players out of the car's shadow
+  (two passes out of two after the change).
 - Lint failed on `docs/audit/data/netaudit-v2-phase7.json` (missing trailing newline).
 - `apps/web/test/hostmode.netcode.test.ts` failed now and then: shots were counted across a
   counter reset (measurement race in the test); shots are now compared by input sequence.

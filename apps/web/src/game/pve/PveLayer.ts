@@ -585,10 +585,14 @@ export class PveLayer {
         return;
       }
       case "roar": {
+        // Rings travel out to the real reach of the push, drawn as a steady outer circle.
+        const reach = ar || 230;
+        const span = Math.max(1, reach - def.radius);
         const t = performance.now() / 1000;
+        g.lineStyle(2, 0xffb36b, 0.55).strokeCircle(v.x, v.y, reach);
         for (let i = 0; i < 3; i++) {
-          const rr = def.radius + ((t * 160 + i * 60) % 200);
-          g.lineStyle(3, 0xffb36b, Math.max(0, 0.8 - rr / 260)).strokeCircle(v.x, v.y, rr);
+          const rr = def.radius + ((t * 160 + (i * span) / 3) % span);
+          g.lineStyle(3, 0xffb36b, Math.max(0, 0.85 - (rr - def.radius) / span)).strokeCircle(v.x, v.y, rr);
         }
         return;
       }

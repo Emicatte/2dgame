@@ -666,20 +666,18 @@ export interface SquadScale {
   spawnInterval: number;
   enemyHp: number;
   specialBonus: number;
-  supply: number;
   /** Directions enemies arrive from at once (spawn zones used together). */
   fronts: number;
 }
 
 const SQUAD: readonly SquadScale[] = [
-  { density: 1, maxAlive: 18, spawnInterval: 1, enemyHp: 1, specialBonus: 0, supply: 1, fronts: 1 },
+  { density: 1, maxAlive: 18, spawnInterval: 1, enemyHp: 1, specialBonus: 0, fronts: 1 },
   {
     density: 1.55,
     maxAlive: 26,
     spawnInterval: 0.82,
     enemyHp: 1,
     specialBonus: 0.04,
-    supply: 1.3,
     fronts: 2,
   },
   {
@@ -688,7 +686,6 @@ const SQUAD: readonly SquadScale[] = [
     spawnInterval: 0.7,
     enemyHp: 1.05,
     specialBonus: 0.08,
-    supply: 1.6,
     fronts: 2,
   },
   {
@@ -697,7 +694,6 @@ const SQUAD: readonly SquadScale[] = [
     spawnInterval: 0.62,
     enemyHp: 1.1,
     specialBonus: 0.12,
-    supply: 1.9,
     fronts: 3,
   },
 ];

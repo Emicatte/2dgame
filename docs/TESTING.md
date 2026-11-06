@@ -105,7 +105,44 @@ pnpm test:e2e:p2p vehicles.spec                    # two browsers over WebRTC (h
 TEST_DATABASE_URL=postgres://postgres@localhost:55432/scrapline_test pnpm --filter @scrapline/server exec vitest run test/repository.test.ts
 ```
 
-## Results (last run: 2026-11-05, v0.4.0 vehicles, modes, maps, progression)
+### Outbreak and Combat Visual Overhaul (0.5.0)
+
+```bash
+pnpm --filter @scrapline/shared exec vitest run test/pveProgress.test.ts test/maps.test.ts
+pnpm --filter @scrapline/server exec vitest run test/pve.test.ts test/pve.integration.test.ts
+pnpm --filter @scrapline/web exec vitest run test/hostmode.pve.test.ts test/combat.*.test.ts test/settings.migrate.test.ts
+pnpm test:e2e:p2p outbreak.spec                   # two Chrome processes over WebRTC: co-op objectives + boss
+E2E_SHOTS_DIR=/tmp/shots pnpm test:e2e:p2p outbreak.spec   # same, keeping screenshots
+```
+
+Acceptance criteria and results by phase: `docs/v3/ROADMAP.md`; systems and budgets:
+`docs/v3/OUTBREAK.md`.
+
+## Results (last run: 2026-11-06, v0.5.0 Outbreak and Combat Visual Overhaul, branch `outbreak`)
+
+| Suite | Count | Result |
+|---|---|---|
+| Lint (Biome), typecheck (tsc strict, E2E sources included) | — | clean |
+| `packages/shared` unit (+ PvE progression, maps incl. Halvorsen Works, flow fields against a reference Dijkstra on every map and class) | 96 | pass |
+| `apps/web` unit (+ 61 combat visual tests, host-mode Outbreak: sync, revive, results, rejoin, wipe → Deathmatch) | 103 | pass |
+| `apps/server` unit + integration (+ 40 PvE simulation tests, Outbreak over real sockets), without PostgreSQL/TLS variables | 153 + 8 skipped | pass |
+| E2E host mode (WebRTC, two Chrome processes): TDM + invite + reload + host close | 1 | pass |
+| E2E host mode: Outbreak, two browsers complete the first two objectives of First Contact together | 1 | pass (2.3–2.9 min) |
+| E2E host mode: Survival boss scenario (health bar, phase, telegraphs; screenshots) | 1 | pass |
+| E2E host mode: vehicles (guest drives, host shoots from the window, fight on foot) | 1 | pass, twice, after a fix in the spec (below) |
+
+The vehicle spec failed three times out of three in this environment, on this branch and on the
+untouched v0.4.0 tree: at 5 FPS (software rendering) the burst from the car window lasted long
+enough to empty the rifle and its reserve, and the two players left the car on opposite sides,
+so the car stood between them and took every shot (found with a diagnostic copy of the spec:
+positions, HUD, screenshot). The spec now switches to the sidearm and steps both players out of
+the car's shadow; it logs the positions it fights from.
+
+Not run for 0.5.0: the dedicated-server E2E suite (`pnpm test:e2e`), the netcode matrix and the
+PostgreSQL contract; the dedicated-server PvE path is covered by the real-socket integration
+test. Performance figures: `docs/v3/OUTBREAK.md` §8.
+
+## Results (2026-11-05, v0.4.0 vehicles, modes, maps, progression)
 
 | Suite | Count | Result |
 |---|---|---|
