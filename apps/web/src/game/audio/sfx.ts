@@ -278,7 +278,11 @@ class Sfx {
     if (kind === "spit") {
       this.noiseBurst(out, t, 0.18, "bandpass", 1600, 2, 0.6);
       this.tone(out, t, "sine", 300, 120, 0.15, 0.3);
-    } else if (kind === "charge" || kind === "slam") {
+    } else if (kind === "roar" || kind === "summon") {
+      this.tone(out, t, "sawtooth", 140, 55, 1.1, 0.7);
+      this.tone(out, t + 0.05, "square", 90, 45, 0.9, 0.3);
+      this.noiseBurst(out, t, 0.9, "bandpass", 420, 1.5, 0.5);
+    } else if (kind === "charge" || kind === "slam" || kind === "impact") {
       this.tone(out, t, "sawtooth", 90, 40, 0.5, 0.6);
       this.noiseBurst(out, t, 0.4, "lowpass", 600, 0.8, 0.7);
     } else {

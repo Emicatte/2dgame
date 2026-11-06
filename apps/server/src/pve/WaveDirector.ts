@@ -4,6 +4,7 @@ import {
   hasLineOfSight,
   MAX_ZOMBIES,
   type NavGrid,
+  navClassFor,
   type SquadScale,
   type Vec2,
   type WaveDef,
@@ -117,6 +118,8 @@ export class WaveDirector {
   ): WaveRun {
     const counts = waveComposition(def, players, squad, diff);
     const queue = spawnQueue(counts, () => this.host.rng());
+    // A boss leads its wave.
+    if (def.boss) queue.unshift(def.boss);
     const tick = this.host.tick;
     this.run = {
       number,
@@ -202,7 +205,7 @@ export class WaveDirector {
   findSpawn(kind: ZombieKind, zones: readonly Vec2[]): Vec2 | null {
     const def = ZOMBIES[kind];
     const nav = this.host.nav();
-    const cls = def.radius > 16 ? 2 : 1;
+    const cls = navClassFor(def.radius);
     const ok = (x: number, y: number, strict: boolean): boolean => {
       const c = Math.floor(x / nav.cell) + Math.floor(y / nav.cell) * nav.cols;
       if (x < 0 || y < 0 || x >= nav.width || y >= nav.height || !walkable(nav, c, cls)) return false;
@@ -250,6 +253,7 @@ export class WaveDirector {
       for (let c = 2; c < nav.cols - 2; c += 5) {
         const idx = r * nav.cols + c;
         if (walkable(nav, idx, 2)) out.push(cellCenter(nav, idx));
+        else if (walkable(nav, idx, 1) && (r + c) % 2 === 0) out.push(cellCenter(nav, idx));
       }
     }
     this.fallback = out;

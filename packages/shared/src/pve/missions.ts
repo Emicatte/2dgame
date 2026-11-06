@@ -54,6 +54,8 @@ export interface WaveDef {
   supply?: boolean;
   /** Banner shown when the wave starts. */
   label?: string;
+  /** A boss leads the wave (spawned first, far from the squad); the wave ends when it falls. */
+  boss?: ZombieKind;
 }
 
 export type Trigger =
@@ -336,6 +338,15 @@ export function survivalWave(n: number): WaveDef {
       return { enemies: { walker: 14, runner: 4, spitter: 3, brute: 1 }, label: "Wave 4 · brute" };
     case 5:
       return { enemies: { brute: 2, walker: 10, runner: 4, exploder: 2 }, label: "Wave 5 · brute pack" };
+  }
+  // Every tenth wave: a boss with support.
+  if (n % 10 === 0) {
+    return {
+      boss: "abomination",
+      enemies: { walker: 6 + n / 2, runner: 2 + n / 5, exploder: 1 + n / 10 },
+      supply: true,
+      label: `Wave ${n} · The Abomination`,
+    };
   }
   const k = n - 5;
   const total = 26 + k * 3;

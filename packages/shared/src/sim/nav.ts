@@ -18,11 +18,12 @@ import type { Rect, Vec2 } from "./math.ts";
  */
 
 export const NAV_CELL = 24;
-/** Body radius each clearance class must fit (index = class). */
-export const NAV_CLASS_RADIUS = [0, 16, 26] as const;
-export type NavClass = 1 | 2;
+/** Body radius each clearance class must fit (index = class). Class 3: bosses. */
+export const NAV_CLASS_RADIUS = [0, 16, 26, 40] as const;
+export type NavClass = 1 | 2 | 3;
 export const NAV_SMALL: NavClass = 1;
 export const NAV_LARGE: NavClass = 2;
+export const NAV_HUGE: NavClass = 3;
 export const NAV_INF = 0x3fffffff;
 
 const ORTHO = 10;
@@ -40,7 +41,7 @@ export interface NavGrid {
 }
 
 export function navClassFor(radius: number): NavClass {
-  return radius > NAV_CLASS_RADIUS[1] ? NAV_LARGE : NAV_SMALL;
+  return radius > NAV_CLASS_RADIUS[2] ? NAV_HUGE : radius > NAV_CLASS_RADIUS[1] ? NAV_LARGE : NAV_SMALL;
 }
 
 function fits(world: CollisionWorld, x: number, y: number, r: number): boolean {
@@ -53,7 +54,8 @@ function fits(world: CollisionWorld, x: number, y: number, r: number): boolean {
 
 function classAt(world: CollisionWorld, x: number, y: number): number {
   if (!fits(world, x, y, NAV_CLASS_RADIUS[1])) return 0;
-  return fits(world, x, y, NAV_CLASS_RADIUS[2]) ? 2 : 1;
+  if (!fits(world, x, y, NAV_CLASS_RADIUS[2])) return 1;
+  return fits(world, x, y, NAV_CLASS_RADIUS[3]) ? 3 : 2;
 }
 
 export function buildNavGrid(world: CollisionWorld, cell: number = NAV_CELL): NavGrid {
@@ -73,7 +75,7 @@ export function buildNavGrid(world: CollisionWorld, cell: number = NAV_CELL): Na
 
 /** Recomputes the cells a changed rectangle (a door opening or closing) can affect. */
 export function updateNavRegion(grid: NavGrid, world: CollisionWorld, rect: Rect): void {
-  const m = NAV_CLASS_RADIUS[2] + grid.cell;
+  const m = NAV_CLASS_RADIUS[3] + grid.cell;
   const c0 = Math.max(0, Math.floor((rect.x - m) / grid.cell));
   const c1 = Math.min(grid.cols - 1, Math.floor((rect.x + rect.w + m) / grid.cell));
   const r0 = Math.max(0, Math.floor((rect.y - m) / grid.cell));

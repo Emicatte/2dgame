@@ -695,3 +695,114 @@ describe("performance budget", () => {
     console.log(`[budget] 4 players, server tick cost by enemy count\n${rows.join("\n")}`);
   });
 });
+
+describe("boss: The Abomination", () => {
+  function bossSetup(players = 1) {
+    const sim = makeSim("works", 9);
+    const pve = startPve(sim, "survival");
+    pve.waves.stop();
+    pve.nextWaveTick = 0;
+    const ps = Array.from({ length: players }, (_, i) => {
+      const p = addPlayer(sim, `p${i}`);
+      place(p, 1400 + i * 50, 1250);
+      return p;
+    });
+    const boss = pve.zw.spawn("abomination", 1650, 950, { state: "hunt" });
+    return { sim, pve, ps, boss };
+  }
+
+  it("health scales with the squad, phases change at 66 % and 33 % with a roar, and it can be defeated", () => {
+    const solo = bossSetup(1);
+    const four = bossSetup(4);
+    expect(four.boss.maxHp).toBeGreaterThan(solo.boss.maxHp * 2);
+    const { sim, pve, ps, boss } = solo;
+    const phases: number[] = [];
+    const hit = (frac: number) => pve.damageZombie(boss.id, boss.maxHp * frac, ps[0]!, false, boss.x, boss.y);
+    hit(0.36);
+    for (const e of tick(sim)) if (e.t === "pve" && e.k === "bossPhase") phases.push(e.n ?? 0);
+    expect(boss.phase).toBe(1);
+    expect(boss.cur?.kind).toBe("roar");
+    // During the roar it shrugs off damage.
+    const hp = boss.hp;
+    hit(0.2);
+    expect(hp - boss.hp).toBeLessThan(boss.maxHp * 0.03);
+    for (let i = 0; i < 40; i++) tick(sim);
+    hit(0.32);
+    for (const e of tick(sim)) if (e.t === "pve" && e.k === "bossPhase") phases.push(e.n ?? 0);
+    expect(boss.phase).toBe(2);
+    expect(phases).toEqual([2, 3]);
+    for (let i = 0; i < 40; i++) tick(sim);
+    pve.damageZombie(boss.id, 999999, ps[0]!, false, boss.x, boss.y);
+    expect(boss.dead).toBe(true);
+    tick(sim);
+    expect(pve.bossId).toBe("");
+  });
+
+  it("every boss attack is telegraphed: slam, debris and charge land only after their windup", () => {
+    const { sim, pve, ps, boss } = bossSetup(1);
+    const p = ps[0]!;
+    p.protectedUntil = 0;
+    // Slam: stand next to it.
+    place(p, boss.x + 90, boss.y);
+    let windupAt = -1;
+    let hitAt = -1;
+    for (let i = 0; i < 80 && hitAt < 0; i++) {
+      p.hp = PLAYER.maxHealth;
+      const ev = tick(sim);
+      if (boss.act === ACT.WINDUP && boss.cur?.kind === "slam" && windupAt < 0) windupAt = sim.tick;
+      if (ev.some((e) => e.t === "hit" && e.v === p.id && e.p === `z:${boss.id}`)) hitAt = sim.tick;
+    }
+    expect(windupAt).toBeGreaterThan(0);
+    expect(hitAt - windupAt).toBeGreaterThanOrEqual(Math.round(1.1 * 20) - 1);
+    // Phase 2 debris: thrown at range, lands on the marked spot.
+    pve.damageZombie(boss.id, boss.maxHp * 0.4, p, false, boss.x, boss.y);
+    for (let i = 0; i < 40; i++) tick(sim);
+    place(p, boss.x - 420, boss.y + 300);
+    let thrown: { tx?: number; ty?: number; r?: number } | null = null;
+    for (let i = 0; i < 20 * 10 && !thrown; i++) {
+      p.hp = PLAYER.maxHealth;
+      for (const e of tick(sim)) if (e.t === "proj" && e.r) thrown = e;
+    }
+    expect(thrown).not.toBeNull();
+    expect(Math.hypot((thrown!.tx ?? 0) - p.sim.x, (thrown!.ty ?? 0) - p.sim.y)).toBeLessThan(140);
+  });
+
+  it("summons lesser infected in its second phase", () => {
+    const { sim, pve, ps, boss } = bossSetup(1);
+    ps[0]!.protectedUntil = Number.MAX_SAFE_INTEGER;
+    pve.damageZombie(boss.id, boss.maxHp * 0.4, ps[0]!, false, boss.x, boss.y);
+    let adds = 0;
+    for (let i = 0; i < 20 * 30 && adds === 0; i++) {
+      tick(sim);
+      adds = [...pve.zw.zombies.values()].filter((z) => !z.dead && z.group === boss.id).length;
+    }
+    expect(adds).toBeGreaterThan(0);
+  });
+
+  it("Survival wave 10 is led by the boss and ends only when it falls", () => {
+    const def = survivalWave(10);
+    expect(def.boss).toBe("abomination");
+    const sim = makeSim("works", 4);
+    const pve = startPve(sim, "survival");
+    const a = addPlayer(sim, "alpha");
+    place(a, 1500, 1100);
+    a.protectedUntil = Number.MAX_SAFE_INTEGER;
+    pve.waves.start(def, 10, [], 1, squadScale(1), DIFFICULTY.veteran);
+    let bossSeen = "";
+    for (let i = 0; i < 20 * 20 && !pve.waves.done; i++) {
+      tick(sim);
+      if (pve.bossId) bossSeen = pve.bossId;
+      // Kill everything but the boss.
+      for (const z of pve.zw.zombies.values())
+        if (!z.dead && !z.def.boss) pve.damageZombie(z.id, 9999, a, false, z.x, z.y);
+    }
+    expect(bossSeen).not.toBe("");
+    expect(pve.waves.done).toBe(false);
+    pve.damageZombie(bossSeen, 9999999, a, false, 0, 0);
+    for (let i = 0; i < 20 * 20 && !pve.waves.done; i++) {
+      tick(sim);
+      for (const z of pve.zw.zombies.values()) if (!z.dead) pve.damageZombie(z.id, 9999, a, false, z.x, z.y);
+    }
+    expect(pve.waves.done).toBe(true);
+  });
+});

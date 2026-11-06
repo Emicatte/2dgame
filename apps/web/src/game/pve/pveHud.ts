@@ -1,4 +1,5 @@
 import {
+  bossPhase,
   DIFFICULTY,
   isDifficulty,
   type MatchState,
@@ -7,6 +8,7 @@ import {
   type NetEvent,
   PLAYER,
   PVE_STATUS,
+  zombieByIndex,
 } from "@scrapline/shared";
 import { createStore } from "../../lib/store.ts";
 import { sessionStore } from "../../net/session.ts";
@@ -74,6 +76,8 @@ export interface PveHudState {
   hint: { text: string; id: number } | null;
   banner: { text: string; tone: "wave" | "good" | "bad" | "info"; id: number } | null;
   feed: { id: number; text: string; tone: "good" | "bad" | "info"; at: number }[];
+  /** Boss health bar (name, health, phase 1-based of `phases`). */
+  boss: { name: string; hp: number; mhp: number; phase: number; phases: number } | null;
 }
 
 const initial: PveHudState = {
@@ -101,6 +105,7 @@ const initial: PveHudState = {
   hint: null,
   banner: null,
   feed: [],
+  boss: null,
 };
 
 export const pveHudStore = createStore<PveHudState>({ ...initial });
@@ -169,6 +174,9 @@ export const pveHud = {
           case "complete":
             banner("Mission complete", "good");
             break;
+          case "bossPhase":
+            banner(`Phase ${ev.n ?? ""}: it's enraged!`, "wave");
+            break;
           case "failed":
             banner(ev.s || "Mission failed", "bad");
             break;
@@ -227,6 +235,18 @@ export const pveHud = {
     });
     const me = state.players.get(self);
     const solo = state.players.size === 1;
+    const bz = state.pve.boss ? state.zombies.get(state.pve.boss) : undefined;
+    const bdef = bz ? zombieByIndex(bz.k) : undefined;
+    const boss =
+      bz && bdef?.boss
+        ? {
+            name: bdef.name,
+            hp: bz.hp,
+            mhp: bz.mhp,
+            phase: bossPhase(bdef, bz.hp / Math.max(1, bz.mhp)) + 1,
+            phases: bdef.boss.phases.length,
+          }
+        : null;
     const difficulty = isDifficulty(state.pve.difficulty) ? state.pve.difficulty : "veteran";
     pveHudStore.patch({
       active: true,
@@ -256,6 +276,7 @@ export const pveHud = {
             dead: !me.alive && state.pve.status === PVE_STATUS.RUNNING,
           }
         : null,
+      boss,
       ...extra,
     });
     void PLAYER;

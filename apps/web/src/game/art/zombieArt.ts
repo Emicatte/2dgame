@@ -42,10 +42,17 @@ function drawZombie(def: ZombieDef): HTMLCanvasElement {
   const body = def.color;
   const dark = shade(body, -0.5);
   const accent = def.accent;
-  const wide = def.kind === "brute" ? 1.25 : def.kind === "runner" ? 0.8 : def.kind === "exploder" ? 1.15 : 1;
+  const wide =
+    def.kind === "brute" || def.kind === "abomination"
+      ? 1.25
+      : def.kind === "runner"
+        ? 0.8
+        : def.kind === "exploder"
+          ? 1.15
+          : 1;
   // Arms reaching forward.
   ctx.strokeStyle = hex(shade(body, -0.15));
-  ctx.lineWidth = def.kind === "brute" ? 9 : 5;
+  ctx.lineWidth = def.kind === "brute" ? 9 : def.kind === "abomination" ? 13 : 5;
   const reach = def.kind === "stalker" ? 1.25 : def.kind === "runner" ? 1.1 : 1;
   for (const side of [-1, 1]) {
     ctx.beginPath();
@@ -102,8 +109,33 @@ function drawZombie(def: ZombieDef): HTMLCanvasElement {
       ctx.fill();
     }
   }
+  if (def.kind === "abomination") {
+    // Fused bodies: extra masses, a second head, exposed glowing tissue.
+    for (const [px, py, pr, tone] of [
+      [-0.45, -0.5, 0.42, -0.2],
+      [-0.5, 0.45, 0.38, -0.3],
+      [0.05, -0.62, 0.3, 0.05],
+      [-0.1, 0.6, 0.32, -0.1],
+    ] as const) {
+      ctx.fillStyle = hex(shade(body, tone));
+      ctx.strokeStyle = hex(dark);
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(px * r, py * r, pr * r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.fillStyle = radialGlow(ctx, -r * 0.2, 0, r * 0.5, accent, 0.85);
+    ctx.beginPath();
+    ctx.arc(-r * 0.2, 0, r * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = hex(shade(body, 0.1));
+    ctx.beginPath();
+    ctx.arc(r * 0.05, -r * 0.42, r * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
   // Head, pushed forward.
-  const hr = def.kind === "brute" ? r * 0.36 : r * 0.42;
+  const hr = def.kind === "brute" ? r * 0.36 : def.kind === "abomination" ? r * 0.3 : r * 0.42;
   ctx.fillStyle = hex(shade(body, 0.12));
   ctx.strokeStyle = hex(dark);
   ctx.lineWidth = 1.4;

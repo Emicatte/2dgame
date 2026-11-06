@@ -1027,6 +1027,14 @@ export class ArenaScene extends Phaser.Scene {
       case "zatk": {
         const s = spatial(ev.x, ev.y);
         sfx.zombieAttack(ev.k, s.distance, s.pan);
+        const me = this.views.get(this.room?.sessionId ?? "");
+        if (
+          (ev.k === "slam" || ev.k === "impact" || ev.k === "roar") &&
+          me &&
+          Math.hypot(me.root.x - ev.x, me.root.y - ev.y) < 600
+        ) {
+          this.cameras.main.shake(180, 0.008 * settingsStore.get().screenShake);
+        }
         break;
       }
       case "zdie": {

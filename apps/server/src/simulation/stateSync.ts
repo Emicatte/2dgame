@@ -1,4 +1,5 @@
 import {
+  ATTACK_KINDS,
   formatIdList,
   HazardState,
   type MatchState,
@@ -158,11 +159,15 @@ export function syncPve(state: MatchState, sim: GameSimulation): void {
     if (s.a !== a) s.a = a;
     if (s.hp !== z.hp) s.hp = Math.min(65535, z.hp);
     if (s.st !== z.state) s.st = z.state;
-    if (s.act !== z.act) {
+    if (s.act !== z.act || s.at !== z.actTick) {
       s.act = z.act;
       s.at = z.actTick;
       s.tx = Math.round(z.actX);
       s.ty = Math.round(z.actY);
+      const cur = z.cur ?? z.def.attack;
+      s.ak = Math.max(0, ATTACK_KINDS.indexOf(cur.kind));
+      s.aw = Math.min(65535, Math.max(1, Math.round(cur.windupSec * sim.tickRateHz)));
+      s.ar = Math.min(255, Math.round(cur.radius ?? 0));
     }
   }
   const hs = state.hazards;

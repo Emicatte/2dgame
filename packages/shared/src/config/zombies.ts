@@ -6,9 +6,34 @@
  * `index` travels on the wire: keep indices stable once a release ships.
  */
 
-export type ZombieKind = "walker" | "runner" | "brute" | "spitter" | "stalker" | "exploder";
+export type ZombieKind = "walker" | "runner" | "brute" | "spitter" | "stalker" | "exploder" | "abomination";
 
-export type AttackKind = "melee" | "spit" | "explode" | "pounce" | "charge";
+export type AttackKind =
+  | "melee"
+  | "spit"
+  | "explode"
+  | "pounce"
+  | "charge"
+  /** Boss: area slam around itself. */
+  | "slam"
+  /** Boss: lobbed debris landing on a marked circle. */
+  | "throw"
+  /** Boss: calls lesser infected. */
+  | "summon"
+  /** Boss: phase transition (shockwave, no damage). */
+  | "roar";
+/** Wire index of an attack kind (ZombieState.ak). Keep the order stable. */
+export const ATTACK_KINDS: readonly AttackKind[] = [
+  "melee",
+  "spit",
+  "explode",
+  "pounce",
+  "charge",
+  "slam",
+  "throw",
+  "summon",
+  "roar",
+];
 
 export interface AttackDef {
   kind: AttackKind;
@@ -31,6 +56,38 @@ export interface AttackDef {
   /** Lunge/charge speed (px/s) and how long it lasts (s). */
   lungeSpeed?: number;
   lungeSec?: number;
+  /** Summon: what and how many. */
+  summon?: { kind: ZombieKind; count: number };
+  /** Throw: debris pieces per throw (spread around the target). */
+  volley?: number;
+}
+
+/** One boss attack within a phase: usable in a distance band, with its own cooldown. */
+export interface BossAttackDef extends AttackDef {
+  id: string;
+  minRange: number;
+  maxRange: number;
+  cooldownSec: number;
+  /** Combo: this attack follows immediately when this one ends. */
+  combo?: string;
+}
+
+export interface BossPhaseDef {
+  /** The phase starts when health falls below this fraction (1 = from the start). */
+  below: number;
+  speedMult: number;
+  /** Windups get shorter in later phases (still always telegraphed). */
+  windupMult: number;
+  attacks: BossAttackDef[];
+}
+
+export interface BossDef {
+  title: string;
+  phases: BossPhaseDef[];
+  /** Phase transition: roar and shockwave, the boss takes almost no damage meanwhile. */
+  transitionSec: number;
+  /** Health grows with the squad: × (1 + perExtraPlayer × (players − 1)). */
+  perExtraPlayer: number;
 }
 
 export interface ZombieDef {
@@ -76,6 +133,8 @@ export interface ZombieDef {
   large: boolean;
   /** Survival / waves: spawn weight once unlocked (0 = never random). */
   weight: number;
+  /** Bosses: phases, attacks and transitions. */
+  boss?: BossDef;
 }
 
 export const ZOMBIES: Record<ZombieKind, ZombieDef> = {
@@ -268,7 +327,209 @@ export const ZOMBIES: Record<ZombieKind, ZombieDef> = {
     large: false,
     weight: 1.5,
   },
+  abomination: {
+    kind: "abomination",
+    index: 6,
+    name: "The Abomination",
+    blurb: "A mass of fused infected. Learn its tells: the lane, the circle, the falling debris.",
+    radius: 40,
+    maxHp: 3200,
+    speed: 82,
+    wanderSpeed: 30,
+    turnRate: 2.4,
+    sight: 1400,
+    hearing: 2,
+    memorySec: 60,
+    attack: { kind: "melee", range: 30, windupSec: 0.8, recoverSec: 0.9, damage: 30, knockback: 420 },
+    armor: 1,
+    stunnedDamageMult: 2,
+    wallStunSec: 2.4,
+    behaviour: "swarm",
+    mass: 12,
+    color: 0x6b4a52,
+    accent: 0xff6a4a,
+    xp: 300,
+    large: true,
+    weight: 0,
+    boss: {
+      title: "Boss",
+      transitionSec: 1.6,
+      perExtraPlayer: 0.45,
+      phases: [
+        {
+          below: 1,
+          speedMult: 1,
+          windupMult: 1,
+          attacks: [
+            {
+              id: "slam",
+              kind: "slam",
+              range: 0,
+              minRange: 0,
+              maxRange: 150,
+              cooldownSec: 7,
+              windupSec: 1.1,
+              recoverSec: 1,
+              damage: 35,
+              radius: 170,
+              edgeFactor: 0.5,
+              knockback: 380,
+            },
+            {
+              id: "charge",
+              kind: "charge",
+              range: 0,
+              minRange: 220,
+              maxRange: 640,
+              cooldownSec: 8,
+              windupSec: 1,
+              recoverSec: 0.8,
+              damage: 40,
+              knockback: 600,
+              lungeSpeed: 500,
+              lungeSec: 1,
+            },
+          ],
+        },
+        {
+          below: 0.66,
+          speedMult: 1.15,
+          windupMult: 0.85,
+          attacks: [
+            {
+              id: "slam",
+              kind: "slam",
+              range: 0,
+              minRange: 0,
+              maxRange: 150,
+              cooldownSec: 6,
+              windupSec: 1.1,
+              recoverSec: 0.9,
+              damage: 35,
+              radius: 180,
+              edgeFactor: 0.5,
+              knockback: 400,
+            },
+            {
+              id: "throw",
+              kind: "throw",
+              range: 0,
+              minRange: 230,
+              maxRange: 900,
+              cooldownSec: 4.5,
+              windupSec: 0.9,
+              recoverSec: 0.7,
+              damage: 30,
+              radius: 95,
+              edgeFactor: 0.4,
+              projectileSpeed: 520,
+              volley: 1,
+            },
+            {
+              id: "charge",
+              kind: "charge",
+              range: 0,
+              minRange: 220,
+              maxRange: 640,
+              cooldownSec: 7,
+              windupSec: 1,
+              recoverSec: 0.8,
+              damage: 40,
+              knockback: 600,
+              lungeSpeed: 520,
+              lungeSec: 1,
+            },
+            {
+              id: "summon",
+              kind: "summon",
+              range: 0,
+              minRange: 0,
+              maxRange: 3000,
+              cooldownSec: 16,
+              windupSec: 1.2,
+              recoverSec: 0.8,
+              damage: 0,
+              summon: { kind: "walker", count: 4 },
+            },
+          ],
+        },
+        {
+          below: 0.33,
+          speedMult: 1.25,
+          windupMult: 0.75,
+          attacks: [
+            {
+              id: "slam",
+              kind: "slam",
+              range: 0,
+              minRange: 0,
+              maxRange: 160,
+              cooldownSec: 6,
+              windupSec: 1.1,
+              recoverSec: 0.5,
+              damage: 35,
+              radius: 190,
+              edgeFactor: 0.5,
+              knockback: 420,
+              combo: "charge",
+            },
+            {
+              id: "throw",
+              kind: "throw",
+              range: 0,
+              minRange: 230,
+              maxRange: 950,
+              cooldownSec: 4,
+              windupSec: 0.9,
+              recoverSec: 0.6,
+              damage: 26,
+              radius: 85,
+              edgeFactor: 0.4,
+              projectileSpeed: 560,
+              volley: 3,
+            },
+            {
+              id: "charge",
+              kind: "charge",
+              range: 0,
+              minRange: 220,
+              maxRange: 680,
+              cooldownSec: 6,
+              windupSec: 1,
+              recoverSec: 0.7,
+              damage: 40,
+              knockback: 620,
+              lungeSpeed: 560,
+              lungeSec: 1,
+            },
+            {
+              id: "summon",
+              kind: "summon",
+              range: 0,
+              minRange: 0,
+              maxRange: 3000,
+              cooldownSec: 14,
+              windupSec: 1.2,
+              recoverSec: 0.8,
+              damage: 0,
+              summon: { kind: "runner", count: 4 },
+            },
+          ],
+        },
+      ],
+    },
+  },
 };
+
+/** Boss phase index (0-based) for a health fraction. */
+export function bossPhase(def: ZombieDef, hpFraction: number): number {
+  const phases = def.boss?.phases ?? [];
+  let idx = 0;
+  phases.forEach((p, i) => {
+    if (hpFraction <= p.below) idx = i;
+  });
+  return idx;
+}
 
 export const ZOMBIE_LIST: readonly ZombieDef[] = Object.values(ZOMBIES).sort((a, b) => a.index - b.index);
 

@@ -245,6 +245,8 @@ export class PveController implements ZombieHost {
       p.sim.vx += knock.x;
       p.sim.vy += knock.y;
     }
+    // Pure shove (a boss roar): no damage, no hit event.
+    if (dmg <= 0) return;
     this.sim.damagePlayerFrom(p, dmg, from ? `z:${from.id}` : "", from ? from.def.name : "Acid", x, y);
   }
 
@@ -376,6 +378,9 @@ export class PveController implements ZombieHost {
     else this.updateSurvival();
     this.waves.step(this.squad, this.diff, this.squadSize);
     this.zw.step();
+    let boss = "";
+    for (const z of this.zw.zombies.values()) if (!z.dead && z.def.boss) boss = z.id;
+    this.bossId = boss;
     this.updateLoot();
     this.checkWipe();
   }

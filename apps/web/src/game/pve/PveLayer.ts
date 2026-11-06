@@ -1,6 +1,7 @@
 import {
   ACT,
   AI,
+  ATTACK_KINDS,
   type HitTarget,
   lerp,
   lerpAngle,
@@ -151,7 +152,7 @@ class ZombieView {
       if (this.flashMs <= 0) this.body.clearTint();
     }
     this.bar.clear();
-    const showBar = hp < mhp && (this.def.kind !== "walker" || hp < mhp * 0.99);
+    const showBar = !this.def.boss && hp < mhp && (this.def.kind !== "walker" || hp < mhp * 0.99);
     if (showBar) {
       const w = Math.max(26, this.def.radius * 2);
       const top = -this.def.radius - 12;
@@ -178,6 +179,8 @@ interface PropView {
 }
 
 interface Proj {
+  /** Lobbed debris: where it lands and how wide (drawn as a warning circle during the flight). */
+  land?: { x: number; y: number; r: number; dur: number };
   img: Phaser.GameObjects.Image;
   x: number;
   y: number;
@@ -417,19 +420,39 @@ export class PveLayer {
         this.effects.explosion(ev.x, ev.y);
         break;
       case "proj": {
-        const img = this.scene.add.image(ev.x, ev.y, ZTEX.spit).setDisplaySize(18, 18).setDepth(39);
-        this.projectiles.set(ev.id, { img, x: ev.x, y: ev.y, vx: ev.vx, vy: ev.vy, t0: performance.now() });
+        const lob = ev.r && ev.tx !== undefined && ev.ty !== undefined;
+        const img = this.scene.add
+          .image(ev.x, ev.y, lob ? TEX.debris : ZTEX.spit)
+          .setDisplaySize(lob ? 34 : 18, lob ? 34 : 18)
+          .setTint(lob ? 0x5b4e58 : 0xffffff)
+          .setDepth(lob ? 45 : 39);
+        const speed = Math.hypot(ev.vx, ev.vy) || 1;
+        const land = lob
+          ? { x: ev.tx!, y: ev.ty!, r: ev.r!, dur: Math.hypot(ev.tx! - ev.x, ev.ty! - ev.y) / speed }
+          : undefined;
+        this.projectiles.set(ev.id, {
+          img,
+          x: ev.x,
+          y: ev.y,
+          vx: ev.vx,
+          vy: ev.vy,
+          t0: performance.now(),
+          ...(land ? { land } : {}),
+        });
         break;
       }
       case "projx": {
         const p = this.projectiles.get(ev.id);
         p?.img.destroy();
         this.projectiles.delete(ev.id);
-        enemyHitFx(this.effects, ev.x, ev.y, 0, { lethal: false, color: 0xc6ff4a });
+        if (p?.land) this.effects.crash(ev.x, ev.y, 600);
+        else enemyHitFx(this.effects, ev.x, ev.y, 0, { lethal: false, color: 0xc6ff4a });
         break;
       }
       case "zatk":
-        if (ev.k === "slam") this.effects.crash(ev.x, ev.y, 420);
+        if (ev.k === "slam" || ev.k === "impact")
+          this.effects.crash(ev.x, ev.y, ev.k === "impact" ? 500 : 700);
+        else if (ev.k === "roar" || ev.k === "summon") this.effects.spawn(ev.x, ev.y);
         break;
       default:
         break;
@@ -462,7 +485,7 @@ export class PveLayer {
       }
       v.root.setVisible(true);
       v.update(s.x, s.y, s.a, zs.hp, zs.mhp, zs.st, dtSec);
-      this.drawTelegraph(g, v, zs.act, zs.at, zs.tx, zs.ty, zs.st, renderTick, tickRate);
+      this.drawTelegraph(g, v, zs.act, zs.at, zs.tx, zs.ty, zs.st, renderTick, tickRate, zs.ak, zs.aw, zs.ar);
     }
     // Props: pulse when usable, hold progress ring.
     const t = now / 1000;
@@ -502,6 +525,21 @@ export class PveLayer {
         this.projectiles.delete(id);
         continue;
       }
+      if (p.land) {
+        // Lobbed debris: arc over the map, the landing circle fills up until impact.
+        const k = Math.min(1, age / Math.max(0.05, p.land.dur));
+        const lift = Math.sin(k * Math.PI) * 60;
+        p.img.setPosition(
+          p.x + p.vx * Math.min(age, p.land.dur),
+          p.y + p.vy * Math.min(age, p.land.dur) - lift,
+        );
+        const size = 30 * (0.8 + 0.6 * Math.sin(k * Math.PI));
+        p.img.setDisplaySize(size, size).setRotation(age * 5);
+        g.fillStyle(0xff3d3d, 0.1 + 0.25 * k).fillCircle(p.land.x, p.land.y, p.land.r);
+        g.lineStyle(2, 0xff3d3d, 0.9).strokeCircle(p.land.x, p.land.y, p.land.r);
+        g.lineStyle(3, 0xffd34a, 0.9).strokeCircle(p.land.x, p.land.y, p.land.r * k);
+        continue;
+      }
       p.img.setPosition(p.x + p.vx * age, p.y + p.vy * age).setRotation(age * 8);
     }
   }
@@ -520,6 +558,9 @@ export class PveLayer {
     st: number,
     renderTick: number,
     tickRate: number,
+    ak = 0,
+    aw = 0,
+    ar = 0,
   ): void {
     const def = v.def;
     if (st === AI.ALERT) {
@@ -536,11 +577,40 @@ export class PveLayer {
       }
     }
     if (act !== ACT.WINDUP) return;
-    const charge = !!def.special && Math.hypot(tx - v.x, ty - v.y) > def.attack.range * 3 + 60;
-    const atk = charge && def.special ? def.special : def.attack;
-    const k = Math.max(0, Math.min(1, (renderTick - at) / tickRate / atk.windupSec));
+    // The synchronized attack kind and windup length drive the telegraph (phase-scaled for bosses).
+    const kind = ATTACK_KINDS[ak] ?? def.attack.kind;
+    const windupTicks = aw > 0 ? aw : def.attack.windupSec * tickRate;
+    const k = Math.max(0, Math.min(1, (renderTick - at) / windupTicks));
+    const atk = kind === def.attack.kind ? def.attack : (def.special ?? def.attack);
     const red = 0xff3d3d;
-    switch (atk.kind) {
+    switch (kind) {
+      case "slam": {
+        const r = ar || 160;
+        g.fillStyle(red, 0.1 + 0.25 * k).fillCircle(v.x, v.y, r);
+        g.lineStyle(3, red, 0.9).strokeCircle(v.x, v.y, r);
+        g.lineStyle(4, 0xffd34a, 0.95).strokeCircle(v.x, v.y, Math.max(def.radius, r * k));
+        return;
+      }
+      case "roar": {
+        const t = performance.now() / 1000;
+        for (let i = 0; i < 3; i++) {
+          const rr = def.radius + ((t * 160 + i * 60) % 200);
+          g.lineStyle(3, 0xffb36b, Math.max(0, 0.8 - rr / 260)).strokeCircle(v.x, v.y, rr);
+        }
+        return;
+      }
+      case "summon": {
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 90);
+        g.lineStyle(3, 0xc6ff4a, 0.4 + 0.5 * pulse).strokeCircle(v.x, v.y, def.radius + 30 + 20 * k);
+        return;
+      }
+      case "throw": {
+        g.lineStyle(2, red, 0.5 + 0.5 * k).strokeCircle(tx, ty, (ar || 90) * (1.4 - 0.4 * k));
+        g.fillStyle(red, 0.08 + 0.15 * k).fillCircle(tx, ty, ar || 90);
+        return;
+      }
+    }
+    switch (atk.kind === kind ? atk.kind : kind) {
       case "melee": {
         const r = def.radius + atk.range + 20;
         const face = Math.atan2(ty - v.y, tx - v.x);

@@ -161,6 +161,10 @@ export const ZombieState = schema(
     /** Telegraph target (charge end point, spit target, blast centre). */
     tx: t.int16().default(0),
     ty: t.int16().default(0),
+    /** Current attack: ATTACK_KINDS index, windup length (ticks) and area radius (px). */
+    ak: t.uint8().default(0),
+    aw: t.uint16().default(0),
+    ar: t.uint8().default(0),
   },
   "ZombieState",
 );

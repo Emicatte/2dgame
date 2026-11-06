@@ -2,6 +2,9 @@ import {
   ACT,
   AI,
   type AiState,
+  type AttackDef,
+  type BossAttackDef,
+  bossPhase,
   buildFlowField,
   type Circle,
   type CollisionWorld,
@@ -112,7 +115,13 @@ export interface Zombie {
   actX: number;
   actY: number;
   /** Which attack the current act belongs to. */
-  actKind: "attack" | "special";
+  actKind: "attack" | "special" | "boss";
+  /** The attack being performed (phase-scaled for bosses). */
+  cur: AttackDef | null;
+  /** Boss: id of the current attack, cooldowns by attack id, phase index. */
+  curId: string;
+  cooldowns: Map<string, number>;
+  phase: number;
   target: string | null;
   lastKnownX: number;
   lastKnownY: number;
@@ -149,6 +158,8 @@ export interface Zombie {
 }
 
 export interface Projectile {
+  /** Lobbed debris: flies over everything to its target and hurts an area when it lands. */
+  lob?: { radius: number; edge: number };
   id: number;
   x: number;
   y: number;
@@ -173,7 +184,7 @@ export interface Hazard {
 interface TargetField {
   cell: number;
   builtTick: number;
-  fields: [FlowField | null, FlowField | null, FlowField | null];
+  fields: [FlowField | null, FlowField | null, FlowField | null, FlowField | null];
   dirty: boolean;
 }
 
@@ -241,7 +252,10 @@ export class ZombieWorld {
   spawn(kind: ZombieKind, x: number, y: number, opts: SpawnOptions = {}): Zombie {
     const def = ZOMBIES[kind];
     const tick = this.host.tick;
-    const maxHp = Math.max(1, Math.round(def.maxHp * this.difficulty.enemyHp * this.hpMult));
+    const players = Math.max(1, this.host.actors().length);
+    // Bosses scale with the squad more than regular infected (four players must not melt them).
+    const squad = def.boss ? 1 + def.boss.perExtraPlayer * (players - 1) : this.hpMult;
+    const maxHp = Math.max(1, Math.round(def.maxHp * this.difficulty.enemyHp * squad));
     const z: Zombie = {
       id: `z${this.nextId++}`,
       def,
@@ -262,11 +276,15 @@ export class ZombieWorld {
       actX: 0,
       actY: 0,
       actKind: "attack",
+      cur: null,
+      curId: "",
+      cooldowns: new Map(),
+      phase: 0,
       target: null,
       lastKnownX: x,
       lastKnownY: y,
       lastSeenTick: 0,
-      horde: opts.state === "hunt" && def.behaviour !== "flank",
+      horde: (opts.state === "hunt" && def.behaviour !== "flank") || !!def.boss,
       path: null,
       pathGoalX: x,
       pathGoalY: y,
@@ -342,7 +360,7 @@ export class ZombieWorld {
       const cell = nearestWalkable(nav, a.x, a.y, 1, 4);
       let f = this.targetFields.get(a.id);
       if (!f) {
-        f = { cell: -2, builtTick: -999, fields: [null, null, null], dirty: true };
+        f = { cell: -2, builtTick: -999, fields: [null, null, null, null], dirty: true };
         this.targetFields.set(a.id, f);
       }
       if (cell !== f.cell) f.dirty = true;
@@ -355,7 +373,8 @@ export class ZombieWorld {
       const f = this.targetFields.get(id)!;
       if (!f.dirty || this.host.tick - f.builtTick < 3) continue;
       const a = actors.find((x) => x.id === id)!;
-      for (const cls of [1, 2] as const) {
+      const classes: NavClass[] = this.hasHuge() ? [1, 2, 3] : [1, 2];
+      for (const cls of classes) {
         const src = nearestWalkable(nav, a.x, a.y, cls, 4);
         f.fields[cls] = buildFlowField(nav, cls, src >= 0 ? [src] : [], NAV_INF, f.fields[cls] ?? undefined);
       }
@@ -366,6 +385,11 @@ export class ZombieWorld {
       this.stats.fieldsBuilt++;
     }
     this.fieldCursor = ids.length > 0 ? (this.fieldCursor + 1) % ids.length : 0;
+  }
+
+  private hasHuge(): boolean {
+    for (const z of this.zombies.values()) if (!z.dead && z.cls === 3) return true;
+    return false;
   }
 
   private fieldFor(targetId: string, cls: NavClass): FlowField | null {
@@ -613,6 +637,7 @@ export class ZombieWorld {
     }
     if (z.state !== AI.CHASE || !target?.alive || target.airborne) return;
     const r = this.reach(z, target);
+    if (z.def.boss && this.bossAct(z, target)) return;
     const atk = z.def.attack;
     const sp = z.def.special;
     if (sp && tick >= z.specialReadyTick && !r.vehicle) {
@@ -625,7 +650,7 @@ export class ZombieWorld {
         // Charge: telegraph the line it will run along.
         const ang = Math.atan2(target.y - z.y, target.x - z.x);
         const len = (sp.lungeSpeed ?? 500) * (sp.lungeSec ?? 0.8);
-        this.startAct(z, "special", z.x + Math.cos(ang) * len, z.y + Math.sin(ang) * len);
+        this.startAct(z, "special", z.x + Math.cos(ang) * len, z.y + Math.sin(ang) * len, sp);
         return;
       }
     }
@@ -664,7 +689,57 @@ export class ZombieWorld {
     }
   }
 
-  private startAct(z: Zombie, kind: "attack" | "special", tx: number, ty: number): void {
+  /**
+   * Boss attack choice: the first ready attack of the current phase whose distance band fits
+   * (slam when close, debris at range, charge on a clear lane, summon when few adds remain).
+   * Returns false to fall back to the basic melee.
+   */
+  private bossAct(z: Zombie, t: PveActor): boolean {
+    const tick = this.host.tick;
+    const phase = z.def.boss!.phases[z.phase]!;
+    const d = Math.hypot(t.x - z.x, t.y - z.y);
+    const order = ["slam", "throw", "charge", "summon"];
+    const attacks = [...phase.attacks].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+    for (const a of attacks) {
+      if (tick < (z.cooldowns.get(a.id) ?? 0)) continue;
+      if (d < a.minRange || d > a.maxRange) continue;
+      if (a.kind === "charge" && !clearPath(this.host.world(), z.x, z.y, t.x, t.y, z.def.radius)) continue;
+      if (a.kind === "throw" && !this.sees(z, t, a.maxRange)) continue;
+      if (a.kind === "summon") {
+        let adds = 0;
+        for (const o of this.zombies.values()) if (!o.dead && o.group === z.id) adds++;
+        if (adds >= 4) continue;
+      }
+      this.startBossAttack(z, a, t);
+      return true;
+    }
+    return false;
+  }
+
+  private startBossAttack(z: Zombie, a: BossAttackDef, t: PveActor | undefined): void {
+    const phase = z.def.boss!.phases[z.phase]!;
+    const def: BossAttackDef = { ...a, windupSec: a.windupSec * phase.windupMult };
+    let tx = z.x;
+    let ty = z.y;
+    if (t && (a.kind === "charge" || a.kind === "throw")) {
+      const ang = Math.atan2(t.y - z.y, t.x - z.x);
+      const len =
+        a.kind === "charge" ? (a.lungeSpeed ?? 500) * (a.lungeSec ?? 0.8) : Math.hypot(t.x - z.x, t.y - z.y);
+      tx = z.x + Math.cos(ang) * len;
+      ty = z.y + Math.sin(ang) * len;
+    }
+    z.curId = a.id;
+    this.startAct(z, "boss", tx, ty, def);
+  }
+
+  private startAct(
+    z: Zombie,
+    kind: "attack" | "special" | "boss",
+    tx: number,
+    ty: number,
+    def?: AttackDef,
+  ): void {
+    z.cur = def ?? z.def.attack;
     z.state = AI.ATTACK;
     z.act = ACT.WINDUP;
     z.actKind = kind;
@@ -676,10 +751,16 @@ export class ZombieWorld {
 
   private runAttack(z: Zombie, target: PveActor | undefined, actors: readonly PveActor[]): void {
     const tick = this.host.tick;
-    const def = z.actKind === "special" && z.def.special ? z.def.special : z.def.attack;
+    const def = z.cur ?? z.def.attack;
     const elapsed = tick - z.actTick;
     if (z.act === ACT.WINDUP) {
-      if (target && def.kind !== "charge") {
+      if (
+        target &&
+        def.kind !== "charge" &&
+        def.kind !== "slam" &&
+        def.kind !== "roar" &&
+        def.kind !== "summon"
+      ) {
         // Melee and spit keep tracking during the windup; charges and blasts are committed.
         if (def.kind === "melee" || def.kind === "pounce") {
           const r = this.reach(z, target);
@@ -705,18 +786,95 @@ export class ZombieWorld {
       z.attackReadyTick = tick + this.secTicks(0.2);
       if (z.actKind === "special" && z.def.special)
         z.specialReadyTick = tick + this.secTicks(z.def.special.cooldownSec);
+      if (z.actKind === "boss") {
+        const b = def as BossAttackDef;
+        if (b.id) z.cooldowns.set(b.id, tick + this.secTicks(b.cooldownSec));
+        // Combos: the next attack follows at once (still telegraphed).
+        const next = b.combo ? z.def.boss!.phases[z.phase]!.attacks.find((x) => x.id === b.combo) : undefined;
+        if (next) {
+          this.startBossAttack(z, next, target);
+          return;
+        }
+      }
+      z.cur = null;
       this.setState(z, z.target ? AI.CHASE : AI.INVESTIGATE);
     }
   }
 
-  private strike(
-    z: Zombie,
-    def: ZombieDef["attack"],
-    target: PveActor | undefined,
-    actors: readonly PveActor[],
-  ): void {
+  private strike(z: Zombie, def: AttackDef, target: PveActor | undefined, actors: readonly PveActor[]): void {
     const dmg = def.damage * z.damageMult;
     switch (def.kind) {
+      case "slam":
+      case "roar": {
+        const radius = def.kind === "roar" ? 230 : (def.radius ?? 160);
+        const edge = def.edgeFactor ?? 0.5;
+        this.host.emit({ t: "zatk", z: z.id, k: def.kind, x: Math.round(z.x), y: Math.round(z.y) });
+        for (const a of actors) {
+          if (!a.alive || a.vehicle) continue;
+          const d = Math.hypot(a.x - z.x, a.y - z.y);
+          if (d > radius + PLAYER.radius) continue;
+          const ang = Math.atan2(a.y - z.y, a.x - z.x);
+          const k = def.kind === "roar" ? 460 : (def.knockback ?? 0);
+          const knock = { x: Math.cos(ang) * k, y: Math.sin(ang) * k };
+          // The roar only pushes (a breather between phases).
+          const amount = def.kind === "roar" ? 0 : dmg * (1 - (1 - edge) * clamp(d / radius, 0, 1));
+          this.host.hurtPlayer(a.id, amount, z, a.x, a.y, knock);
+        }
+        return;
+      }
+      case "throw": {
+        const n = Math.max(1, def.volley ?? 1);
+        const speed = def.projectileSpeed ?? 500;
+        for (let i = 0; i < n; i++) {
+          // Extra pieces land around the target: the marked circles show where.
+          const spread = i === 0 ? 0 : 110;
+          const a = (i / n) * Math.PI * 2 + z.angle;
+          const tx = z.actX + Math.cos(a) * spread;
+          const ty = z.actY + Math.sin(a) * spread;
+          const ang = Math.atan2(ty - z.y, tx - z.x);
+          const len = Math.hypot(tx - z.x, ty - z.y);
+          const p: Projectile = {
+            id: this.nextProj++,
+            x: z.x,
+            y: z.y,
+            vx: Math.cos(ang) * speed,
+            vy: Math.sin(ang) * speed,
+            left: len,
+            damage: dmg,
+            puddle: undefined,
+            from: z.id,
+            lob: { radius: def.radius ?? 90, edge: def.edgeFactor ?? 0.4 },
+          };
+          this.projectiles.set(p.id, p);
+          this.host.emit({
+            t: "proj",
+            id: p.id,
+            x: Math.round(p.x),
+            y: Math.round(p.y),
+            vx: Math.round(p.vx),
+            vy: Math.round(p.vy),
+            tx: Math.round(tx),
+            ty: Math.round(ty),
+            r: p.lob!.radius,
+          });
+        }
+        this.host.emit({ t: "zatk", z: z.id, k: "throw", x: Math.round(z.x), y: Math.round(z.y) });
+        return;
+      }
+      case "summon": {
+        const sm = def.summon;
+        this.host.emit({ t: "zatk", z: z.id, k: "summon", x: Math.round(z.x), y: Math.round(z.y) });
+        if (!sm) return;
+        const nav = this.host.nav();
+        for (let i = 0; i < sm.count; i++) {
+          const a = (i / sm.count) * Math.PI * 2;
+          const at = randomWalkableNear(nav, 1, z.x + Math.cos(a) * 120, z.y + Math.sin(a) * 120, 60, () =>
+            this.host.rng(),
+          );
+          if (at) this.spawn(sm.kind, at.x, at.y, { state: "hunt", group: z.id, wave: z.wave });
+        }
+        return;
+      }
       case "melee": {
         this.host.emit({ t: "zatk", z: z.id, k: "melee", x: Math.round(z.actX), y: Math.round(z.actY) });
         if (!target?.alive) return;
@@ -830,6 +988,8 @@ export class ZombieWorld {
     // `scaled`: the caller already applied the precision bonus per pellet.
     if (precise && !scaled) dmg *= PRECISION_DAMAGE_MULT;
     if (z.state === AI.STUNNED) dmg *= z.def.stunnedDamageMult;
+    // A boss roaring through a phase transition shrugs off almost everything.
+    if (z.cur?.kind === "roar" && z.act === ACT.WINDUP) dmg *= 0.1;
     const dealt = Math.max(1, Math.round(dmg));
     z.hp = Math.max(0, z.hp - dealt);
     if (by) {
@@ -837,6 +997,23 @@ export class ZombieWorld {
       z.lastHurtTick = this.host.tick;
     }
     const lethal = z.hp === 0;
+    if (!lethal && z.def.boss) {
+      const ph = bossPhase(z.def, z.hp / z.maxHp);
+      if (ph > z.phase) {
+        z.phase = ph;
+        z.lungeUntil = 0;
+        z.cooldowns.clear();
+        this.host.emit({ t: "pve", k: "bossPhase", n: ph + 1, s: z.id });
+        this.startAct(z, "boss", z.x, z.y, {
+          kind: "roar",
+          range: 0,
+          windupSec: z.def.boss.transitionSec,
+          recoverSec: 0.3,
+          damage: 0,
+        });
+        z.curId = "";
+      }
+    }
     const ev: NetEvent = {
       t: "zhit",
       p: by,
@@ -907,7 +1084,7 @@ export class ZombieWorld {
     };
     switch (z.state) {
       case AI.ATTACK: {
-        const def = z.actKind === "special" && z.def.special ? z.def.special : z.def.attack;
+        const def = z.cur ?? z.def.attack;
         if (z.act === ACT.ACTIVE && (def.kind === "charge" || def.kind === "pounce") && tick < z.lungeUntil) {
           return { vx: z.lungeVx, vy: z.lungeVy, face: Math.atan2(z.lungeVy, z.lungeVx) };
         }
@@ -1129,12 +1306,17 @@ export class ZombieWorld {
       z.act = ACT.NONE;
       if (z.actKind === "special" && z.def.special)
         z.specialReadyTick = this.host.tick + this.secTicks(z.def.special.cooldownSec);
+      if (z.actKind === "boss" && z.curId) {
+        const b = z.cur as BossAttackDef;
+        z.cooldowns.set(z.curId, this.host.tick + this.secTicks(b.cooldownSec ?? 6));
+      }
+      z.cur = null;
       this.setState(z, AI.STUNNED, z.def.wallStunSec);
     }
   }
 
   private lungeContacts(z: Zombie, actors: readonly PveActor[]): void {
-    const def = z.actKind === "special" && z.def.special ? z.def.special : z.def.attack;
+    const def = z.cur ?? z.def.attack;
     for (const a of actors) {
       if (!a.alive || a.vehicle || z.lungeHits.has(a.id)) continue;
       if (Math.hypot(a.x - z.x, a.y - z.y) > z.def.radius + PLAYER.radius + 6) continue;
@@ -1187,6 +1369,26 @@ export class ZombieWorld {
       const step = Math.min(p.left, speed * dt);
       const ux = p.vx / speed;
       const uy = p.vy / speed;
+      if (p.lob) {
+        // Lobbed: flies over walls and players, lands on the marked spot.
+        p.x += ux * step;
+        p.y += uy * step;
+        p.left -= step;
+        if (p.left > 0.5) continue;
+        this.projectiles.delete(id);
+        this.host.emit({ t: "projx", id, x: Math.round(p.x), y: Math.round(p.y) });
+        this.host.emit({ t: "zatk", z: p.from, k: "impact", x: Math.round(p.x), y: Math.round(p.y) });
+        const from = this.zombies.get(p.from) ?? null;
+        for (const a of actors) {
+          if (!a.alive || a.airborne) continue;
+          const d = Math.hypot(a.x - p.x, a.y - p.y);
+          if (d > p.lob.radius + PLAYER.radius) continue;
+          const amount = p.damage * (1 - (1 - p.lob.edge) * clamp(d / p.lob.radius, 0, 1));
+          if (a.vehicle) this.host.hurtVehicle(a.vehicle, amount, p.x, p.y);
+          else this.host.hurtPlayer(a.id, amount, from, a.x, a.y);
+        }
+        continue;
+      }
       // Players along this step (vehicle occupants: the hull takes it).
       let hitAt = step;
       let victim: PveActor | null = null;

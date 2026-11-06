@@ -31,6 +31,8 @@ export function PveHud() {
 
   if (!h.active) return null;
   const me = h.me;
+  const boss = h.boss;
+  const notches = boss ? Array.from({ length: boss.phases - 1 }, (_, i) => (i + 1) / boss.phases) : [];
   const waveLine =
     h.wave > 0 && h.left > 0
       ? `Wave ${h.wave} · ${h.left} infected left`
@@ -71,6 +73,23 @@ export function PveHud() {
         )}
         {h.mode === "survival" && <p className="pve-objective__wave mono">Infected eliminated: {h.kills}</p>}
       </section>
+
+      {boss && (
+        <section className="pve-boss" aria-label={`${boss.name}, phase ${boss.phase}`} data-testid="pve-boss">
+          <header>
+            <span className="pve-boss__name">{boss.name}</span>
+            <span className="pve-boss__phase mono">
+              Phase {boss.phase}/{boss.phases}
+            </span>
+          </header>
+          <div className="pve-boss__bar" aria-hidden="true">
+            <span style={{ transform: `scaleX(${Math.max(0, boss.hp / Math.max(1, boss.mhp))})` }} />
+            {notches.map((f) => (
+              <i key={f} style={{ left: `${f * 100}%` }} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <ul className="pve-squad" aria-label="Squad" data-testid="pve-squad">
         {h.squad.map((m) => (

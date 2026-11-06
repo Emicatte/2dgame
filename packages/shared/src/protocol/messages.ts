@@ -133,7 +133,17 @@ export type NetEvent =
   /** An enemy attack lands (sound and impact): melee, spit, pounce, charge, explode. */
   | { t: "zatk"; z: string; k: string; x: number; y: number }
   /** Acid projectile launched (`id`), flying in a straight line until "projx". */
-  | { t: "proj"; id: number; x: number; y: number; vx: number; vy: number }
+  | {
+      t: "proj";
+      id: number;
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      tx?: number;
+      ty?: number;
+      r?: number;
+    }
   | { t: "projx"; id: number; x: number; y: number }
   /** Blast (exploder): centre and radius. */
   | { t: "boom"; x: number; y: number; r: number }
