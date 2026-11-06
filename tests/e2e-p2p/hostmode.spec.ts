@@ -19,6 +19,7 @@ interface Hooks {
   selfId(): string | null;
   phase(): string | null;
   players(): { id: string; x: number; y: number; alive: boolean }[];
+  pve(): { dark: boolean } | null;
   net(): {
     stalled: boolean;
     pendingMaxEver: number;
@@ -100,6 +101,9 @@ test("host mode: create, Team Deathmatch invite link, play, reload and resume, h
   const bId = (await hooks(b, (h) => h.selfId()))!;
   const aId = (await hooks(a, (h) => h.selfId()))!;
   expect(bId).not.toBe(aId);
+  // PvP arenas keep their lighting: the co-op darkness never runs here.
+  expect((await hooks(a, (h) => h.pve()))?.dark).toBe(false);
+  expect((await hooks(b, (h) => h.pve()))?.dark).toBe(false);
 
   // B moves; the host's authoritative state and B's own view agree.
   const before = (await hooks(a, (h) => h.players())).find((p) => p.id === bId)!;

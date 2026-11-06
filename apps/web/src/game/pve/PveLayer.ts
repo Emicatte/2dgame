@@ -18,6 +18,25 @@ import Phaser from "phaser";
 import { TEX, TEX_SCALE } from "../art/textures.ts";
 import { generateZombieTextures, ZTEX } from "../art/zombieArt.ts";
 import type { Effects } from "../effects/Effects.ts";
+import type { Lightmap } from "./lightmap.ts";
+import { isVisible } from "./visibility.ts";
+
+const TEX_EYES = "dread-eyes";
+
+function makeEyesTexture(scene: Phaser.Scene): void {
+  if (scene.textures.exists(TEX_EYES)) return;
+  const c = scene.textures.createCanvas(TEX_EYES, 24, 12)!;
+  const ctx = c.getContext();
+  for (const x of [6, 18]) {
+    const g = ctx.createRadialGradient(x, 6, 0, x, 6, 6);
+    g.addColorStop(0, "rgba(255,255,255,1)");
+    g.addColorStop(0.35, "rgba(255,255,255,0.8)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(x - 6, 0, 12, 12);
+  }
+  c.refresh();
+}
 
 /**
  * Client side of Outbreak: renders what the authoritative room simulates. Enemies are interpolated
@@ -93,6 +112,9 @@ class ZombieView {
   private readonly bar: Phaser.GameObjects.Graphics;
   private flashMs = 0;
   private bob = Math.random() * 10;
+  /** Glinting eyes in the dark (above the light map): seen, not lit. */
+  readonly eyes: Phaser.GameObjects.Image;
+  private blink = Math.random() * 4;
   private lastX = 0;
   private lastY = 0;
   x = 0;
@@ -110,6 +132,32 @@ class ZombieView {
     this.body = scene.add.image(0, 0, ZTEX.body(def.kind)).setScale(1 / TEX_SCALE);
     this.bar = scene.add.graphics();
     this.root = scene.add.container(0, 0, [this.shadow, this.body, this.bar]).setDepth(18);
+    const big = def.boss ? 2.4 : def.kind === "brute" ? 1.5 : 1;
+    this.eyes = scene.add
+      .image(0, 0, TEX_EYES)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setTint(
+        def.boss ? 0xff3b2f : def.kind === "runner" ? 0xffe68a : def.kind === "stalker" ? 0x9fffd0 : 0xffc35a,
+      )
+      .setDisplaySize(10 * big, 5 * big)
+      .setDepth(34)
+      .setVisible(false);
+  }
+
+  /** Eyes in the dark: shown when the enemy is in sight but unlit; they blink now and then. */
+  glint(show: boolean, angle: number, dist: number, dtSec: number): void {
+    this.blink -= dtSec;
+    if (this.blink < -0.12) this.blink = 1.5 + Math.random() * 4;
+    if (!show || this.blink < 0) {
+      this.eyes.setVisible(false);
+      return;
+    }
+    const fwd = this.def.radius * 0.55;
+    this.eyes
+      .setVisible(true)
+      .setPosition(this.x + Math.cos(angle) * fwd, this.y + Math.sin(angle) * fwd)
+      .setRotation(angle + Math.PI / 2)
+      .setAlpha(Math.max(0.18, 0.75 - dist / 1400));
   }
 
   flash(): void {
@@ -151,6 +199,7 @@ class ZombieView {
 
   destroy(): void {
     this.root.destroy(true);
+    this.eyes.destroy();
   }
 }
 
@@ -190,8 +239,8 @@ export class PveLayer {
   private readonly doors = new Map<string, Phaser.GameObjects.Graphics>();
   private readonly projectiles = new Map<number, Proj>();
   private readonly fx: Phaser.GameObjects.Graphics;
-  private readonly dark: Phaser.GameObjects.Rectangle;
-  private readonly lantern: Phaser.GameObjects.Image;
+  /** Co-op darkness (owned by the scene): line of sight and light levels for the eye glints. */
+  lightmap: Lightmap | null = null;
   private mission: MissionDef | null = null;
   private mapId = "";
   private doorKey = "\u0000";
@@ -205,22 +254,9 @@ export class PveLayer {
     private readonly effects: Effects,
   ) {
     generateZombieTextures(scene);
-    this.fx = scene.add.graphics().setDepth(13);
-    // PvE maps are darker: one camera-space quad (cheap) under the lights, which brighten it back.
-    this.dark = scene.add
-      .rectangle(0, 0, 10, 10, 0x05060a, 0.4)
-      .setOrigin(0)
-      .setScrollFactor(0)
-      .setDepth(29)
-      .setVisible(false);
-    this.lantern = scene.add
-      .image(0, 0, TEX.glowSoft)
-      .setBlendMode(Phaser.BlendModes.ADD)
-      .setTint(0xfff1d0)
-      .setAlpha(0.22)
-      .setDisplaySize(620, 620)
-      .setDepth(31)
-      .setVisible(false);
+    makeEyesTexture(scene);
+    // Telegraphs sit above the darkness: an attack is always readable, even from an unseen enemy.
+    this.fx = scene.add.graphics().setDepth(33);
   }
 
   /** Map / mission changed (or left PvE): rebuild doors and props. */
@@ -233,8 +269,6 @@ export class PveLayer {
     this.mapId = map.id;
     this.mission = mission;
     this.doorKey = "\u0000";
-    this.dark.setVisible(pve);
-    this.lantern.setVisible(pve);
   }
 
   /** Doors open in the state (the scene rebuilds the collision world when this changes). */
@@ -457,15 +491,8 @@ export class PveLayer {
     focus: { x: number; y: number },
   ): void {
     if (!this.active) return;
-    const cam = this.scene.cameras.main;
-    // Camera zoom also scales scroll-factor-0 objects around the screen centre: oversize the
-    // quad so it covers the whole view at any zoom.
-    const w = this.scene.scale.width;
-    const h = this.scene.scale.height;
-    this.dark.setPosition(-w, -h).setSize(w * 3, h * 3);
-    this.dark.setAlpha(this.power ? 0.26 : 0.42);
-    this.lantern.setPosition(focus.x, focus.y);
-    void cam;
+    const lm = this.lightmap?.enabled ? this.lightmap : null;
+    const poly = lm?.poly ?? null;
     const g = this.fx;
     g.clear();
     const now = performance.now();
@@ -478,6 +505,11 @@ export class PveLayer {
       }
       v.root.setVisible(true);
       v.update(s.x, s.y, s.a, zs.hp, zs.mhp, zs.st, dtSec);
+      if (lm && poly) {
+        const dist = Math.hypot(s.x - focus.x, s.y - focus.y);
+        const seen = dist < 1100 && isVisible(poly, s.x, s.y, v.def.radius);
+        v.glint(seen && lm.lightAt(s.x, s.y) < 0.3, s.a, dist, dtSec);
+      } else v.glint(false, s.a, 0, dtSec);
       this.drawTelegraph(g, v, zs.act, zs.at, zs.tx, zs.ty, zs.st, renderTick, tickRate, zs.ak, zs.aw, zs.ar);
     }
     // Props: pulse when usable, hold progress ring.
@@ -715,6 +747,13 @@ export class PveLayer {
     this.buffer.clear();
     for (const p of this.projectiles.values()) p.img.destroy();
     this.projectiles.clear();
+  }
+
+  /** Enemies currently shown only by their eyes (in sight, unlit). */
+  get glintCount(): number {
+    let n = 0;
+    for (const v of this.views.values()) if (v.eyes.visible) n++;
+    return n;
   }
 
   get enemyCount(): number {

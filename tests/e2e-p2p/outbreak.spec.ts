@@ -29,6 +29,10 @@ interface PveInfo {
   rendered: number;
   downed: boolean;
   hp: number;
+  dark: boolean;
+  sightVertices: number;
+  glints: number;
+  tension: number;
 }
 
 const pve = (page: Page) =>
@@ -216,12 +220,24 @@ test("Survival: a boss renders with its health bar and telegraphs (host only)", 
   expect(spawned).toBe(true);
   await expect(a.getByTestId("pve-boss")).toContainText("The Abomination", { timeout: 10_000 });
   await expect(a.getByTestId("pve-boss")).toContainText("Phase 1/3");
+  // Co-op darkness: the light map and the line of sight are live.
+  const lit = await pve(a);
+  expect(lit?.dark).toBe(true);
+  expect(lit?.sightVertices ?? 0).toBeGreaterThan(8);
   // Let it close in and telegraph (slam / charge); keep the player still and shooting.
   await walk(a, [], { fire: true });
+  let maxGlints = 0;
+  let maxTension = 0;
   for (let i = 0; i < 8; i++) {
     await a.waitForTimeout(700);
     await shot(a, `outbreak-boss-${i}`);
+    const d = await pve(a);
+    maxGlints = Math.max(maxGlints, d?.glints ?? 0);
+    maxTension = Math.max(maxTension, d?.tension ?? 0);
   }
+  console.log(`[outbreak e2e] darkness: max glints ${maxGlints}, max tension ${maxTension}`);
+  // A boss at close range makes the moment tense.
+  expect(maxTension).toBeGreaterThan(0.4);
   const info = await pve(a);
   console.log(`[outbreak e2e] boss scenario: ${JSON.stringify(info)}`);
   // The boss is synchronized and rendered (the run may already be lost: a boss alone is brutal).

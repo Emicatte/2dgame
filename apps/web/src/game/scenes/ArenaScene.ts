@@ -1,5 +1,6 @@
 import type { Room } from "@colyseus/sdk";
 import {
+  AI,
   AIRBORNE_ALT,
   activeWeapon,
   airWorldFor,
@@ -88,8 +89,11 @@ import {
 import { NetMetrics } from "../net/metrics.ts";
 import { type PredictEnv, Predictor } from "../net/Predictor.ts";
 import { PerfRecorder } from "../perf/PerfRecorder.ts";
+import { type Carrier, type Headlight, Lightmap, type LightSource } from "../pve/lightmap.ts";
 import { enemyHitFx, PveLayer } from "../pve/PveLayer.ts";
 import { pveHud } from "../pve/pveHud.ts";
+import { flashlightFlicker, smoothTension, type TensionEnemy, tensionTarget } from "../pve/tension.ts";
+import { sightWorld } from "../pve/visibility.ts";
 
 interface PickupView {
   id: string;
@@ -141,8 +145,16 @@ export class ArenaScene extends Phaser.Scene {
     base: number;
     flicker: number;
     seed: number;
+    color: number;
+    radius: number;
     group?: "power" | "alarm";
   }[] = [];
+  /** Co-op darkness: light map with line of sight (PvE only). */
+  private lightmap!: Lightmap;
+  /** Dread level for the local player (drives the score and the flashlight flicker). */
+  private tension = 0;
+  private lastHurtAt = -99;
+  private stalkerNear = false;
   /** Outbreak / Survival rendering (enemies, telegraphs, props, doors, hazards). */
   private pve!: PveLayer;
   /** Collision worlds with the current mission doors (null outside PvE maps with doors). */
@@ -203,6 +215,9 @@ export class ArenaScene extends Phaser.Scene {
     this.controls = new InputManager();
     this.effects = new Effects(this, () => this.map);
     this.pve = new PveLayer(this, this.effects);
+    this.lightmap = new Lightmap(this);
+    this.lightmap.setQuality(settingsStore.get().quality);
+    this.pve.lightmap = this.lightmap;
     this.perf = new PerfRecorder(this.game, () => this.children.length);
     this.crosshair = new Crosshair(this);
     this.predictor = new Predictor(collisionWorldFor(this.map), 0, airWorldFor(this.map));
@@ -347,6 +362,10 @@ export class ArenaScene extends Phaser.Scene {
           rendered: this.pve.enemyCount,
           downed: !!me?.downed,
           hp: me?.hp ?? 0,
+          dark: this.lightmap.enabled,
+          sightVertices: this.lightmap.poly?.count ?? 0,
+          glints: this.pve.glintCount,
+          tension: Math.round(this.tension * 100) / 100,
         };
       },
       /**
@@ -427,6 +446,7 @@ export class ArenaScene extends Phaser.Scene {
     const quality = settingsStore.get().quality;
     const budget = budgetFor(quality);
     this.effects?.setQuality(quality);
+    this.lightmap?.setQuality(quality);
     const min = budget.lightMinIntensity;
     for (const l of this.lightImages) l.img.setVisible(min <= 0 || l.base > min);
     const cam = this.cameras.main;
@@ -495,6 +515,8 @@ export class ArenaScene extends Phaser.Scene {
       base: l.intensity,
       flicker: l.flicker ?? 0,
       seed: i * 13.37,
+      color: l.color,
+      radius: l.radius,
       ...(l.group ? { group: l.group } : {}),
     }));
     this.doorWorlds = null;
@@ -731,6 +753,23 @@ export class ArenaScene extends Phaser.Scene {
     this.syncObjectiveViews(state);
     if (state.mapId === this.map.id) {
       this.pve.setContext(this.map, state);
+      if (this.pve.active !== this.lightmap.enabled) {
+        this.lightmap.setActive(this.pve.active);
+        // Gunfire and explosions light the dark (wider than their glow, they are the only light).
+        this.effects.lightSink = this.pve.active
+          ? (x, y, r, color, ms, a) =>
+              // Muzzle flashes are tiny glows: widen them; big lights (explosions) barely, and cap.
+              this.lightmap.flash(
+                x,
+                y,
+                Math.min(380, r < 120 ? r * 2.4 : r * 1.3),
+                color,
+                ms * 1.6,
+                Math.min(0.9, a),
+              )
+          : null;
+        if (this.pve.active) this.updateSight(state);
+      }
       if (this.pve.active && this.pve.doorsChanged(state)) this.applyDoors(state);
       if (phase === "lobby") this.pve.resetMatch();
       this.pve.onPatch(state, inMatch);
@@ -804,6 +843,7 @@ export class ArenaScene extends Phaser.Scene {
             const angle =
               me && shooter ? Math.atan2(shooter.root.y - me.root.y, shooter.root.x - me.root.x) : 0;
             sfx.hurt();
+            this.lastHurtAt = performance.now() / 1000;
             this.cameras.main.shake(120, 0.004 * settingsStore.get().screenShake);
             hudStore.patch({ damageFlash: hudStore.get().damageFlash + 1, damageAngle: angle });
           }
@@ -910,6 +950,101 @@ export class ArenaScene extends Phaser.Scene {
     const open = state.mode === "survival" ? new Set(doors.map((d) => d.id)) : parseIdList(state.pve.doors);
     this.doorWorlds = doors.length > 0 ? pveWorlds(this.map, doors, open) : null;
     this.predictor.setWorld(this.doorWorlds?.world ?? collisionWorldFor(this.map), airWorldFor(this.map));
+    this.updateSight(state);
+  }
+
+  /** Walls and closed mission doors block the local player's sight. */
+  private updateSight(state: MatchState) {
+    const mission = state.mode === "outbreak" ? missionById(state.pve.mission) : undefined;
+    const open = parseIdList(state.pve.doors);
+    const closed = state.mode === "survival" ? [] : (mission?.doors ?? []).filter((d) => !open.has(d.id));
+    this.lightmap.setWorld(sightWorld(this.map.solids, closed));
+  }
+
+  /**
+   * Dread, per frame: how tense the moment is, then the light map (flashlights, headlights,
+   * lamps, glowing props and acid, line of sight). Presentation only, from the synced state.
+   */
+  private updateDread(dtSec: number, state: MatchState) {
+    const self = this.room?.sessionId ?? "";
+    const ps = state.players.get(self);
+    const view = this.views.get(self);
+    const cam = this.cameras.main;
+    const eye =
+      view && ps?.alive ? { x: view.root.x, y: view.root.y } : { x: cam.midPoint.x, y: cam.midPoint.y };
+    const enemies: TensionEnemy[] = [];
+    let stalker = false;
+    state.zombies.forEach((z, id) => {
+      const def = zombieByIndex(z.k);
+      if (!def) return;
+      const at = this.pve.position(id) ?? z;
+      const d = Math.hypot(at.x - eye.x, at.y - eye.y);
+      const hunting = z.st === AI.CHASE || z.st === AI.ATTACK;
+      enemies.push({ d, hunting, special: def.kind !== "walker" && def.kind !== "runner", boss: !!def.boss });
+      if (def.kind === "stalker" && hunting && d < 450) stalker = true;
+    });
+    const nowSec = performance.now() / 1000;
+    const hpFrac = ps?.alive ? ps.hp / PLAYER.maxHealth : 1;
+    const target = tensionTarget({
+      enemies,
+      hpFrac,
+      downed: !!ps?.downed,
+      waveActive: state.pve.left > 0,
+      sinceHurt: nowSec - this.lastHurtAt,
+    });
+    this.tension = smoothTension(this.tension, target, dtSec);
+    this.stalkerNear = stalker;
+
+    const allies: Carrier[] = [];
+    const headlights: Headlight[] = [];
+    state.vehicles.forEach((v, id) => {
+      if (v.status !== 0 || !v.s0 || v.alt >= AIRBORNE_ALT) return;
+      const vv = this.vehicleViews.get(id);
+      headlights.push({ x: vv?.root.x ?? v.x, y: vv?.root.y ?? v.y, angle: v.angle });
+    });
+    state.players.forEach((p, id) => {
+      if (id === self || !p.alive || (p.vehicle && p.seat === 0)) return;
+      const pv = this.views.get(id);
+      allies.push({ x: pv?.root.x ?? p.x, y: pv?.root.y ?? p.y, aim: p.aim, downed: p.downed });
+    });
+    const driving = !!ps?.vehicle && ps.seat === 0;
+    const me: Carrier | null =
+      ps?.alive && view && !driving
+        ? { x: view.root.x, y: view.root.y, aim: this.aimAngle(), downed: ps.downed }
+        : null;
+    const lamps: LightSource[] = [];
+    for (const l of this.lightImages) {
+      if (!l.img.visible || l.img.alpha < 0.02) continue;
+      lamps.push({ x: l.img.x, y: l.img.y, r: l.radius, color: l.color, a: Math.min(1, l.img.alpha * 1.6) });
+    }
+    // Things worth finding glow faintly: objectives, loot, supplies; acid glows so it is avoidable.
+    state.props.forEach((p) => {
+      if (p.kind === "ammo" || p.kind === "health")
+        lamps.push({ x: p.x, y: p.y, r: 70, color: p.kind === "health" ? 0xff8a8a : 0xffd27a, a: 0.55 });
+      else if (p.kind === "supply") {
+        if (!p.used) lamps.push({ x: p.x, y: p.y, r: 120, color: 0x7dffb0, a: 0.6 });
+      } else if (p.active && !p.used) lamps.push({ x: p.x, y: p.y, r: 130, color: 0x7fdcff, a: 0.75 });
+    });
+    state.hazards.forEach((h) => {
+      lamps.push({ x: h.x, y: h.y, r: h.r * 1.25, color: 0x9cff5a, a: 0.45 });
+    });
+    const diff = isDifficulty(state.pve.difficulty) ? state.pve.difficulty : "veteran";
+    const base = diff === "recruit" ? 0.7 : diff === "nightmare" ? 0.28 : 0.48;
+    const setting = (settingsStore.get() as { pveBrightness?: number }).pveBrightness ?? 0.5;
+    const brightness = clamp(base + (setting - 0.5) * 0.8 + (state.pve.power ? 0.08 : 0), 0, 1);
+    const danger = ps?.downed ? 1 : ps?.alive && hpFrac <= 0.35 ? 0.3 + (0.35 - hpFrac) * 2 : 0;
+    this.lightmap.update({
+      cam,
+      eye,
+      me,
+      allies,
+      headlights,
+      lamps,
+      brightness,
+      flicker: flashlightFlicker(nowSec, stalker, this.tension),
+      danger,
+      dtSec,
+    });
   }
 
   /** What bullets meet at ground level (mission doors included). */
@@ -1155,6 +1290,7 @@ export class ArenaScene extends Phaser.Scene {
     this.renderPlayers(renderTick, dt / 1000, state);
     if (this.pve.active) {
       const me = this.views.get(this.room.sessionId);
+      this.updateDread(dt / 1000, state);
       this.pve.update(renderTick, dt / 1000, state, state.tickRate || NET.serverTickRate, {
         x: me?.root.x ?? this.cameras.main.midPoint.x,
         y: me?.root.y ?? this.cameras.main.midPoint.y,

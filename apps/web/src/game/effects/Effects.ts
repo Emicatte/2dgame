@@ -317,7 +317,16 @@ export class Effects {
     return f;
   }
 
+  /**
+   * Co-op darkness: every transient light (muzzle flash, explosion) is also handed to the light
+   * map, so gunfire really lights the dark. Null outside PvE.
+   */
+  lightSink:
+    | ((x: number, y: number, radius: number, color: number, ms: number, alpha: number) => void)
+    | null = null;
+
   private light(x: number, y: number, color: number, radius: number, ms: number, alpha: number) {
+    this.lightSink?.(x, y, radius, color, ms, alpha);
     const l = this.takeFlash(this.lights, this.budget.lights, TEX.glow, 5);
     l.img
       .setPosition(x, y)
