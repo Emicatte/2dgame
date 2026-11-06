@@ -35,7 +35,7 @@ input sequence. Both fixes are in the first commit of the branch.
 | 3 | Wave Director, first waves, Survival | ✅ |
 | 4 | Co-op: shared missions, downed/revive, failure, two-browser test | ✅ |
 | 5 | First Contact complete | ✅ scripted and tested end to end in the simulation; first two objectives verified with two real browsers; a full run by human players not done here |
-| 6 | Boss system and first boss | not started |
+| 6 | Boss system and first boss | ✅ boss system (phases, per-phase attacks, combos, transitions, squad scaling) and The Abomination, playable as the boss of every tenth Survival wave; not yet in a mission (The Warden and Subject Zero belong to later missions) |
 | 7 | Dead District, The Convoy | not started (listed in the lobby as in development, not selectable) |
 | 8 | Black Site and miniboss | not started |
 | 9 | Final Breach, Subject Zero | not started |
@@ -63,6 +63,7 @@ input sequence. Both fixes are in the first commit of the branch.
 | **Two independent browsers complete a co-op objective** | `tests/e2e-p2p/outbreak.spec.ts` (two Chrome processes, WebRTC): both reach the hall (objective 1), host restores power while the guest covers (objective 2); both screens show the mission advancing | pass (2.9 min in software rendering) |
 | No PvP regressions | full unit/integration suites; PvP E2E (see TESTING) | see below |
 | Performance budget | tick cost by enemy count, bandwidth | see OUTBREAK.md §8 |
+| Boss changes phase, can be defeated, telegraphs every attack | `pve.test.ts` "boss" (phases at 66/33 % with roar, defeat, slam damage only after its windup, debris aimed at the player, summons, Survival wave 10 ends only when it falls, ranged fallback on a cramped map); boss E2E scenario with screenshots | pass |
 
 Found and fixed by the new tests: an AI state timer that made investigating enemies give up at
 once; a "fat" line-of-sight check that let paths graze corners; holds advancing per server tick

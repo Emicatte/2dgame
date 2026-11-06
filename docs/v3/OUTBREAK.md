@@ -84,6 +84,25 @@ Every significant attack has a windup the client draws from `act`/`at`/`tx`/`ty`
 Damage numbers are Veteran; difficulty multiplies them. Precision hits (pellet within 40 % of
 the radius from the centre) deal ×1.5 and show as critical.
 
+### Boss: The Abomination (`ZOMBIES.abomination`, BossController in `ZombieWorld`)
+
+Bosses are data: health thresholds split the fight into phases, each with its own attack set,
+speed and windup multiplier (windups get shorter, never disappear). The boss picks the first
+ready attack whose distance band fits; attacks have per-attack cooldowns; a phase transition is
+a roar (shove, no damage; the boss takes 10 % damage meanwhile).
+
+| Phase | Health | Attacks (windup) | Changes |
+|---|---|---|---|
+| 1 | 100–66 % | slam r 170 (1.1 s), charge lane (1.0 s), melee | — |
+| 2 | 66–33 % | + lobbed debris on marked circles (0.77 s), summons 4 walkers | speed ×1.15, windups ×0.85 |
+| 3 | < 33 % | slam → charge combo, three-piece debris volley, summons 4 runners | speed ×1.25, windups ×0.75 |
+
+A charge into a wall stuns it for 2.4 s (×2 damage taken): the intended punish. Health scales
+with the squad (× 1 + 0.45 per extra player), unlike regular infected. On maps narrower than its
+body it follows the large-body field and slides along walls; if it is still cut off it keeps
+throwing debris. HUD: boss bar with phase notches; telegraphs come from the synchronized attack
+kind, windup length and radius. It leads every tenth Survival wave; the wave ends when it falls.
+
 ## 4. Waves
 
 `WaveDirector` turns a wave definition (counts for one Veteran player) into a queue:
@@ -156,14 +175,16 @@ in development and cannot be selected (no placeholder missions).
 All additions use the existing channels (state patches, event batch per tick):
 
 - `MatchState.zombies` (`ZombieState`: kind index, x/y int16, facing uint8 in 1/256 turns, hp,
-  max hp, AI state, attack phase + start tick + telegraph target), `hazards`, `props` (mission
+  max hp, AI state, attack phase + start tick + telegraph target, attack kind + windup ticks +
+  area radius), `hazards`, `props` (mission
   props, supply crates, loot), `pve` (`PveState`: mission, difficulty, step, progress, counters,
   wave, enemies left, next wave tick, status, power, alarm, open doors, flags, self-revives,
   kills, boss id). `PlayerState`: `downed`, `bleed` (tenths of a second), `revive`, `revives`.
 - Events: `zhit` (damage to an enemy, precision/armor flags), `zdie`, `zatk` (attack lands),
-  `proj` / `projx` (acid flight and landing; the client flies it in a straight line), `boom`,
-  `down`, `revive`, `bleed`, `pve` (step, wave, clear, hint, door, prop, supply, complete,
-  failed). A player hit by an enemy gets the usual `hit` with `p = "z:<id>"`.
+  `proj` / `projx` (acid or lobbed debris: flight and landing; debris carries its landing point
+  and radius `tx`/`ty`/`r`, drawn as a warning circle during the flight), `boom`,
+  `down`, `revive`, `bleed`, `pve` (step, wave, clear, hint, door, prop, supply, bossPhase,
+  complete, failed). A player hit by an enemy gets the usual `hit` with `p = "z:<id>"`.
 - Settings: `mission`, `difficulty` (host only, validated: unknown missions are refused).
 - Results: `ResultsMessage.pve` (squad summary) and `PersonalResult.record.pve` with a `runId`.
   The receiving browser records a run once per id; PvP stats (kills, deaths, wins, career) are
