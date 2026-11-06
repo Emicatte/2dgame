@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (branch `dread`)
+## 0.5.1 — 2026-11-06 (co-op dread pass, TURN diagnostics)
 
 ### Added
 - **Dread pass for co-op** (client only, PvE only): darkness as a light map with line-of-sight
@@ -11,6 +11,11 @@
   settings "Music volume" and "Co-op brightness". See `docs/v3/OUTBREAK.md` §5b.
 - Tests: line of sight and shadow quads, tension and flicker (11), score mix rules (21),
   settings migration; E2E asserts the darkness in co-op and its absence in PvP.
+
+### Fixed
+- Host mode: a refused or unreachable Cloudflare TURN key fell back to STUN without a trace.
+  `GET /api/p2p` now reports `turn` (none / static / cloudflare / cloudflare-error:<status> /
+  cloudflare-unreachable), never a credential, and failures are logged.
 
 ## 0.5.0 — 2026-11-06 (SCRAPLINE 3.0 | OUTBREAK, phases 0–6: combat visual overhaul, co-op PvE)
 
