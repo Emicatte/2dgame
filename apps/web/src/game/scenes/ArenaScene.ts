@@ -7,12 +7,15 @@ import {
   bodyFits,
   C2S,
   type Circle,
+  type CollisionWorld,
   canDamage,
   clamp,
   closestOnBody,
   collisionWorldFor,
   currentSpreadDeg,
   DEFAULT_MAP,
+  DIFFICULTY,
+  DOWNED,
   ENTER_REACH,
   encodeInput,
   fireIntervalSteps,
@@ -20,6 +23,7 @@ import {
   hashString,
   type InputFrame,
   inSector,
+  isDifficulty,
   isMapId,
   isTeamMode,
   isVehicleKind,
@@ -29,6 +33,7 @@ import {
   type MapId,
   type MatchPhase,
   type MatchState,
+  missionById,
   NET,
   type NetEvent,
   NO_WEAPON,
@@ -36,6 +41,8 @@ import {
   PLAYER as P,
   PLAYER,
   type PlayerState,
+  parseIdList,
+  pveWorlds,
   quantizeInput,
   raycastSolids,
   STEP_DT,
@@ -54,7 +61,7 @@ import {
   weaponByIndex,
 } from "@scrapline/shared";
 import Phaser from "phaser";
-import { settingsStore } from "../../lib/settings.ts";
+import { keyLabel, settingsStore } from "../../lib/settings.ts";
 import { gameEvents, session, sessionStore } from "../../net/session.ts";
 import { currentLoadout } from "../../state/profile.ts";
 import { renderMap } from "../art/mapRenderer.ts";
@@ -77,6 +84,8 @@ import {
 import { NetMetrics } from "../net/metrics.ts";
 import { type PredictEnv, Predictor } from "../net/Predictor.ts";
 import { PerfRecorder } from "../perf/PerfRecorder.ts";
+import { enemyHitFx, PveLayer } from "../pve/PveLayer.ts";
+import { pveHud } from "../pve/pveHud.ts";
 
 interface PickupView {
   id: string;
@@ -123,7 +132,17 @@ export class ArenaScene extends Phaser.Scene {
   private room: Room<unknown, MatchState> | null = null;
   private map: MapDef = MAPS[DEFAULT_MAP];
   private mapImage?: Phaser.GameObjects.Image;
-  private lightImages: { img: Phaser.GameObjects.Image; base: number; flicker: number; seed: number }[] = [];
+  private lightImages: {
+    img: Phaser.GameObjects.Image;
+    base: number;
+    flicker: number;
+    seed: number;
+    group?: "power" | "alarm";
+  }[] = [];
+  /** Outbreak / Survival rendering (enemies, telegraphs, props, doors, hazards). */
+  private pve!: PveLayer;
+  /** Collision worlds with the current mission doors (null outside PvE maps with doors). */
+  private doorWorlds: { world: CollisionWorld; shotWorld: CollisionWorld } | null = null;
   private pickupViews = new Map<string, PickupView>();
   private views = new Map<string, PlayerView>();
   private vehicleViews = new Map<string, VehicleView>();
@@ -179,6 +198,7 @@ export class ArenaScene extends Phaser.Scene {
   create(): void {
     this.controls = new InputManager();
     this.effects = new Effects(this);
+    this.pve = new PveLayer(this, this.effects);
     this.perf = new PerfRecorder(this.game, () => this.children.length);
     this.crosshair = this.add.graphics().setDepth(1000).setScrollFactor(0);
     this.hitMarker = this.add.graphics().setDepth(1001).setScrollFactor(0);
@@ -395,7 +415,9 @@ export class ArenaScene extends Phaser.Scene {
       base: l.intensity,
       flicker: l.flicker ?? 0,
       seed: i * 13.37,
+      ...(l.group ? { group: l.group } : {}),
     }));
+    this.doorWorlds = null;
 
     for (const pv of this.pickupViews.values()) {
       pv.base.destroy();
@@ -506,6 +528,9 @@ export class ArenaScene extends Phaser.Scene {
     this.vbuffer.clear();
     this.vehiclePoses.clear();
     this.clearObjectiveViews();
+    this.pve.clear();
+    pveHud.reset();
+    this.doorWorlds = null;
     this.buffer.clear();
     this.clock.reset();
     this.eventQueue = [];
@@ -624,12 +649,19 @@ export class ArenaScene extends Phaser.Scene {
     }
     if (inMatch) this.vbuffer.push(state.tick, vsamples);
     this.syncObjectiveViews(state);
+    if (state.mapId === this.map.id) {
+      this.pve.setContext(this.map, state);
+      if (this.pve.active && this.pve.doorsChanged(state)) this.applyDoors(state);
+      if (phase === "lobby") this.pve.resetMatch();
+      this.pve.onPatch(state, inMatch);
+    }
 
     const me = state.players.get(this.room.sessionId);
     if (me && inMatch) {
       const wasAlive = this.predictorAlive;
       this.predictorAlive = me.alive && phase === "playing";
       if (me.alive && !wasAlive) this.localAliveSince = performance.now();
+      this.predictor.downed = me.downed;
       const wasDriving = this.predictor.driving;
       this.predictor.reconcile(
         me,
@@ -656,6 +688,7 @@ export class ArenaScene extends Phaser.Scene {
   private lastFrameAt = 0;
 
   private onPhaseChange(_from: MatchPhase, to: MatchPhase) {
+    if (to === "countdown" || to === "lobby") pveHud.reset();
     if (to === "countdown") {
       this.lastCountdownSec = -1;
       this.controls.reset();
@@ -742,8 +775,65 @@ export class ArenaScene extends Phaser.Scene {
         default:
           break;
       }
+      if (this.pve.active) this.onPveEvent(ev);
       this.eventQueue.push({ tick, ev });
     }
+  }
+
+  /** Immediate PvE feedback (hit markers on enemies, damage direction from enemies, banners). */
+  private onPveEvent(ev: NetEvent) {
+    const self = this.room?.sessionId;
+    switch (ev.t) {
+      case "zhit":
+        if (ev.p === self) {
+          this.hitMarkerLife = 140;
+          this.hitMarkerLethal = ev.k;
+          sfx.hitMarker(ev.k);
+          this.effects.damageNumber(ev.x, ev.y, ev.dmg, ev.k);
+          hudStore.patch({ hitConfirm: hudStore.get().hitConfirm + 1 });
+        }
+        break;
+      case "hit":
+        if (ev.v === self && ev.p.startsWith("z:")) {
+          const me = this.views.get(self);
+          const from = this.pve.position(ev.p);
+          if (me && from) hudStore.patch({ damageAngle: Math.atan2(from.y - me.root.y, from.x - me.root.x) });
+        }
+        break;
+      case "down":
+        if (ev.p === self) {
+          sfx.death(true);
+          this.cameras.main.shake(200, 0.006 * settingsStore.get().screenShake);
+        }
+        break;
+      case "revive":
+        if (ev.p === self || ev.by === self) sfx.spawn();
+        break;
+      case "boom": {
+        const me = this.views.get(self ?? "");
+        if (me && Math.hypot(me.root.x - ev.x, me.root.y - ev.y) < 500) {
+          this.cameras.main.shake(220, 0.01 * settingsStore.get().screenShake);
+        }
+        break;
+      }
+      default:
+        break;
+    }
+    pveHud.onEvent(ev, self ?? "");
+  }
+
+  /** Mission doors changed: every machine rebuilds the same collision worlds (exact prediction). */
+  private applyDoors(state: MatchState) {
+    const mission = state.mode === "outbreak" ? missionById(state.pve.mission) : undefined;
+    const doors = mission?.doors ?? [];
+    const open = state.mode === "survival" ? new Set(doors.map((d) => d.id)) : parseIdList(state.pve.doors);
+    this.doorWorlds = doors.length > 0 ? pveWorlds(this.map, doors, open) : null;
+    this.predictor.setWorld(this.doorWorlds?.world ?? collisionWorldFor(this.map), airWorldFor(this.map));
+  }
+
+  /** What bullets meet at ground level (mission doors included). */
+  private shotWorld(): CollisionWorld {
+    return this.doorWorlds?.shotWorld ?? shotWorldFor(this.map);
   }
 
   private playQueuedEvents(renderTick: number) {
@@ -760,6 +850,7 @@ export class ArenaScene extends Phaser.Scene {
       if (q.tick > renderTick + 0.5 && q.tick - renderTick < 40) break;
       this.eventQueue.shift();
       const ev = q.ev;
+      if (this.pve.active) this.playPveEvent(ev, spatial);
       switch (ev.t) {
         case "shot": {
           if (ev.p === self) break;
@@ -863,6 +954,35 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
+  private playPveEvent(ev: NetEvent, spatial: (x: number, y: number) => { distance: number; pan: number }) {
+    this.pve.playEvent(ev);
+    switch (ev.t) {
+      case "zhit": {
+        const from = this.views.get(ev.p);
+        const angle = from ? Math.atan2(ev.y - from.root.y, ev.x - from.root.x) : 0;
+        enemyHitFx(this.effects, ev.x, ev.y, angle, { lethal: ev.k, armored: !!ev.a, weakSpot: !!ev.c });
+        break;
+      }
+      case "zatk": {
+        const s = spatial(ev.x, ev.y);
+        sfx.zombieAttack(ev.k, s.distance, s.pan);
+        break;
+      }
+      case "zdie": {
+        const s = spatial(ev.x, ev.y);
+        sfx.zombieDeath(s.distance, s.pan);
+        break;
+      }
+      case "boom": {
+        const s = spatial(ev.x, ev.y);
+        sfx.explosion(s.distance, s.pan);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
   // ---------------------------------------------------------------- loop
 
   override update(): void {
@@ -933,6 +1053,15 @@ export class ArenaScene extends Phaser.Scene {
     this.updateEnterTarget(state, renderTick);
     this.renderVehicles(renderTick, dt / 1000, state);
     this.renderPlayers(renderTick, dt / 1000, state);
+    if (this.pve.active) {
+      const me = this.views.get(this.room.sessionId);
+      this.pve.update(renderTick, dt / 1000, state, state.tickRate || NET.serverTickRate, {
+        x: me?.root.x ?? this.cameras.main.midPoint.x,
+        y: me?.root.y ?? this.cameras.main.midPoint.y,
+      });
+      this.drawDowned(state);
+      this.updateAmbience(dt, state);
+    }
     this.updateEngine(dt, state);
     this.updateCamera(dt);
     this.drawCrosshair();
@@ -1042,7 +1171,7 @@ export class ArenaScene extends Phaser.Scene {
     const sim = this.predictor.sim;
     const ox = sim.x;
     const oy = sim.y;
-    const world = shotWorldFor(this.map);
+    const world = this.shotWorld();
     const renderTick = this.clock.renderTick();
     const targets: HitTarget[] = [];
     const state = this.room?.state;
@@ -1092,6 +1221,7 @@ export class ArenaScene extends Phaser.Scene {
         group: id,
       });
     });
+    if (this.pve.active) targets.push(...this.pve.targets());
     const ride = myVehicle ? this.vehiclePoses.get(myVehicle) : undefined;
     const opts = { airWorld: airWorldFor(this.map), shooterAir: (ride?.alt ?? 0) >= AIRBORNE_ALT };
     const ends = angles.map((a) => {
@@ -1342,7 +1472,7 @@ export class ArenaScene extends Phaser.Scene {
   private laserLength(x: number, y: number, aim: number, weaponIndex: number): number {
     const def = weaponIndex === NO_WEAPON ? undefined : weaponByIndex(weaponIndex);
     if (!def?.fx.laserSight) return 0;
-    return raycastSolids(shotWorldFor(this.map), x, y, Math.cos(aim), Math.sin(aim), def.rangePx);
+    return raycastSolids(this.shotWorld(), x, y, Math.cos(aim), Math.sin(aim), def.rangePx);
   }
 
   private updateCamera(dt: number) {
@@ -1473,6 +1603,17 @@ export class ArenaScene extends Phaser.Scene {
   private animateLights() {
     const t = performance.now() / 1000;
     for (const l of this.lightImages) {
+      if (l.group) {
+        // PvE: power lights follow the generator, alarm beacons pulse while the alarm sounds.
+        const on =
+          l.group === "power" ? this.pve.power || !this.pve.active : this.pve.alarm && this.pve.active;
+        l.img.setVisible(on);
+        if (!on) continue;
+        if (l.group === "alarm") {
+          l.img.setAlpha(l.base * (0.35 + 0.65 * Math.max(0, Math.sin(t * 6 + l.seed))));
+          continue;
+        }
+      }
       if (l.flicker <= 0) continue;
       const n = Math.sin(t * 13 + l.seed) * 0.5 + Math.sin(t * 31 + l.seed * 2) * 0.3;
       l.img.setAlpha(Math.max(0, l.base * (1 - l.flicker * 0.5 + n * l.flicker * 0.5)));
@@ -1544,6 +1685,7 @@ export class ArenaScene extends Phaser.Scene {
     const interact = this.enterTarget
       ? `Enter ${this.enterTarget.def.name} as ${this.enterTarget.def.seats[this.enterTarget.seat]!.role}`
       : (this.enterBlocked ?? (weapon ? `Take ${weapon}` : null));
+    if (this.pve.active) this.updatePveHud(state, serverTick);
     const killerName = this.killedBy ? (state.players.get(this.killedBy)?.name ?? "someone") : null;
     const keySlots = ["1", "2", "3"];
     hudStore.patch({
@@ -1604,6 +1746,100 @@ export class ArenaScene extends Phaser.Scene {
       },
     });
     void this.localAliveSince;
+  }
+
+  /** Downed players: rings for bleed-out and revive progress. */
+  private drawDowned(state: MatchState) {
+    const bleedMax =
+      DIFFICULTY[isDifficulty(state.pve.difficulty) ? state.pve.difficulty : "veteran"].bleedoutSec;
+    state.players.forEach((p, id) => {
+      if (!p.alive || !p.downed) return;
+      const v = this.views.get(id);
+      if (!v) return;
+      this.pve.markDowned(v.root.x, v.root.y, p.bleed / 10 / bleedMax, p.revive);
+    });
+  }
+
+  private groanTimer = 0;
+  /** Occasional groans from the nearest infected (positional). */
+  private updateAmbience(dt: number, state: MatchState) {
+    this.groanTimer -= dt;
+    if (this.groanTimer > 0) return;
+    this.groanTimer = 1400 + Math.random() * 2200;
+    const me = this.views.get(this.room?.sessionId ?? "");
+    if (!me) return;
+    let best: { x: number; y: number; d: number } | null = null;
+    state.zombies.forEach((z) => {
+      const d = Math.hypot(z.x - me.root.x, z.y - me.root.y);
+      if (d < 900 && (!best || d < best.d)) best = { x: z.x, y: z.y, d };
+    });
+    const b = best as { x: number; y: number; d: number } | null;
+    if (b) sfx.zombieGroan(b.d, clamp((b.x - me.root.x) / 900, -1, 1));
+  }
+
+  /** PvE HUD: prompts, objective marker, off-screen allies, squad. */
+  private updatePveHud(state: MatchState, serverTick: number) {
+    const self = this.room?.sessionId ?? "";
+    const me = state.players.get(self);
+    const sim = this.predictor.sim;
+    let prompt: { text: string; progress: number; blocked?: boolean } | null = null;
+    const key = keyLabel(settingsStore.get().bindings.interact);
+    if (me?.alive && !me.downed && !me.vehicle) {
+      // Revive first (the server gives revives priority over props).
+      state.players.forEach((p, id) => {
+        if (prompt || id === self || !p.alive || !p.downed) return;
+        if (Math.hypot(p.x - sim.x, p.y - sim.y) <= DOWNED.reviveReach) {
+          prompt = { text: `Hold ${key}: revive ${p.name}`, progress: p.revive };
+        }
+      });
+      const mission = state.mode === "outbreak" ? missionById(state.pve.mission) : undefined;
+      const flags = parseIdList(state.pve.flags);
+      state.props.forEach((pr, id) => {
+        if (prompt || Math.hypot(pr.x - sim.x, pr.y - sim.y) > 74) return;
+        if (pr.kind === "supply") {
+          prompt = { text: `Hold ${key}: take supplies`, progress: 0 };
+          return;
+        }
+        const def = mission?.props.find((x) => x.id === id);
+        if (!def || pr.used) return;
+        if (def.requires && !flags.has(def.requires)) {
+          prompt = { text: `${def.label}: needs the ${def.requires}`, progress: 0, blocked: true };
+          return;
+        }
+        if (pr.active) prompt = { text: `Hold ${key}: ${def.label}`, progress: pr.prog };
+      });
+    }
+    // Objective marker (off-screen arrow) and teammates.
+    const cam = this.cameras.main;
+    const project = (x: number, y: number, label: string, downed?: boolean) => {
+      const sx = (x - cam.worldView.x) * cam.zoom;
+      const sy = (y - cam.worldView.y) * cam.zoom;
+      const w = this.scale.width;
+      const h = this.scale.height;
+      const onScreen = sx >= 0 && sy >= 0 && sx <= w && sy <= h;
+      const angle = Math.atan2(sy - h / 2, sx - w / 2);
+      const m = 44;
+      return {
+        x: onScreen ? sx : clamp(sx, m, w - m),
+        y: onScreen ? sy : clamp(sy, m, h - m),
+        angle,
+        onScreen,
+        distM: Math.round(Math.hypot(x - sim.x, y - sim.y) / 16),
+        label,
+        ...(downed ? { downed } : {}),
+      };
+    };
+    const mission = state.mode === "outbreak" ? missionById(state.pve.mission) : undefined;
+    const step = mission?.steps[state.pve.step];
+    const marker =
+      step?.marker && state.pve.status === 0 ? project(step.marker.x, step.marker.y, step.text) : null;
+    const allies: ReturnType<typeof project>[] = [];
+    state.players.forEach((p, id) => {
+      if (id === self || !p.alive) return;
+      const v = this.views.get(id);
+      allies.push(project(v?.root.x ?? p.x, v?.root.y ?? p.y, p.name, p.downed));
+    });
+    pveHud.update(state, self, serverTick, { prompt, marker, allies });
   }
 
   private objectiveHud(state: MatchState): HudObjective[] {

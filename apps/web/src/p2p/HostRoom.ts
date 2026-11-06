@@ -31,9 +31,15 @@ import {
 import { z } from "zod";
 // The dedicated server's simulation, state mirroring and scoring run unchanged in the host's tab.
 import { type ComputedResult, computeResults, resultRows } from "../../../server/src/players/results.ts";
+import { applyPveSettings, buildPveResults, pveOver } from "../../../server/src/pve/pveRoom.ts";
 import { MatchRules } from "../../../server/src/rules/MatchRules.ts";
 import { GameSimulation, type ServerPlayer } from "../../../server/src/simulation/GameSimulation.ts";
-import { syncObjectives, syncPlayerState, syncVehicles } from "../../../server/src/simulation/stateSync.ts";
+import {
+  syncObjectives,
+  syncPlayerState,
+  syncPve,
+  syncVehicles,
+} from "../../../server/src/simulation/stateSync.ts";
 import { signal } from "../net/signal.ts";
 import type { PeerLink, WireData } from "./link.ts";
 import {
@@ -237,7 +243,11 @@ export class HostRoom {
         if (tick >= this.state.phaseEndTick) this.startPlaying();
         break;
       case "playing":
-        if (this.sim.leaderScore() >= this.state.killLimit) this.endMatch();
+        if (this.rules.pveMode) {
+          // PvE ends with the mission (complete / failed) or the safety cap.
+          if (pveOver(this.sim) || tick >= this.state.phaseEndTick) this.endMatch();
+          else this.kickIdle(tick);
+        } else if (this.sim.leaderScore() >= this.state.killLimit) this.endMatch();
         else if (tick >= this.state.phaseEndTick) this.endMatch();
         else this.kickIdle(tick);
         break;
@@ -600,12 +610,18 @@ export class HostRoom {
     // Mode first: it resets length, score limit and size to the mode's defaults.
     if (s.mode && s.mode !== this.state.mode) {
       this.rules.setMode(s.mode);
-      const forced = MatchRules.mapForMode(this.state.mode, this.state.mapId as MapId);
-      if (forced) {
-        this.state.mapId = forced;
-        this.sim.setMap(MAPS[forced]);
-        this.syncPickups(true);
-      }
+      const forced = MatchRules.mapForMode(
+        this.state.mode,
+        this.state.mapId as MapId,
+        this.state.pve.mission,
+      );
+      if (forced) this.switchMap(forced);
+      this.syncPracticeTargets();
+    }
+    if (this.rules.pveMode) {
+      const r = applyPveSettings(this.state, s);
+      if (r.map) this.switchMap(r.map);
+      if (r.error) this.notice(r.error, "warn", undefined, id);
     }
     if (s.teamSize && this.rules.teamMode && s.teamSize !== this.state.teamSize) {
       if (!this.rules.setTeamSize(s.teamSize))
@@ -614,17 +630,29 @@ export class HostRoom {
     if (s.friendlyFire !== undefined && this.rules.teamMode) this.rules.setFriendlyFire(s.friendlyFire);
     if (s.map && s.map !== this.state.mapId) {
       if (this.rules.mapAllowed(s.map)) {
-        this.state.mapId = s.map;
-        this.sim.setMap(MAPS[s.map]);
-        this.syncPickups(true);
+        this.switchMap(s.map);
       } else {
-        this.notice("That mode needs a map with vehicles", "warn", undefined, id);
+        this.notice(
+          this.rules.pveMode
+            ? "That map is not available for this mode"
+            : "That mode needs a map with vehicles",
+          "warn",
+          undefined,
+          id,
+        );
       }
     }
+    if (this.rules.pveMode) return;
     if (s.durationSec) this.state.durationSec = s.durationSec;
     if (s.killLimit) this.state.killLimit = s.killLimit;
     if (s.maxPlayers && !this.rules.teamMode)
       this.state.maxPlayers = Math.max(s.maxPlayers, 1 + this.seats.size);
+  }
+
+  private switchMap(map: MapId) {
+    this.state.mapId = map;
+    this.sim.setMap(MAPS[map]);
+    this.syncPickups(true);
   }
 
   private handleStart(id: string) {
@@ -657,6 +685,7 @@ export class HostRoom {
     this.syncPracticeTargets();
     this.practiceMatch = this.bots.size > 0;
     this.rules.prepareMatch();
+    this.sim.setPve(this.rules.pveConfig());
     this.sim.resetForMatch();
     this.state.phase = "countdown";
     this.state.winnerId = "";
@@ -681,12 +710,34 @@ export class HostRoom {
     this.state.winnerId = standings[0]?.id ?? "";
     this.state.winnerTeam = this.sim.winningTeam();
     this.rules.sync();
+    if (this.sim.pve) {
+      this.sim.pve.abort("Time limit reached");
+      syncPve(this.state, this.sim);
+      this.sendPveResults();
+      return;
+    }
     this.sendResults(standings);
+  }
+
+  /** PvE run summary to every player; each browser records its own run once (by run id). */
+  private sendPveResults() {
+    const runId = `${this.opts.code}-${this.state.matchIndex}-${this.sim.pve!.startTick}-${randomId(6)}`;
+    const res = buildPveResults(this.sim, runId, this.sim.secToTicks(MATCH_DEFAULTS.minParticipationSec));
+    for (const p of this.sim.players.values()) {
+      const msg: ResultsMessage = {
+        winnerId: "",
+        rows: res.rows,
+        pve: res.pve,
+        personal: res.personal.get(p.id) ?? null,
+      };
+      this.sendTo(p.id, S2C.RESULTS, msg);
+    }
   }
 
   private backToLobby() {
     this.state.phase = "lobby";
     this.state.phaseEndTick = 0;
+    this.sim.setPve(null);
     for (const p of this.sim.players.values()) {
       p.alive = false;
       p.respawnTick = 0;
@@ -740,7 +791,8 @@ export class HostRoom {
 
   /** Same as the dedicated server: a host alone in the lobby gets three strafing targets. */
   private syncPracticeTargets() {
-    const alone = this.seats.size === 0;
+    // Co-op PvE has its own enemies: no training targets.
+    const alone = this.seats.size === 0 && !this.rules.pveMode;
     const wanted = alone && this.state.phase === "lobby" ? 3 : 0;
     const keep = alone && this.state.phase !== "lobby";
     if (wanted > 0 && this.bots.size === 0) {
@@ -829,6 +881,7 @@ export class HostRoom {
     this.syncPickups(false);
     syncVehicles(this.state, this.sim);
     syncObjectives(this.state, this.sim);
+    syncPve(this.state, this.sim);
   }
 
   private syncPickups(rebuild: boolean) {

@@ -1,4 +1,4 @@
-import { GAME_TITLE, type GameMode, MAP_IDS, MAPS, type MapId, titleForLevel } from "@scrapline/shared";
+import { GAME_TITLE, type GameMode, MAPS, type MapId, PVP_MAP_IDS, titleForLevel } from "@scrapline/shared";
 import { type FormEvent, useState } from "react";
 import { Button, LevelChip } from "../components/ui.tsx";
 import { useStore } from "../lib/store.ts";
@@ -35,6 +35,19 @@ export function MainMenu({
       await session.quickMatch(currentLoadout(), mode);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Matchmaking failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Co-op: opens a private room / arena already set to Outbreak (First Contact). */
+  async function coop() {
+    setBusy(true);
+    setError(null);
+    try {
+      await session.createCoop(currentLoadout());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not create the co-op room");
     } finally {
       setBusy(false);
     }
@@ -89,6 +102,10 @@ export function MainMenu({
               <Button onClick={() => onNavigate("join")} disabled={busy} data-testid="join-room">
                 Join with code
               </Button>
+              <Button onClick={() => void coop()} disabled={busy} data-testid="create-coop">
+                Outbreak · co-op
+                <kbd>1–4 vs infected</kbd>
+              </Button>
             </>
           ) : (
             <>
@@ -108,6 +125,10 @@ export function MainMenu({
               </Button>
               <Button onClick={() => onNavigate("browse")} disabled={busy}>
                 Play · browse rooms
+              </Button>
+              <Button onClick={() => void coop()} disabled={busy} data-testid="create-coop">
+                Outbreak · co-op
+                <kbd>1–4 vs infected</kbd>
               </Button>
               <div className="menu__row">
                 <Button onClick={() => onNavigate("create")} disabled={busy} data-testid="create-room">
@@ -241,7 +262,7 @@ export function CreateDialog({ onClose }: { onClose: () => void }) {
               : "You will be the host: choose the map, length and score, then share the code."}
           </span>
           <div className="grid-3" role="radiogroup" aria-label="Map">
-            {MAP_IDS.map((id) => (
+            {PVP_MAP_IDS.map((id) => (
               <button
                 key={id}
                 type="button"

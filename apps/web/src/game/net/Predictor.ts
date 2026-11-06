@@ -67,6 +67,8 @@ export class Predictor {
   /** Predicted vehicle while the local player drives (null otherwise). */
   vehicle: VehicleSim | null = null;
   mount: Mount | null = null;
+  /** PvE: the local player is downed (crawls, cannot fire), as last confirmed by the server. */
+  downed = false;
   private airWorld: CollisionWorld;
   private pending: InputFrame[] = [];
   private seq = 0;
@@ -112,6 +114,7 @@ export class Predictor {
         alive,
         emit,
         obstacles: env.obstacles,
+        downed: this.downed,
       });
       return;
     }

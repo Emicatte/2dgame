@@ -1,14 +1,16 @@
 import {
-  GAME_MODES,
   type GameMode,
+  isPveMode,
   isTeamMode,
-  MAP_IDS,
   MAPS,
   MATCH_LIMITS,
   MODE_BLURBS,
   MODE_NAMES,
   MODE_SCORE_UNIT,
   modeNeedsVehicles,
+  PVE_MODES,
+  PVP_MAP_IDS,
+  PVP_MODES,
   skinById,
   TEAM_SIZE,
   TEAMS,
@@ -19,6 +21,7 @@ import { Button, formatClock, hexColor, LevelChip, Panel } from "../components/u
 import { useStore } from "../lib/store.ts";
 import { HOST_MODE } from "../net/api.ts";
 import { type LobbyPlayer, session, sessionStore } from "../net/session.ts";
+import { PveMatchSettings } from "./PveLobby.tsx";
 
 const DURATIONS = [180, 300, 420, 600, 900];
 const EMPTY_SLOT_KEYS = ["empty-a", "empty-b", "empty-c", "empty-d"];
@@ -30,6 +33,8 @@ const SCORE_LIMITS: Record<GameMode, number[]> = {
   dom: [50, 100, 150, 200],
   ctf: [1, 2, 3, 5],
   mayhem: [20, 30, 50, 80],
+  outbreak: [],
+  survival: [],
 };
 
 export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
@@ -188,62 +193,85 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
           <Panel title="Match">
             <div className="stack">
               {canHost && (
-                <fieldset className="mode-grid" aria-label="Game mode" data-testid="mode-select">
-                  {GAME_MODES.map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      className="mode-card"
-                      aria-pressed={s.mode === m}
-                      onClick={() => session.updateSettings({ mode: m })}
-                      data-testid={`mode-${m}`}
-                    >
-                      {MODE_NAMES[m]}
-                    </button>
-                  ))}
-                </fieldset>
+                <>
+                  <fieldset className="mode-grid" aria-label="Competitive modes" data-testid="mode-select">
+                    {PVP_MODES.map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        className="mode-card"
+                        aria-pressed={s.mode === m}
+                        onClick={() => session.updateSettings({ mode: m })}
+                        data-testid={`mode-${m}`}
+                      >
+                        {MODE_NAMES[m]}
+                      </button>
+                    ))}
+                  </fieldset>
+                  <fieldset className="mode-grid mode-grid--coop" aria-label="Co-op modes">
+                    {PVE_MODES.map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        className="mode-card mode-card--coop"
+                        aria-pressed={s.mode === m}
+                        onClick={() => session.updateSettings({ mode: m })}
+                        data-testid={`mode-${m}`}
+                      >
+                        {MODE_NAMES[m]}
+                        <small>Co-op 1–4</small>
+                      </button>
+                    ))}
+                  </fieldset>
+                </>
               )}
               <p className="mode-blurb" data-testid="mode-blurb">
                 {MODE_BLURBS[s.mode]}
               </p>
-              <div className="grid-3">
-                {MAP_IDS.map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={`map-card ${modeNeedsVehicles(s.mode) && !MAPS[id].vehicleSpawns ? "is-unavailable" : ""}`}
-                    aria-pressed={s.mapId === id}
-                    disabled={!canHost || (modeNeedsVehicles(s.mode) && !MAPS[id].vehicleSpawns)}
-                    onClick={() => session.updateSettings({ map: id })}
-                    title={
-                      modeNeedsVehicles(s.mode) && !MAPS[id].vehicleSpawns
-                        ? `${MODE_NAMES[s.mode]} needs a map with vehicles`
-                        : MAPS[id].tagline
-                    }
-                    data-testid={`map-${id}`}
-                  >
-                    <img className="map-card__preview" src={mapThumb(id)} alt="" />
-                    <span className="map-card__label">
-                      {MAPS[id].name}
-                      {MAPS[id].vehicleSpawns && <span className="map-card__tag">Vehicles</span>}
+              {isPveMode(s.mode) ? (
+                <PveMatchSettings canHost={canHost} />
+              ) : (
+                <>
+                  <div className="grid-3">
+                    {PVP_MAP_IDS.map((id) => (
+                      <button
+                        key={id}
+                        type="button"
+                        className={`map-card ${modeNeedsVehicles(s.mode) && !MAPS[id].vehicleSpawns ? "is-unavailable" : ""}`}
+                        aria-pressed={s.mapId === id}
+                        disabled={!canHost || (modeNeedsVehicles(s.mode) && !MAPS[id].vehicleSpawns)}
+                        onClick={() => session.updateSettings({ map: id })}
+                        title={
+                          modeNeedsVehicles(s.mode) && !MAPS[id].vehicleSpawns
+                            ? `${MODE_NAMES[s.mode]} needs a map with vehicles`
+                            : MAPS[id].tagline
+                        }
+                        data-testid={`map-${id}`}
+                      >
+                        <img className="map-card__preview" src={mapThumb(id)} alt="" />
+                        <span className="map-card__label">
+                          {MAPS[id].name}
+                          {MAPS[id].vehicleSpawns && <span className="map-card__tag">Vehicles</span>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="row" style={{ flexWrap: "wrap" }} data-testid="match-rules">
+                    <span className="badge">{MODE_NAMES[s.mode]}</span>
+                    {teams && (
+                      <span className="badge">
+                        {s.teamSize}v{s.teamSize}
+                      </span>
+                    )}
+                    <span className="badge">{formatClock(s.durationSec)} min</span>
+                    <span className="badge">
+                      {s.killLimit} {MODE_SCORE_UNIT[s.mode]}
                     </span>
-                  </button>
-                ))}
-              </div>
-              <div className="row" style={{ flexWrap: "wrap" }} data-testid="match-rules">
-                <span className="badge">{MODE_NAMES[s.mode]}</span>
-                {teams && (
-                  <span className="badge">
-                    {s.teamSize}v{s.teamSize}
-                  </span>
-                )}
-                <span className="badge">{formatClock(s.durationSec)} min</span>
-                <span className="badge">
-                  {s.killLimit} {MODE_SCORE_UNIT[s.mode]}
-                </span>
-                {teams && <span className="badge">Friendly fire {s.friendlyFire ? "on" : "off"}</span>}
-              </div>
-              {canHost && (
+                    {teams && <span className="badge">Friendly fire {s.friendlyFire ? "on" : "off"}</span>}
+                  </div>
+                </>
+              )}
+              {canHost && !isPveMode(s.mode) && (
                 <div className="stack">
                   {teams && (
                     <div className="setting-row">
@@ -366,9 +394,13 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                   data-testid="start-match"
                 >
                   {allReady
-                    ? s.players.length < 2
-                      ? "Start practice"
-                      : "Start match"
+                    ? isPveMode(s.mode)
+                      ? s.mode === "survival"
+                        ? "Start survival"
+                        : "Start mission"
+                      : s.players.length < 2
+                        ? "Start practice"
+                        : "Start match"
                     : "Waiting for ready…"}
                 </Button>
               ) : (

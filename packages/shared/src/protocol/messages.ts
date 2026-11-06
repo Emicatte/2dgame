@@ -176,6 +176,10 @@ export interface PersonalResult {
   persisted: boolean;
   /** Solo practice against training targets: nothing is recorded. */
   practice?: boolean;
+  /** PvE: cosmetic titles earned and missions unlocked by this run (filled in by the recorder). */
+  pveTitles?: string[];
+  pveUnlocked?: string[];
+  pvePersonalBest?: boolean;
   /**
    * Host mode (no shared database): the match figures the receiving player's browser records in
    * its local profile. Absent from dedicated-server results.

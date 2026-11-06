@@ -11,6 +11,7 @@ export * from "./protocol/api.ts";
 export * from "./protocol/input.ts";
 export * from "./protocol/messages.ts";
 export * from "./pve/missions.ts";
+export * from "./pve/progress.ts";
 export * from "./pve/world.ts";
 export * from "./sim/collision.ts";
 export * from "./sim/hitscan.ts";

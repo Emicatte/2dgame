@@ -1,16 +1,25 @@
 import {
+  type Difficulty,
+  FIRST_CONTACT,
   type GameMode,
+  isDifficulty,
+  isPveMode,
   isTeamMode,
   MAPS,
   MATCH_LIMITS,
   type MapId,
   type MatchState,
   MODE_DEFAULTS,
+  missionById,
   modeNeedsVehicles,
+  PVE_SQUAD,
+  PVP_MAP_IDS,
+  SURVIVAL_MAPS,
   TEAM_ALPHA,
   TEAM_BRAVO,
   TEAM_SIZE,
 } from "@scrapline/shared";
+import type { PveConfig } from "../pve/PveController.ts";
 import type { GameSimulation, ServerPlayer } from "../simulation/GameSimulation.ts";
 
 /**
@@ -29,6 +38,11 @@ export class MatchRules {
 
   get teamMode(): boolean {
     return isTeamMode(this.state.mode);
+  }
+
+  /** Co-op PvE (Outbreak, Survival): every human on team 1, no friendly fire, no practice targets. */
+  get pveMode(): boolean {
+    return isPveMode(this.state.mode);
   }
 
   private humans(): ServerPlayer[] {
@@ -53,7 +67,15 @@ export class MatchRules {
     this.state.durationSec = d.durationSec;
     this.state.killLimit = d.scoreLimit;
     this.state.friendlyFire = d.friendlyFire;
-    if (isTeamMode(mode)) {
+    if (isPveMode(mode)) {
+      this.state.teamSize = 0;
+      this.state.maxPlayers = Math.max(PVE_SQUAD.max, humans);
+      if (mode === "outbreak" && !missionById(this.state.pve.mission))
+        this.state.pve.mission = FIRST_CONTACT.id;
+      if (mode === "survival") this.state.pve.mission = "";
+      if (!isDifficulty(this.state.pve.difficulty)) this.state.pve.difficulty = "veteran";
+      for (const p of this.sim.players.values()) p.team = 1;
+    } else if (isTeamMode(mode)) {
       const size = Math.min(TEAM_SIZE.max, Math.max(d.teamSize, Math.ceil(humans / 2)));
       this.state.teamSize = size;
       this.state.maxPlayers = size * 2;
@@ -89,6 +111,12 @@ export class MatchRules {
   }
 
   applyCombatRules(): void {
+    if (this.pveMode) {
+      // One squad: shots pass through teammates.
+      this.sim.rules = { teams: true, friendlyFire: false };
+      if (this.sim.mode !== this.state.mode) this.sim.setMode(this.state.mode as GameMode);
+      return;
+    }
     this.sim.rules = { teams: this.teamMode, friendlyFire: this.teamMode && this.state.friendlyFire };
     if (this.sim.mode !== this.state.mode) this.sim.setMode(this.state.mode as GameMode);
   }
@@ -97,14 +125,34 @@ export class MatchRules {
    * The map a mode must be played on instead of `mapId`, or null when `mapId` is fine: Vehicle
    * Mayhem needs a map with vehicles (the first one is used).
    */
-  static mapForMode(mode: string, mapId: MapId): MapId | null {
+  static mapForMode(mode: string, mapId: MapId, mission?: string): MapId | null {
+    if (mode === "outbreak") {
+      const m = missionById(mission ?? "") ?? FIRST_CONTACT;
+      return mapId === m.map ? null : m.map;
+    }
+    if (mode === "survival") return SURVIVAL_MAPS.includes(mapId) ? null : SURVIVAL_MAPS[0]!;
+    // Competitive modes never run on PvE maps.
+    if (MAPS[mapId].pve) {
+      const pvp = PVP_MAP_IDS.find((id) => !modeNeedsVehicles(mode) || MAPS[id].vehicleSpawns?.length);
+      return pvp ?? "industrial";
+    }
     if (!modeNeedsVehicles(mode) || MAPS[mapId].vehicleSpawns?.length) return null;
-    return (Object.keys(MAPS) as MapId[]).find((id) => MAPS[id].vehicleSpawns?.length) ?? null;
+    return PVP_MAP_IDS.find((id) => MAPS[id].vehicleSpawns?.length) ?? null;
+  }
+
+  /** PvE: the run configuration for the next match (null in competitive modes). */
+  pveConfig(): PveConfig | null {
+    if (!this.pveMode) return null;
+    const difficulty: Difficulty = isDifficulty(this.state.pve.difficulty)
+      ? this.state.pve.difficulty
+      : "veteran";
+    if (this.state.mode === "survival") return { mode: "survival", difficulty };
+    return { mode: "outbreak", mission: missionById(this.state.pve.mission) ?? FIRST_CONTACT, difficulty };
   }
 
   /** A map the host may pick under the current mode. */
   mapAllowed(mapId: MapId): boolean {
-    return MatchRules.mapForMode(this.state.mode, mapId) === null;
+    return MatchRules.mapForMode(this.state.mode, mapId, this.state.pve.mission) === null;
   }
 
   /**
@@ -114,6 +162,10 @@ export class MatchRules {
   assign(id: string, preferred?: number): number {
     const p = this.sim.players.get(id);
     if (!p) return -1;
+    if (this.pveMode) {
+      p.team = 1;
+      return 1;
+    }
     if (!this.teamMode) {
       p.team = 0;
       return 0;
@@ -173,6 +225,11 @@ export class MatchRules {
    * empty (otherwise there is nobody to fight) — in that case teams are rebalanced.
    */
   prepareMatch(): void {
+    if (this.pveMode) {
+      for (const p of this.sim.players.values()) p.team = 1;
+      this.applyCombatRules();
+      return;
+    }
     if (!this.teamMode) return;
     const humans = this.humans();
     for (const p of humans) if (p.team !== TEAM_ALPHA && p.team !== TEAM_BRAVO) this.assign(p.id);

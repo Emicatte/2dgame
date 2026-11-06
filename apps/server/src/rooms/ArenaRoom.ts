@@ -11,6 +11,7 @@ import {
   hashString,
   type InputBatch,
   inputBatchSchema,
+  isPveMode,
   isSkinUnlocked,
   joinOptionsSchema,
   kickSchema,
@@ -42,11 +43,12 @@ import { z } from "zod";
 import { uniqueRoomCode } from "../matchmaking/roomCodes.ts";
 import type { MatchPlayerResult } from "../persistence/repository.ts";
 import { type ComputedResult, computeResults, personalResult, resultRows } from "../players/results.ts";
+import { applyPveSettings, buildPveResults, pveOver } from "../pve/pveRoom.ts";
 import { MatchRules } from "../rules/MatchRules.ts";
 import { verifyToken } from "../security/tokens.ts";
 import { getServices } from "../services.ts";
 import { GameSimulation, type ServerPlayer } from "../simulation/GameSimulation.ts";
-import { syncObjectives, syncPlayerState, syncVehicles } from "../simulation/stateSync.ts";
+import { syncObjectives, syncPlayerState, syncPve, syncVehicles } from "../simulation/stateSync.ts";
 
 interface AuthData {
   playerId: string;
@@ -151,7 +153,9 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       tickRate: NET.serverTickRate,
     });
     this.rules = new MatchRules(this.sim, this.state, (id) => this.bots.has(id));
-    const mode: GameMode = options.mode && GAME_MODES.includes(options.mode) ? options.mode : "deathmatch";
+    let mode: GameMode = options.mode && GAME_MODES.includes(options.mode) ? options.mode : "deathmatch";
+    // Co-op PvE runs in private rooms only (a squad of friends), never through quick matchmaking.
+    if (this.kind === "quick" && isPveMode(mode)) mode = "deathmatch";
     this.rules.setMode(mode);
     this.enforceModeMap();
     this.maxClients = this.state.maxPlayers;
@@ -413,6 +417,12 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       this.rules.setMode(s.mode);
       this.applyCapacity();
       this.enforceModeMap();
+      this.syncPracticeTargets();
+    }
+    if (this.rules.pveMode) {
+      const r = applyPveSettings(this.state, s);
+      if (r.map) this.enforceModeMap();
+      if (r.error) this.notice(r.error, "warn", undefined, client);
     }
     if (s.teamSize && this.rules.teamMode && s.teamSize !== this.state.teamSize) {
       if (this.rules.setTeamSize(s.teamSize)) this.applyCapacity();
@@ -445,7 +455,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
 
   /** Vehicle Mayhem moves the room to a vehicle map. */
   private enforceModeMap() {
-    const forced = MatchRules.mapForMode(this.state.mode, this.state.mapId as MapId);
+    const forced = MatchRules.mapForMode(this.state.mode, this.state.mapId as MapId, this.state.pve.mission);
     if (!forced) return;
     this.state.mapId = forced;
     this.sim.setMap(MAPS[forced]);
@@ -529,7 +539,11 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
         if (tick >= this.state.phaseEndTick) this.startPlaying();
         break;
       case "playing":
-        if (this.sim.leaderScore() >= this.state.killLimit) this.endMatch("score-limit");
+        if (this.rules.pveMode) {
+          if (pveOver(this.sim)) this.endMatch("pve");
+          else if (tick >= this.state.phaseEndTick) this.endMatch("time");
+          else this.kickIdle(tick);
+        } else if (this.sim.leaderScore() >= this.state.killLimit) this.endMatch("score-limit");
         else if (tick >= this.state.phaseEndTick) this.endMatch("time");
         else this.kickIdle(tick);
         break;
@@ -567,6 +581,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     this.syncPracticeTargets();
     this.practiceMatch = this.bots.size > 0;
     this.rules.prepareMatch();
+    this.sim.setPve(this.rules.pveConfig());
     this.sim.resetForMatch();
     this.state.winnerTeam = 0;
     this.leavers = [];
@@ -597,13 +612,38 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     this.state.winnerTeam = this.sim.winningTeam();
     this.rules.sync();
     void this.updateMetadata();
+    if (this.sim.pve) {
+      if (reason === "time") this.sim.pve.abort("Time limit reached");
+      syncPve(this.state, this.sim);
+      this.sendPveResults();
+      return;
+    }
     void this.persistMatch(standings, reason);
+  }
+
+  /**
+   * PvE results. The dedicated server does not persist PvE runs yet (host mode records them in
+   * each player's browser): XP is shown, `persisted` stays false.
+   */
+  private sendPveResults() {
+    const runId = randomUUID();
+    const res = buildPveResults(this.sim, runId, this.sim.secToTicks(MATCH_DEFAULTS.minParticipationSec));
+    for (const client of this.clients) {
+      const msg: ResultsMessage = {
+        winnerId: "",
+        rows: res.rows,
+        pve: res.pve,
+        personal: res.personal.get(client.sessionId) ?? null,
+      };
+      client.send(S2C.RESULTS, msg);
+    }
   }
 
   private backToLobby() {
     this.state.phase = "lobby";
     this.state.phaseEndTick = 0;
     this.matchStartedAt = null;
+    this.sim.setPve(null);
     for (const p of this.sim.players.values()) {
       p.alive = false;
       p.respawnTick = 0;
@@ -632,8 +672,9 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
    */
   private syncPracticeTargets() {
     const humans = this.clients.length;
-    const wanted = this.kind === "private" && humans === 1 && this.state.phase === "lobby" ? 3 : 0;
-    const keep = this.kind === "private" && humans === 1 && this.state.phase !== "lobby";
+    const solo = this.kind === "private" && humans === 1 && !this.rules.pveMode;
+    const wanted = solo && this.state.phase === "lobby" ? 3 : 0;
+    const keep = solo && this.state.phase !== "lobby";
     if (wanted > 0 && this.bots.size === 0) {
       for (let i = 1; i <= wanted; i++) {
         const id = `bot:${i}`;
@@ -801,6 +842,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     this.syncPickups(false);
     syncVehicles(this.state, this.sim);
     syncObjectives(this.state, this.sim);
+    syncPve(this.state, this.sim);
   }
 
   /** Team modes: winner and final scores for the results message. */

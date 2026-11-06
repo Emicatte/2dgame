@@ -4,15 +4,18 @@
  */
 import {
   applyMatchToCareer,
+  applyPveRun,
   type CareerStats,
   DEFAULT_PRIMARY,
   DEFAULT_SKIN,
   isWeaponId,
   levelFromXp,
   normalizeCareer,
+  normalizePveProgress,
   type PersonalResult,
   type PlayerStats,
   type PublicProfile,
+  type PveProgress,
   unlocksForLevel,
 } from "@scrapline/shared";
 
@@ -28,6 +31,8 @@ export interface LocalProfileData {
   createdAt: string;
   stats: PlayerStats;
   career?: CareerStats;
+  /** Outbreak campaign and Survival records (kept apart from competitive stats). */
+  pve?: PveProgress;
 }
 
 const emptyStats = (): PlayerStats => ({
@@ -60,6 +65,7 @@ function read(): LocalProfileData | null {
       createdAt: typeof d.createdAt === "string" ? d.createdAt : new Date().toISOString(),
       stats: { ...emptyStats(), ...(d.stats ?? {}) },
       career: normalizeCareer(d.career),
+      pve: normalizePveProgress(d.pve),
     };
   } catch {
     return memoryCopy;
@@ -102,6 +108,10 @@ export const localProfile = {
     return read();
   },
 
+  pve(): PveProgress {
+    return normalizePveProgress(read()?.pve);
+  },
+
   create(nickname: string): LocalProfileData {
     const d: LocalProfileData = {
       v: 1,
@@ -134,6 +144,30 @@ export const localProfile = {
     const rec = personal.record;
     if (!d || !rec || personal.practice) return personal;
     const before = levelFromXp(d.xp).level;
+    if (rec.pve) {
+      // PvE run: XP and the PvE record only (PvP stats and career untouched), once per run id.
+      const res = applyPveRun(normalizePveProgress(d.pve), rec.pve);
+      const xp = res.recorded ? d.xp + Math.max(0, Math.floor(personal.xpGained)) : d.xp;
+      if (res.recorded) {
+        const s = d.stats;
+        write({ ...d, xp, pve: res.progress, stats: { ...s, playtimeSec: s.playtimeSec + rec.playtimeSec } });
+      }
+      const after = levelFromXp(xp).level;
+      const unlocked: string[] = [];
+      for (let l = before + 1; l <= after; l++) unlocked.push(...unlocksForLevel(l));
+      return {
+        ...personal,
+        xpGained: res.recorded ? personal.xpGained : 0,
+        totalXp: xp,
+        level: after,
+        leveledUp: after > before,
+        unlocked,
+        persisted: res.recorded,
+        pveTitles: res.newTitles,
+        pveUnlocked: res.unlocked,
+        pvePersonalBest: res.personalBest,
+      };
+    }
     const { career, rewards } = applyMatchToCareer(
       normalizeCareer(d.career),
       {

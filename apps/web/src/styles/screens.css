@@ -1246,3 +1246,348 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+
+/* ------------------------------------------------------------------ Outbreak (co-op PvE) */
+
+.mode-grid--coop {
+  margin-top: 6px;
+}
+.mode-card--coop {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-color: rgba(125, 255, 176, 0.35);
+}
+.mode-card--coop small {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.campaign {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.campaign__mission {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+  text-align: left;
+  padding: 8px 10px;
+  background: var(--panel-2, #1c1f24);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: var(--font-display);
+  cursor: pointer;
+}
+.campaign__mission[aria-pressed="true"] {
+  border-color: var(--good);
+  box-shadow: inset 3px 0 0 var(--good);
+}
+.campaign__mission:disabled {
+  cursor: default;
+}
+.campaign__mission.is-planned {
+  opacity: 0.45;
+}
+.campaign__chapter {
+  grid-row: span 2;
+  color: var(--muted);
+  font-size: 18px;
+}
+.campaign__name {
+  font-weight: 600;
+}
+.campaign__mission small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.briefing {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  background: rgba(10, 11, 13, 0.6);
+}
+.briefing__map {
+  width: 120px;
+  height: auto;
+  border: 1px solid var(--line);
+}
+.briefing__title {
+  margin: 0;
+  font-size: 18px;
+}
+.briefing__setting,
+.briefing__enemies {
+  margin: 2px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.briefing p {
+  margin: 4px 0;
+}
+
+.pve-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.pve-objective {
+  position: absolute;
+  top: 44px;
+  left: 16px;
+  max-width: min(360px, 42vw);
+}
+.pve-objective header {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.pve-objective__mission {
+  color: var(--good);
+  font-weight: 600;
+}
+.pve-objective__step {
+  margin-left: auto;
+}
+.pve-objective__text {
+  margin: 4px 0 2px;
+  font-size: 17px;
+  font-weight: 600;
+}
+.pve-objective__wave {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--warn);
+}
+.pve-bar {
+  display: block;
+  height: 5px;
+  margin-top: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.pve-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--good);
+  transform-origin: left center;
+  transition: transform 80ms linear;
+}
+.pve-bar--prompt {
+  width: 180px;
+}
+.pve-squad {
+  position: absolute;
+  top: 170px;
+  left: 16px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  width: 190px;
+}
+.pve-squad li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 4px 8px;
+  background: rgba(14, 15, 17, 0.7);
+  border-left: 3px solid var(--signal);
+  font-size: 13px;
+}
+.pve-squad li.is-you {
+  border-left-color: var(--good);
+}
+.pve-squad li.is-downed {
+  border-left-color: var(--danger);
+  animation: pve-blink 0.8s steps(2) infinite;
+}
+.pve-squad li.is-dead {
+  opacity: 0.5;
+}
+.pve-squad__bar {
+  grid-column: span 2;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.pve-squad__bar > span {
+  display: block;
+  height: 100%;
+  background: var(--text);
+  transform-origin: left center;
+}
+.pve-squad li.is-downed .pve-squad__bar > span {
+  background: var(--danger);
+}
+.pve-feed {
+  position: absolute;
+  top: 210px;
+  right: 16px;
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+}
+.pve-feed__item {
+  padding: 3px 10px;
+  background: rgba(14, 15, 17, 0.72);
+  font-size: 13px;
+}
+.pve-feed__item.is-good {
+  color: var(--good);
+}
+.pve-feed__item.is-bad {
+  color: var(--danger);
+}
+.pve-hint {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(560px, 80vw);
+  padding: 8px 14px;
+  background: rgba(14, 15, 17, 0.85);
+  border: 1px solid rgba(125, 255, 176, 0.5);
+  font-size: 15px;
+  animation: pve-in var(--t-med) var(--ease-out);
+}
+.pve-hint__tag {
+  margin-right: 8px;
+  padding: 1px 6px;
+  background: var(--good);
+  color: #08110c;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.pve-banner {
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 22px;
+  font-size: 28px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  background: rgba(14, 15, 17, 0.75);
+  border-top: 2px solid var(--warn);
+  border-bottom: 2px solid var(--warn);
+  animation: pve-in var(--t-med) var(--ease-out);
+}
+.pve-banner.is-good {
+  border-color: var(--good);
+  color: var(--good);
+}
+.pve-banner.is-bad {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.pve-marker,
+.pve-ally {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  justify-items: center;
+}
+.pve-marker__arrow,
+.pve-ally__arrow {
+  width: 0;
+  height: 0;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 18px solid var(--good);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
+}
+.pve-marker__dist {
+  font-size: 12px;
+  color: var(--good);
+}
+.pve-marker__diamond {
+  width: 14px;
+  height: 14px;
+  margin-top: -46px;
+  border: 2px solid var(--good);
+  transform: rotate(45deg);
+  animation: pve-blink 1.4s ease-in-out infinite;
+}
+.pve-ally__arrow {
+  border-left-color: var(--signal);
+  border-top-width: 7px;
+  border-bottom-width: 7px;
+  border-left-width: 13px;
+}
+.pve-ally__name {
+  font-size: 12px;
+  color: var(--signal);
+}
+.pve-ally.is-downed .pve-ally__arrow {
+  border-left-color: var(--danger);
+}
+.pve-ally.is-downed .pve-ally__name {
+  color: var(--danger);
+}
+.pve-prompt {
+  position: absolute;
+  bottom: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  background: rgba(14, 15, 17, 0.82);
+  border: 1px solid rgba(125, 255, 176, 0.45);
+  font-size: 15px;
+}
+.pve-prompt.is-blocked {
+  border-color: rgba(255, 90, 82, 0.5);
+  color: var(--muted);
+}
+.pve-downed-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 45%, rgba(120, 0, 0, 0.45) 100%);
+  animation: pve-pulse 1.6s ease-in-out infinite;
+}
+.pve-downed .pve-bar {
+  width: 220px;
+}
+@keyframes pve-blink {
+  50% {
+    opacity: 0.55;
+  }
+}
+@keyframes pve-pulse {
+  50% {
+    opacity: 0.6;
+  }
+}
+@keyframes pve-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pve-squad li.is-downed,
+  .pve-marker__diamond,
+  .pve-downed-vignette,
+  .pve-hint,
+  .pve-banner {
+    animation: none;
+  }
+}

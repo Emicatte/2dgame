@@ -256,6 +256,46 @@ class Sfx {
     this.tone(out, t + 0.03, "square", 140, 90, 0.08, 0.35);
   }
 
+  // ----- PvE (Outbreak / Survival)
+
+  /** Low rasping groan of a nearby infected. */
+  zombieGroan(distance = 0, pan = 0): void {
+    if (!this.ctx || !this.throttle("groan", 600)) return;
+    const out = this.out(this.sfxBus, pan, Math.max(0.02, 0.32 - distance / 3000));
+    if (!out) return;
+    const t = this.ctx.currentTime;
+    const f = 70 + Math.random() * 40;
+    this.tone(out, t, "sawtooth", f * 1.3, f, 0.7, 0.25);
+    this.noiseBurst(out, t, 0.6, "bandpass", 500 + Math.random() * 300, 3, 0.25);
+  }
+
+  /** An infected attack landing (melee swipe, spit, pounce, charge, wall slam). */
+  zombieAttack(kind: string, distance = 0, pan = 0): void {
+    if (!this.ctx || !this.throttle(`zatk-${kind}`, 60)) return;
+    const out = this.out(this.sfxBus, pan, Math.max(0.04, 0.6 - distance / 2400));
+    if (!out) return;
+    const t = this.ctx.currentTime;
+    if (kind === "spit") {
+      this.noiseBurst(out, t, 0.18, "bandpass", 1600, 2, 0.6);
+      this.tone(out, t, "sine", 300, 120, 0.15, 0.3);
+    } else if (kind === "charge" || kind === "slam") {
+      this.tone(out, t, "sawtooth", 90, 40, 0.5, 0.6);
+      this.noiseBurst(out, t, 0.4, "lowpass", 600, 0.8, 0.7);
+    } else {
+      this.noiseBurst(out, t, 0.12, "highpass", 1200, 0.9, 0.5);
+      this.tone(out, t, "sawtooth", 220, 90, 0.18, 0.35);
+    }
+  }
+
+  zombieDeath(distance = 0, pan = 0): void {
+    if (!this.ctx || !this.throttle("zdie", 50)) return;
+    const out = this.out(this.sfxBus, pan, Math.max(0.03, 0.45 - distance / 2600));
+    if (!out) return;
+    const t = this.ctx.currentTime;
+    this.tone(out, t, "sawtooth", 160, 45, 0.35, 0.3);
+    this.noiseBurst(out, t, 0.25, "lowpass", 900, 0.8, 0.45);
+  }
+
   /** Bullet on armor plate. */
   armorHit(): void {
     if (!this.ctx || !this.throttle("armor", 50)) return;

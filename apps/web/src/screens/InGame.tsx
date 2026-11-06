@@ -1,4 +1,5 @@
 import {
+  isPveMode,
   isTeamMode,
   KILL_BY_EXPLOSION,
   KILL_BY_VEHICLE,
@@ -11,9 +12,11 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Button, formatClock, Panel } from "../components/ui.tsx";
 import { type HudObjective, type HudVehicle, hudStore, uiStore } from "../game/hudStore.ts";
+import { pveHudStore } from "../game/pve/pveHud.ts";
 import { keyLabel, settingsStore } from "../lib/settings.ts";
 import { useStore } from "../lib/store.ts";
 import { gameEvents, session, sessionStore } from "../net/session.ts";
+import { PveHud } from "./PveHud.tsx";
 
 interface FeedItem {
   id: number;
@@ -413,13 +416,14 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
           </div>
         )}
 
+        {isPveMode(s.mode) && <PveHud />}
         <ObjectiveStrip items={hud.objectives} myTeam={myTeam} />
         {hud.objectives.some((o) => o.carriedByYou) && (
           <div className="carrier-banner" role="status">
             You have the enemy flag: bring it to your flag stand
           </div>
         )}
-        {teams ? (
+        {isPveMode(s.mode) ? null : teams ? (
           <div className="hud__top" data-testid="team-scores">
             {([1, 2] as const).map((t, i) => (
               <div
@@ -519,12 +523,15 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
           </>
         )}
 
-        {hud.interactPrompt && hud.alive && !hud.vehicle && (
-          <div className="interact" data-testid="interact-prompt">
-            <kbd>{interactKey}</kbd>
-            {hud.interactPrompt}
-          </div>
-        )}
+        {hud.interactPrompt &&
+          hud.alive &&
+          !hud.vehicle &&
+          !(isPveMode(s.mode) && pveHudStore.get().prompt) && (
+            <div className="interact" data-testid="interact-prompt">
+              <kbd>{interactKey}</kbd>
+              {hud.interactPrompt}
+            </div>
+          )}
 
         {hud.vehicle && hud.alive && (
           <VehiclePanel

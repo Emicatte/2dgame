@@ -70,6 +70,9 @@ export interface SessionState {
   scoreA: number;
   scoreB: number;
   winnerTeam: number;
+  /** PvE lobby settings. */
+  mission: string;
+  difficulty: string;
 }
 
 const initialState: SessionState = {
@@ -98,6 +101,8 @@ const initialState: SessionState = {
   scoreA: 0,
   scoreB: 0,
   winnerTeam: 0,
+  mission: "",
+  difficulty: "veteran",
 };
 
 export const sessionStore = createStore<SessionState>({ ...initialState });
@@ -149,6 +154,12 @@ class GameSession {
     await this.connect(() =>
       this.client.joinOrCreate(ROOM_NAME, this.options("quick", loadout, undefined, { mode }), MatchState),
     );
+  }
+
+  /** Co-op: a private room (arena in host mode) set to Outbreak on its mission map. */
+  async createCoop(loadout: Loadout): Promise<void> {
+    await this.createPrivate(loadout, "works", HOST_MODE ? {} : { mode: "outbreak" });
+    if (HOST_MODE) this.updateSettings({ mode: "outbreak" });
   }
 
   async createPrivate(loadout: Loadout, map: MapId, extra: Record<string, unknown> = {}): Promise<void> {
@@ -330,6 +341,8 @@ class GameSession {
       scoreA: state.scoreA,
       scoreB: state.scoreB,
       winnerTeam: state.winnerTeam,
+      mission: state.pve?.mission ?? "",
+      difficulty: state.pve?.difficulty || "veteran",
     });
   }
 
