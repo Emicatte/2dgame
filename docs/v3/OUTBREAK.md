@@ -227,6 +227,31 @@ Ambient trickle (walkers, runners) outside scripted waves. Mission XP 900 × dif
 "First Responder" on the first completion. The rest of the campaign is listed in the lobby as
 in development and cannot be selected (no placeholder missions).
 
+## 6b. Dead District (Marlow Street)
+
+A 4800 × 2560 city authored as a route. Faster infected (runner-heavy waves and ambient) and
+attacks from different streets.
+
+1. **Get to the Marlow apartments** (walkers and runners on the avenue, infected in the lobby).
+2. **Answer the survivors' radio** behind their barricade (hold E 2 s): the clinic door opens.
+3. **Recover medical supplies from St. Anne clinic** (3 kits, hold E 1.5 s each; a spitter,
+   walkers, a runner; the clinic's back door is open to the lot).
+4. **Hold the apartments** while the survivors treat the wounded: 3 waves from different
+   streets (north and west; east, south and the alley; then every street with a brute and an
+   exploder), a supply crate after the second.
+5. **Take the survivors' truck across the city** (new step kind `drive`): the garage opens with
+   a loud alarm, a brute guards it; the armored carrier (driver + roof gun) goes east along the
+   avenue, south down the side street (the overpass has collapsed: only the infected squeeze
+   through the rubble), east on the river road between wrecks, chased by a horde. The step ends
+   when the truck is at the checkpoint gate with every standing player there, on foot or aboard.
+6. **Get inside the checkpoint and hold** 15 s while the horde hits the gate.
+
+Unlocked by completing First Contact. Mission XP 1100 × difficulty, title "Street Medic".
+Tests: every point reachable with the doors open, brutes reach the apartments from every street,
+the closed gate seals the compound, the truck's real body fits the whole route (and stays in
+while the garage is shut), the full script with the truck **driven** by an autopilot through the
+real vehicle physics (3,058 px, arrives damaged), and a browser scenario up to the radio.
+
 ## 7. Network protocol additions
 
 All additions use the existing channels (state patches, event batch per tick):
@@ -244,6 +269,9 @@ All additions use the existing channels (state patches, event batch per tick):
   complete, failed). A player hit by an enemy gets the usual `hit` with `p = "z:<id>"`, downed
   or not (the damage direction indicator uses it).
 - Settings: `mission`, `difficulty` (host only, validated: unknown missions are refused).
+- Steps: `reach`, `interact`, `collect`, `waves`, `kill`, `extract` and `drive` (a vehicle, of
+  a given kind if set, in the area with every standing player; `count`/`countMax` = players in
+  the area / standing). Props: generator, keycard, panel, terminal, medical, radio.
 - Results: `ResultsMessage.pve` (squad summary) and `PersonalResult.record.pve` with a `runId`.
   The receiving browser records a run once per id; PvP stats (kills, deaths, wins, career) are
   not touched by PvE, including when a player leaves a run in the middle (the dedicated server

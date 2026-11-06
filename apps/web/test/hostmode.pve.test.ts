@@ -85,7 +85,7 @@ describe("host mode: Outbreak co-op", () => {
     expect([...host.state.players.keys()].some((id) => id.startsWith("bot:"))).toBe(false);
     host.send(C2S.SETTINGS, { difficulty: "recruit" });
     // Unknown mission refused, mission unchanged.
-    host.send(C2S.SETTINGS, { mission: "dead-district" });
+    host.send(C2S.SETTINGS, { mission: "no-such-mission" });
     await ticks(host, 1);
     expect(host.state.pve.difficulty).toBe("recruit");
     expect(host.state.pve.mission).toBe(FIRST_CONTACT.id);

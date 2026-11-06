@@ -3,6 +3,7 @@
  * waves. The authoritative room runs them (MissionDirector); the client reads the same definition
  * for objective text, markers, doors and props, so nothing mission-specific is hard-coded in either.
  */
+import type { VehicleKind } from "../config/vehicles.ts";
 import type { ZombieKind } from "../config/zombies.ts";
 import type { MapId } from "../maps/types.ts";
 import type { Rect, Vec2 } from "../sim/math.ts";
@@ -14,7 +15,7 @@ export interface DoorDef extends Rect {
   startOpen?: boolean;
 }
 
-export type PropKind = "generator" | "keycard" | "panel" | "terminal";
+export type PropKind = "generator" | "keycard" | "panel" | "terminal" | "medical" | "radio";
 
 export interface PropDef extends Vec2 {
   id: string;
@@ -85,7 +86,12 @@ export type StepDef =
   | (StepBase & { kind: "collect"; props: string[] })
   | (StepBase & { kind: "waves"; waves: WaveDef[]; intermissionSec?: number })
   | (StepBase & { kind: "kill"; group: string })
-  | (StepBase & { kind: "extract"; area: Rect; holdSec: number; horde?: WaveDef });
+  | (StepBase & { kind: "extract"; area: Rect; holdSec: number; horde?: WaveDef })
+  /**
+   * Bring a vehicle (of `vehicle` kind, if set) into the area with every standing player there,
+   * on foot or aboard. `horde` chases from the start of the step.
+   */
+  | (StepBase & { kind: "drive"; area: Rect; vehicle?: VehicleKind; horde?: WaveDef });
 
 export interface MissionDef {
   id: string;
@@ -293,7 +299,188 @@ export const FIRST_CONTACT: MissionDef = {
   title: "First Responder",
 };
 
-export const MISSIONS: readonly MissionDef[] = [FIRST_CONTACT];
+// ------------------------------------------------------------------ Dead District
+
+const DD_LOBBY: Rect = { x: 560, y: 630, w: 660, h: 400 };
+const DD_GATE_APPROACH: Rect = { x: 4040, y: 2090, w: 350, h: 340 };
+const DD_CHECKPOINT: Rect = { x: 4450, y: 2100, w: 300, h: 320 };
+
+export const DEAD_DISTRICT: MissionDef = {
+  id: "dead-district",
+  chapter: 2,
+  name: "Dead District",
+  setting: "Marlow Street · abandoned city",
+  brief:
+    "A radio call from the Marlow apartments: survivors, wounded, out of medicine. Get them what they need from St. Anne clinic, hold the building while they patch up, then take their truck across the city to the military checkpoint.",
+  map: "district",
+  doors: [
+    { id: "clinic-door", label: "Clinic door", x: 1920, y: 1460, w: 160, h: 24 },
+    { id: "garage-door", label: "Garage door", x: 2550, y: 1460, w: 260, h: 24 },
+    { id: "checkpoint-gate", label: "Checkpoint gate", x: 4400, y: 2100, w: 24, h: 280 },
+  ],
+  props: [
+    { id: "radio", kind: "radio", label: "Survivors' radio", x: 890, y: 470, holdSec: 2 },
+    { id: "med-1", kind: "medical", label: "Medical supplies", x: 1800, y: 1700, holdSec: 1.5 },
+    { id: "med-2", kind: "medical", label: "Medical supplies", x: 2210, y: 1620, holdSec: 1.5 },
+    { id: "med-3", kind: "medical", label: "Medical supplies", x: 2060, y: 1960, holdSec: 1.5 },
+  ],
+  groups: [
+    {
+      id: "avenue",
+      enemies: [
+        { kind: "walker", x: 760, y: 1250, state: "wander" },
+        { kind: "walker", x: 1100, y: 1180, state: "wander" },
+        { kind: "runner", x: 1180, y: 1330, state: "idle" },
+        { kind: "walker", x: 1460, y: 900, state: "wander" },
+      ],
+    },
+    {
+      id: "lobby",
+      enemies: [
+        { kind: "walker", x: 700, y: 900, state: "idle" },
+        { kind: "walker", x: 1050, y: 820, state: "idle" },
+        { kind: "runner", x: 880, y: 980, state: "idle" },
+      ],
+    },
+    {
+      id: "clinic",
+      enemies: [
+        { kind: "spitter", x: 2180, y: 1580, state: "idle" },
+        { kind: "walker", x: 1800, y: 1820, state: "idle" },
+        { kind: "walker", x: 2220, y: 1880, state: "idle" },
+        { kind: "runner", x: 1960, y: 1760, state: "idle" },
+      ],
+    },
+    {
+      id: "garage",
+      enemies: [
+        { kind: "brute", x: 2860, y: 1640, state: "idle" },
+        { kind: "walker", x: 2520, y: 1760, state: "idle" },
+      ],
+    },
+    {
+      id: "route",
+      enemies: [
+        { kind: "runner", x: 3360, y: 1580, state: "idle" },
+        { kind: "walker", x: 3330, y: 1900, state: "wander" },
+        { kind: "walker", x: 3720, y: 2260, state: "wander" },
+        { kind: "runner", x: 3960, y: 2380, state: "idle" },
+        { kind: "walker", x: 4180, y: 2280, state: "idle" },
+      ],
+    },
+  ],
+  spawnZones: [
+    { id: "north", x: 1460, y: 150 },
+    { id: "alley", x: 2410, y: 150 },
+    { id: "parking", x: 250, y: 560 },
+    { id: "west", x: 150, y: 1250 },
+    { id: "east", x: 3360, y: 1250 },
+    { id: "east-far", x: 4600, y: 1250 },
+    { id: "south", x: 1460, y: 2300 },
+    { id: "southwest", x: 300, y: 2340 },
+    { id: "lot", x: 2760, y: 2300 },
+    { id: "river", x: 3500, y: 2300 },
+    { id: "alley-e", x: 4020, y: 1760 },
+  ],
+  steps: [
+    {
+      kind: "reach",
+      text: "Get to the Marlow apartments",
+      hint: "Runners are fast and weave: let them come and shoot, don't run in a straight line.",
+      area: DD_LOBBY,
+      marker: { x: 900, y: 1070 },
+      onStart: [{ spawn: "avenue" }, { spawn: "lobby" }],
+    },
+    {
+      kind: "interact",
+      prop: "radio",
+      text: "Answer the survivors' radio",
+      hint: "Behind the barricade: hold E at the radio.",
+      marker: { x: 890, y: 470 },
+      onStart: [{ checkpoint: { x: 890, y: 960 } }],
+      onDone: [
+        { open: "clinic-door" },
+        { hint: "They need medicine. St. Anne clinic is across the avenue." },
+      ],
+    },
+    {
+      kind: "collect",
+      props: ["med-1", "med-2", "med-3"],
+      text: "Recover medical supplies from St. Anne clinic",
+      hint: "Spitters keep their distance: close in behind cover, step out of the acid.",
+      marker: { x: 2000, y: 1500 },
+      onStart: [{ spawn: "clinic" }, { checkpoint: { x: 1460, y: 1250 } }],
+      onDone: [{ hint: "Back to the apartments. They will come from every street." }],
+    },
+    {
+      kind: "waves",
+      text: "Hold the apartments while the survivors treat the wounded",
+      hint: "Attacks come from different streets: split the angles, watch each other's backs.",
+      marker: { x: 900, y: 1150 },
+      intermissionSec: 7,
+      waves: [
+        { enemies: { walker: 7, runner: 4 }, zones: ["north", "parking", "west"], label: "North and west!" },
+        {
+          enemies: { walker: 7, runner: 6, spitter: 1 },
+          zones: ["east", "south", "alley"],
+          supply: true,
+          label: "Now the east and the south!",
+        },
+        {
+          enemies: { walker: 9, runner: 7, exploder: 1, brute: 1 },
+          zones: ["north", "east", "south", "west", "alley", "parking"],
+          label: "From every street!",
+        },
+      ],
+      onStart: [{ checkpoint: { x: 890, y: 960 } }],
+      onDone: [
+        { open: "garage-door" },
+        { alarm: true },
+        { hint: "The survivors' truck is in the garage. The door alarm is loud: move." },
+      ],
+    },
+    {
+      kind: "drive",
+      area: DD_GATE_APPROACH,
+      vehicle: "armored",
+      text: "Take the survivors' truck across the city to the checkpoint",
+      hint: "One drives, the others take the roof gun (F changes seat). Ram them, don't stop.",
+      marker: { x: 4200, y: 2260 },
+      onStart: [{ spawn: "garage" }, { spawn: "route" }, { checkpoint: { x: 2680, y: 1300 } }],
+      onDone: [{ open: "checkpoint-gate" }, { alarm: false }],
+      horde: {
+        enemies: { walker: 9, runner: 8 },
+        zones: ["east", "east-far", "lot", "river"],
+        label: "The engine is drawing the horde!",
+      },
+    },
+    {
+      kind: "extract",
+      area: DD_CHECKPOINT,
+      holdSec: 15,
+      text: "Get inside the checkpoint and hold until the gate seals",
+      hint: "Everyone still standing must be inside the compound.",
+      marker: { x: 4600, y: 2260 },
+      onStart: [{ checkpoint: { x: 4200, y: 2260 } }],
+      horde: {
+        enemies: { walker: 12, runner: 6, exploder: 1 },
+        zones: ["river", "alley-e", "lot"],
+        label: "Hold the gate!",
+      },
+    },
+  ],
+  ambient: {
+    everySec: 12,
+    maxAlive: 5,
+    kinds: ["walker", "runner", "runner"],
+    zones: ["north", "alley", "southwest", "parking", "lot"],
+  },
+  xp: 1100,
+  title: "Street Medic",
+  requires: "first-contact",
+};
+
+export const MISSIONS: readonly MissionDef[] = [FIRST_CONTACT, DEAD_DISTRICT];
 
 /**
  * The rest of the planned campaign (shown in the lobby as "in development"; not playable until

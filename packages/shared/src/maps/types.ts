@@ -3,6 +3,7 @@ import type { WeaponId } from "../config/weapons.ts";
 import type { Rect, Vec2 } from "../sim/math.ts";
 
 export type MapId =
+  | "district"
   | "industrial"
   | "neon"
   | "desert"

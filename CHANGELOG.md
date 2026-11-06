@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased (branch `dread`)
+
+### Added
+- **Dead District** (campaign chapter 2, unlocked by First Contact): a new city map and a
+  six-step mission (apartments, radio, clinic supplies, defence from several streets, the
+  survivors' truck across the city, the checkpoint). New step kind `drive`, props medical and
+  radio. See `docs/v3/OUTBREAK.md` §6b.
+- Signaling: TURN keys are stripped of pasted spaces, newlines and quotes; the health endpoint
+  reports the key id's shape (`turnKey`).
+
 ## 0.5.1 — 2026-11-06 (co-op dread pass, TURN diagnostics)
 
 ### Added

@@ -253,6 +253,31 @@ function drawProp(kind: string): HTMLCanvasElement {
       ctx.fillRect(-2.5, -7, 5, 14);
       ctx.fillRect(-7, -2.5, 14, 5);
       break;
+    case "medical":
+      // A field medical case: white shell, red cross, a dark strap.
+      plate(34, 24, 0xdcd8cf, 0x15171a);
+      ctx.fillStyle = hex(0x3a3e43);
+      ctx.fillRect(-17, -2, 34, 4);
+      ctx.fillStyle = hex(0xd83a3a);
+      ctx.fillRect(-3, -9, 6, 18);
+      ctx.fillRect(-9, -3, 18, 6);
+      ctx.fillStyle = hex(0x6a7078);
+      ctx.fillRect(-5, -15, 10, 3);
+      break;
+    case "radio":
+      // A field radio with its antenna and a green dial.
+      plate(34, 22, 0x3a3f2e, 0x0b0c0e);
+      ctx.strokeStyle = hex(0x9aa0a8);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(12, -11);
+      ctx.lineTo(20, -24);
+      ctx.stroke();
+      ctx.fillStyle = hex(0x7dffb0, 0.95);
+      ctx.fillRect(-12, -6, 12, 7);
+      ctx.fillStyle = hex(0x15171a);
+      for (let i = 0; i < 3; i++) ctx.fillRect(4, -6 + i * 5, 8, 2);
+      break;
   }
   return c;
 }
@@ -264,7 +289,17 @@ export function generateZombieTextures(scene: Phaser.Scene): void {
   for (const def of ZOMBIE_LIST) add(ZTEX.body(def.kind), drawZombie(def));
   add(ZTEX.acid, drawPuddle());
   add(ZTEX.spit, drawSpit());
-  for (const k of ["generator", "keycard", "panel", "terminal", "supply", "ammo", "health"]) {
+  for (const k of [
+    "generator",
+    "keycard",
+    "panel",
+    "terminal",
+    "supply",
+    "ammo",
+    "health",
+    "medical",
+    "radio",
+  ]) {
     add(ZTEX.prop(k), drawProp(k));
   }
 }

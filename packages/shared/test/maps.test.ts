@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { collisionWorldFor, isFreeSpot, MAP_IDS, MAPS, PVP_MAP_IDS, validateMap } from "../src/maps/index.ts";
 
 describe("maps", () => {
-  it("ships the three arena maps unchanged, plus the vehicle maps (competitive list), and the PvE map", () => {
-    expect(MAP_IDS).toEqual([...PVP_MAP_IDS, "works"]);
+  it("ships the three arena maps unchanged, plus the vehicle maps (competitive list), and the PvE maps", () => {
+    expect(MAP_IDS).toEqual([...PVP_MAP_IDS, "works", "district"]);
     expect(MAPS.works.pve).toBe(true);
+    expect(MAPS.district.pve).toBe(true);
     expect(PVP_MAP_IDS).toEqual([
       "industrial",
       "neon",
@@ -23,8 +24,9 @@ describe("maps", () => {
     }
   });
 
-  it("the PvE map (Halvorsen Works) has valid, reachable spawns and pickups", () => {
+  it("the PvE maps (Halvorsen Works, Dead District) have valid, reachable spawns and pickups", () => {
     expect(validateMap(MAPS.works)).toEqual([]);
+    expect(validateMap(MAPS.district)).toEqual([]);
   });
 
   for (const id of PVP_MAP_IDS) {

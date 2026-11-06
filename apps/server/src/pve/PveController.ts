@@ -762,7 +762,7 @@ export class PveController implements ZombieHost {
     } else if (s.kind === "waves") {
       this.countMax = s.waves.length;
       this.nextWaveTick = this.sim.tick + this.secTicks(2.5);
-    } else if (s.kind === "extract" && s.horde) {
+    } else if ((s.kind === "extract" || s.kind === "drive") && s.horde) {
       this.waveNumber++;
       const run = this.waves.start(
         s.horde,
@@ -827,6 +827,26 @@ export class PveController implements ZombieHost {
       case "waves":
         this.updateWaveStep(s);
         break;
+      case "drive": {
+        // A vehicle (of the required kind) in the area, and every standing player there with it.
+        const standing = players.filter((p) => this.standing(p));
+        const allIn = standing.length > 0 && standing.every((p) => this.inArea(p, s.area));
+        let vehicleIn = false;
+        for (const v of this.sim.vehicles.values()) {
+          if (v.status !== 0 || (s.vehicle && v.def.kind !== s.vehicle)) continue;
+          if (
+            v.sim.x >= s.area.x &&
+            v.sim.x <= s.area.x + s.area.w &&
+            v.sim.y >= s.area.y &&
+            v.sim.y <= s.area.y + s.area.h
+          )
+            vehicleIn = true;
+        }
+        this.count = standing.filter((p) => this.inArea(p, s.area)).length;
+        this.countMax = standing.length;
+        if (vehicleIn && allIn) this.completeStep();
+        break;
+      }
       case "extract": {
         const alive = players.filter((p) => p.alive && p.connected);
         const standing = alive.filter((p) => !p.pve.downed);

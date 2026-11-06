@@ -20,6 +20,7 @@ const SHOTS = process.env.E2E_SHOTS_DIR;
 
 interface PveInfo {
   mode: string;
+  mission: string;
   step: number;
   doors: string;
   power: boolean;
@@ -242,4 +243,58 @@ test("Survival: a boss renders with its health bar and telegraphs (host only)", 
   console.log(`[outbreak e2e] boss scenario: ${JSON.stringify(info)}`);
   // The boss is synchronized and rendered (the run may already be lost: a boss alone is brutal).
   expect(info?.mode).toBe("survival");
+});
+
+test("Dead District: unlocked after First Contact, the squad reaches the apartments and answers the radio", async () => {
+  test.setTimeout(240_000);
+  browsers = [await chromium.launch({ executablePath: CHROME, headless: true, args: ARGS })];
+  const a = await (await browsers[0]!.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+  a.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
+  await onboard(a, "Medic");
+  // A profile that already completed First Contact (the campaign unlock).
+  await a.evaluate(() => {
+    const key = "scrapline.localProfile.v1";
+    const d = JSON.parse(localStorage.getItem(key) ?? "{}");
+    d.pve = { ...(d.pve ?? {}), missions: { "first-contact": { completions: 1, best: {} } } };
+    localStorage.setItem(key, JSON.stringify(d));
+  });
+  await a.getByTestId("create-coop").click();
+  await expect(a.getByTestId("pve-settings")).toBeVisible({ timeout: 15_000 });
+  await expect(a.getByTestId("mission-dead-district")).toBeEnabled();
+  await a.getByTestId("mission-dead-district").click();
+  await expect(a.getByTestId("briefing")).toContainText("Dead District");
+  await a.getByTestId("difficulty-recruit").click();
+  await a.getByTestId("start-match").click();
+  await phaseIs(a, "playing");
+  await expect(a.getByTestId("pve-objective-text")).toContainText("Marlow apartments");
+  const start = await pve(a);
+  expect(start?.mission).toBe("dead-district");
+  expect(start?.dark).toBe(true);
+  await shot(a, "district-start");
+  // West end of the avenue → the apartments' door → the lobby.
+  await walk(
+    a,
+    [
+      { x: 420, y: 1250 },
+      { x: 890, y: 1200 },
+      { x: 890, y: 900 },
+    ],
+    { fire: true },
+  );
+  await expect.poll(async () => (await pve(a))?.step ?? 0, { timeout: 90_000 }).toBeGreaterThanOrEqual(1);
+  await shot(a, "district-lobby");
+  // Through the gap in the barricade to the radio; hold E there.
+  await walk(
+    a,
+    [
+      { x: 890, y: 660 },
+      { x: 890, y: 510 },
+    ],
+    { fire: true, interact: true },
+  );
+  await expect.poll(async () => (await pve(a))?.step ?? 0, { timeout: 60_000 }).toBeGreaterThanOrEqual(2);
+  const after = await pve(a);
+  expect(after?.doors).toContain("clinic-door");
+  await shot(a, "district-radio");
+  console.log(`[outbreak e2e] Dead District: ${JSON.stringify(after)}`);
 });

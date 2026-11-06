@@ -3,10 +3,12 @@ import {
   AI,
   ATTACK_KINDS,
   BTN,
+  bodyFits,
   buildFlowField,
   buildNavGrid,
   cellIndex,
   collisionWorldFor,
+  DEAD_DISTRICT,
   DIFFICULTY,
   FIRST_CONTACT,
   findPath,
@@ -26,6 +28,7 @@ import {
   quantizeInput,
   squadScale,
   survivalWave,
+  VEHICLES,
   ZOMBIES,
 } from "@scrapline/shared";
 import { describe, expect, it } from "vitest";
@@ -1091,5 +1094,184 @@ describe("review regressions", () => {
     expect(pve.startTick).toBe(sim.tick);
     expect((pve.nextWaveTick - sim.tick) / 20).toBeGreaterThan(3.5);
     expect(pve.zw.alive).toBe(0);
+  });
+});
+
+describe("Dead District", () => {
+  const map = MAPS.district;
+  const allDoors = new Set(DEAD_DISTRICT.doors.map((d) => d.id));
+
+  it("every mission point is reachable with the doors open; brutes reach the apartments; the gate seals the checkpoint", () => {
+    const grid = buildNavGrid(pveWorlds(map, DEAD_DISTRICT.doors, allDoors).world);
+    const field = buildFlowField(grid, 1, [nearestWalkable(grid, map.spawns[0]!.x, map.spawns[0]!.y, 1)]);
+    const points = [
+      ...DEAD_DISTRICT.spawnZones,
+      ...DEAD_DISTRICT.props,
+      ...DEAD_DISTRICT.groups.flatMap((g) => g.enemies),
+      ...DEAD_DISTRICT.steps.flatMap((s) => (s.marker ? [s.marker] : [])),
+    ];
+    for (const p of points) {
+      const c = nearestWalkable(grid, p.x, p.y, 1, 4);
+      expect(c, `${JSON.stringify(p)} on the grid`).toBeGreaterThanOrEqual(0);
+      expect(field.dist[c]!, `${JSON.stringify(p)} reachable`).toBeLessThan(NAV_INF);
+    }
+    // The third wave brings a brute from any street: large bodies reach the apartments' door.
+    const door = buildFlowField(grid, 2, [nearestWalkable(grid, 900, 1120, 2)]);
+    for (const z of DEAD_DISTRICT.spawnZones) {
+      const c = nearestWalkable(grid, z.x, z.y, 2, 6);
+      expect(door.dist[c]!, `brute from ${z.id}`).toBeLessThan(NAV_INF);
+    }
+    // Gate closed: nothing gets into the compound.
+    const sealed = buildNavGrid(
+      pveWorlds(map, DEAD_DISTRICT.doors, new Set(["clinic-door", "garage-door"])).world,
+    );
+    const f2 = buildFlowField(sealed, 1, [nearestWalkable(sealed, 200, 1250, 1)]);
+    expect(f2.dist[nearestWalkable(sealed, 4600, 2260, 1)]!).toBe(NAV_INF);
+  });
+
+  it("the truck fits the whole route: out of the garage, east, down the side street, along the river road", () => {
+    const def = VEHICLES.armored;
+    const world = pveWorlds(map, DEAD_DISTRICT.doors, new Set(["clinic-door", "garage-door"])).world;
+    const spawn = map.vehicleSpawns![0]!;
+    const route = [
+      { x: spawn.x, y: spawn.y },
+      { x: 2680, y: 1250 },
+      { x: 3360, y: 1250 },
+      { x: 3360, y: 2260 },
+      { x: 4200, y: 2260 },
+    ];
+    let heading = spawn.angle;
+    for (let i = 0; i + 1 < route.length; i++) {
+      const a = route[i]!;
+      const b = route[i + 1]!;
+      const next = Math.atan2(b.y - a.y, b.x - a.x);
+      // Turning on the spot at each corner.
+      for (let k = 0; k <= 8; k++) {
+        const ang = heading + ((next - heading) * k) / 8;
+        expect(bodyFits(world, { x: a.x, y: a.y, angle: ang }, def), `turn at ${a.x},${a.y}`).toBe(true);
+      }
+      heading = next;
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      for (let d = 0; d <= len; d += 16) {
+        const x = a.x + ((b.x - a.x) * d) / len;
+        const y = a.y + ((b.y - a.y) * d) / len;
+        expect(
+          bodyFits(world, { x, y, angle: heading }, def),
+          `drive at ${Math.round(x)},${Math.round(y)}`,
+        ).toBe(true);
+      }
+    }
+    // With the garage door still closed, the truck stays in.
+    const shut = pveWorlds(map, DEAD_DISTRICT.doors, new Set<string>()).world;
+    expect(bodyFits(shut, { x: 2680, y: 1470, angle: -Math.PI / 2 }, def)).toBe(false);
+  });
+
+  it("runs from the apartments to the checkpoint: radio, clinic, three waves, the truck, extraction", () => {
+    const sim = makeSim("district", 13);
+    sim.setPve({ mode: "outbreak", mission: DEAD_DISTRICT, difficulty: "recruit" });
+    sim.resetForMatch();
+    const pve = sim.pve!;
+    const a = addPlayer(sim, "alpha");
+    const b = addPlayer(sim, "bravo");
+    sim.resetForMatch();
+    a.protectedUntil = Number.MAX_SAFE_INTEGER;
+    b.protectedUntil = Number.MAX_SAFE_INTEGER;
+    const log: string[] = [];
+    const run = (sec: number, input: Record<string, Partial<InputFrame>> = {}, until?: () => boolean) => {
+      for (let i = 0; i < sec * 20 && !until?.(); i++) {
+        const ev = tick(sim, input);
+        for (const e of ev)
+          if (e.t === "pve") log.push(`${e.k}${e.n !== undefined ? ` ${e.n}` : ""}${e.s ? ` ${e.s}` : ""}`);
+        for (const z of pve.zw.zombies.values()) {
+          if (!z.dead && Math.hypot(z.x - a.sim.x, z.y - a.sim.y) < 700)
+            pve.damageZombie(z.id, 99999, a, false, z.x, z.y);
+        }
+      }
+    };
+    expect(sim.world.solids.length).toBe(map.solids.length + 3);
+    expect(sim.vehicles.size).toBe(1);
+    // 1. The apartments.
+    place(a, 890, 800);
+    place(b, 940, 800);
+    run(1, {}, () => pve.stepIndex === 1);
+    expect(pve.stepIndex).toBe(1);
+    // 2. The radio.
+    place(a, 890, 520);
+    run(4, { alpha: { buttons: BTN.INTERACT } }, () => pve.stepIndex === 2);
+    expect(pve.stepIndex).toBe(2);
+    expect(pve.doorsOpen.has("clinic-door")).toBe(true);
+    // 3. Three medical kits.
+    for (const id of ["med-1", "med-2", "med-3"]) {
+      const pr = DEAD_DISTRICT.props.find((p) => p.id === id)!;
+      place(a, pr.x, pr.y + 30);
+      run(3, { alpha: { buttons: BTN.INTERACT } }, () => pve.props.get(id)!.used);
+      expect(pve.props.get(id)!.used, id).toBe(true);
+    }
+    run(1, {}, () => pve.stepIndex === 3);
+    expect(pve.stepIndex).toBe(3);
+    // 4. Three waves from different streets.
+    place(a, 900, 1150);
+    place(b, 950, 1150);
+    run(300, {}, () => pve.stepIndex === 4);
+    expect(pve.stepIndex).toBe(4);
+    expect(log.filter((l) => l.startsWith("clear")).length).toBe(3);
+    expect(pve.doorsOpen.has("garage-door")).toBe(true);
+    // 5. The drive: on foot at the gate is not enough, the truck must be there.
+    place(a, 4200, 2200);
+    place(b, 4200, 2320);
+    run(2);
+    expect(pve.stepIndex).toBe(4);
+    const truck = [...sim.vehicles.values()][0]!;
+    const seat = (p: ServerPlayer, s: number) =>
+      (sim as unknown as { takeSeat(p: ServerPlayer, v: unknown, s: number): void }).takeSeat(p, truck, s);
+    place(a, truck.sim.x - 60, truck.sim.y);
+    place(b, truck.sim.x + 60, truck.sim.y);
+    seat(a, 0);
+    seat(b, 1);
+    // Drive it for real (vehicle physics, collisions with the door frame, the barricade and the
+    // wrecks): a simple autopilot steers toward the route's waypoints.
+    const route = [
+      { x: 2680, y: 1260 },
+      { x: 3360, y: 1260 },
+      { x: 3360, y: 2260 },
+      { x: 4220, y: 2260 },
+    ];
+    let wp = 0;
+    let driven = 0;
+    let lastX = truck.sim.x;
+    let lastY = truck.sim.y;
+    for (let i = 0; i < 20 * 90 && pve.stepIndex === 4; i++) {
+      const target = route[wp]!;
+      const dx = target.x - truck.sim.x;
+      const dy = target.y - truck.sim.y;
+      if (Math.hypot(dx, dy) < 70 && wp < route.length - 1) wp++;
+      const want = Math.atan2(dy, dx);
+      const diff = Math.atan2(Math.sin(want - truck.sim.angle), Math.cos(want - truck.sim.angle));
+      const steer = Math.max(-1, Math.min(1, diff * 2.5));
+      const throttle =
+        Math.abs(diff) > 0.7 ? 0.3 : Math.hypot(dx, dy) < 200 && wp < route.length - 1 ? 0.55 : 1;
+      run(1 / 20, { alpha: { mx: steer, my: -throttle } });
+      driven += Math.hypot(truck.sim.x - lastX, truck.sim.y - lastY);
+      lastX = truck.sim.x;
+      lastY = truck.sim.y;
+    }
+    console.log(
+      `[mission] truck driven ${Math.round(driven)} px, hp ${truck.hp}, at ${Math.round(truck.sim.x)},${Math.round(truck.sim.y)}`,
+    );
+    expect(driven).toBeGreaterThan(2000);
+    expect(pve.stepIndex).toBe(5);
+    expect(pve.doorsOpen.has("checkpoint-gate")).toBe(true);
+    // 6. Into the compound and hold.
+    sim.leaveVehicle(a, true);
+    sim.leaveVehicle(b, true);
+    place(a, 4600, 2220);
+    place(b, 4640, 2300);
+    run(25, {}, () => pve.status !== PVE_STATUS.RUNNING);
+    expect(pve.status).toBe(PVE_STATUS.COMPLETE);
+    console.log(`[mission] Dead District: ${log.join(" | ")}`);
+    const { result, xp } = pve.results(0);
+    expect(result.completed).toBe(true);
+    expect(result.progress).toBe(DEAD_DISTRICT.steps.length);
+    expect(xp.get("alpha")!.lines[0]!.reason).toContain("Dead District");
   });
 });
