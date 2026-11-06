@@ -107,8 +107,11 @@ test("Outbreak: two browsers complete co-op objectives of First Contact together
   await a.getByTestId("mode-outbreak").click();
   await expect(a.getByTestId("pve-settings")).toBeVisible();
   await expect(a.getByTestId("mission-first-contact")).toHaveAttribute("aria-pressed", "true");
-  // The rest of the campaign is listed as in development, not playable.
-  await expect(a.getByTestId("mission-planned-2")).toBeDisabled();
+  // Later chapters stay locked until the previous one is completed; unbuilt ones are listed as
+  // in development, not playable.
+  await expect(a.getByTestId("mission-dead-district")).toBeDisabled();
+  await expect(a.getByTestId("mission-the-convoy")).toBeDisabled();
+  await expect(a.getByTestId("mission-planned-4")).toBeDisabled();
   await a.getByTestId("difficulty-recruit").click();
   const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
   expect(code).toMatch(/^[A-Z0-9]{5}$/);
@@ -153,6 +156,8 @@ test("Outbreak: two browsers complete co-op objectives of First Contact together
     { fire: true },
   );
   await expect.poll(async () => (await pve(a))?.step, { timeout: 40_000 }).toBe(1);
+  await shot(b, "outbreak-hall-guest-before");
+  console.log(`[outbreak e2e] guest at objective 1: ${JSON.stringify(await pve(b))}`);
   await expect(b.getByTestId("pve-objective-text")).toContainText("Restore power", { timeout: 10_000 });
   await shot(b, "outbreak-hall-guest");
 
@@ -297,4 +302,53 @@ test("Dead District: unlocked after First Contact, the squad reaches the apartme
   expect(after?.doors).toContain("clinic-door");
   await shot(a, "district-radio");
   console.log(`[outbreak e2e] Dead District: ${JSON.stringify(after)}`);
+});
+
+test("The Convoy: the escorted truck's hull is on the HUD, locked until the keys are found", async () => {
+  test.setTimeout(240_000);
+  browsers = [await chromium.launch({ executablePath: CHROME, headless: true, args: ARGS })];
+  const a = await (await browsers[0]!.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+  a.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
+  await onboard(a, "Driver");
+  await a.evaluate(() => {
+    const key = "scrapline.localProfile.v1";
+    const d = JSON.parse(localStorage.getItem(key) ?? "{}");
+    d.pve = {
+      ...(d.pve ?? {}),
+      missions: {
+        "first-contact": { completions: 1, best: {} },
+        "dead-district": { completions: 1, best: {} },
+      },
+    };
+    localStorage.setItem(key, JSON.stringify(d));
+  });
+  await a.getByTestId("create-coop").click();
+  await expect(a.getByTestId("pve-settings")).toBeVisible({ timeout: 15_000 });
+  await a.getByTestId("mission-the-convoy").click();
+  await expect(a.getByTestId("briefing")).toContainText("The Convoy");
+  await a.getByTestId("difficulty-recruit").click();
+  await a.getByTestId("start-match").click();
+  await phaseIs(a, "playing");
+  await expect(a.getByTestId("pve-objective-text")).toContainText("truck keys");
+  await expect(a.getByTestId("pve-escort")).toContainText("Convoy hull 100%");
+  await expect(a.getByTestId("pve-escort")).toContainText("locked");
+  await shot(a, "convoy-start");
+  // Into the depot office (door on its east side) and the keys.
+  await walk(
+    a,
+    [
+      { x: 560, y: 1800 },
+      { x: 540, y: 1660 },
+      { x: 420, y: 1660 },
+      { x: 250, y: 1660 },
+    ],
+    {
+      fire: true,
+      interact: true,
+    },
+  );
+  await expect.poll(async () => (await pve(a))?.step ?? 0, { timeout: 90_000 }).toBeGreaterThanOrEqual(1);
+  await expect(a.getByTestId("pve-escort")).not.toContainText("locked");
+  await expect(a.getByTestId("pve-objective-text")).toContainText("warehouse district");
+  await shot(a, "convoy-keys");
 });

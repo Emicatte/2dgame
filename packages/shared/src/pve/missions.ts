@@ -15,7 +15,7 @@ export interface DoorDef extends Rect {
   startOpen?: boolean;
 }
 
-export type PropKind = "generator" | "keycard" | "panel" | "terminal" | "medical" | "radio";
+export type PropKind = "generator" | "keycard" | "panel" | "terminal" | "medical" | "radio" | "engine";
 
 export interface PropDef extends Vec2 {
   id: string;
@@ -29,6 +29,11 @@ export interface PropDef extends Vec2 {
   sets?: string;
   /** Holding it is loud: nearby infected come to investigate (radius in px). */
   noise?: number;
+  /**
+   * Attached to a vehicle (its id): the prop follows it, `x`/`y` are the offset in the vehicle's
+   * frame (x forward). Used for the convoy truck's engine.
+   */
+  attach?: string;
 }
 
 export interface SpawnZoneDef extends Vec2 {
@@ -67,7 +72,10 @@ export type Trigger =
   | { spawn: string }
   | { hint: string }
   | { supply: Vec2 }
-  | { checkpoint: Vec2 };
+  | { checkpoint: Vec2 }
+  /** Vehicle (id) out of use: everyone aboard gets out, nobody can get in until unlocked. */
+  | { lock: string }
+  | { unlock: string };
 
 interface StepBase {
   /** Objective line shown in the HUD. */
@@ -82,7 +90,8 @@ interface StepBase {
 
 export type StepDef =
   | (StepBase & { kind: "reach"; area: Rect })
-  | (StepBase & { kind: "interact"; prop: string })
+  /** `horde`: a wave that attacks while the prop is being used (a repair under fire). */
+  | (StepBase & { kind: "interact"; prop: string; horde?: WaveDef })
   | (StepBase & { kind: "collect"; props: string[] })
   | (StepBase & { kind: "waves"; waves: WaveDef[]; intermissionSec?: number })
   | (StepBase & { kind: "kill"; group: string })
@@ -115,6 +124,8 @@ export interface MissionDef {
   title: string;
   /** Mission id that must be completed first (campaign unlocks). */
   requires?: string;
+  /** Vehicle (id) the squad escorts: the mission fails if it is destroyed. */
+  escort?: string;
 }
 
 // ------------------------------------------------------------------ First Contact
@@ -480,7 +491,198 @@ export const DEAD_DISTRICT: MissionDef = {
   requires: "first-contact",
 };
 
-export const MISSIONS: readonly MissionDef[] = [FIRST_CONTACT, DEAD_DISTRICT];
+// ------------------------------------------------------------------ The Convoy
+
+export const THE_CONVOY: MissionDef = {
+  id: "the-convoy",
+  chapter: 3,
+  name: "The Convoy",
+  setting: "Kessler Road · industrial road and outskirts",
+  brief:
+    "The evacuation needs the vaccine samples in the depot truck. One of you drives, the others ride the roof gun: get it through the warehouse district and the outskirts, keep it running, and over the river. If the truck dies, the mission does.",
+  map: "outskirts",
+  escort: "cv-truck",
+  doors: [],
+  props: [
+    {
+      id: "keys",
+      kind: "keycard",
+      label: "Truck keys",
+      x: 220,
+      y: 1640,
+      holdSec: 1,
+      sets: "keys",
+    },
+    // The engine sits at the truck's nose (offset in the vehicle's frame: 62 px forward).
+    {
+      id: "engine",
+      kind: "engine",
+      label: "Engine",
+      x: 62,
+      y: 0,
+      holdSec: 18,
+      noise: 900,
+      attach: "cv-truck",
+    },
+  ],
+  groups: [
+    {
+      id: "depot",
+      enemies: [
+        { kind: "walker", x: 600, y: 1700, state: "wander" },
+        { kind: "walker", x: 900, y: 2150, state: "idle" },
+        { kind: "runner", x: 420, y: 1960, state: "idle" },
+        { kind: "walker", x: 300, y: 1690, state: "idle" },
+      ],
+    },
+    {
+      id: "district",
+      enemies: [
+        { kind: "walker", x: 2000, y: 1400, state: "wander" },
+        { kind: "walker", x: 1990, y: 960, state: "idle" },
+        { kind: "runner", x: 2050, y: 700, state: "idle" },
+        { kind: "walker", x: 2600, y: 640, state: "wander" },
+        { kind: "spitter", x: 2760, y: 300, state: "idle" },
+        { kind: "walker", x: 3100, y: 560, state: "idle" },
+        { kind: "runner", x: 3500, y: 620, state: "idle" },
+        { kind: "walker", x: 3860, y: 560, state: "idle" },
+        { kind: "walker", x: 3920, y: 680, state: "idle" },
+      ],
+    },
+    {
+      id: "outskirts",
+      enemies: [
+        { kind: "walker", x: 3900, y: 1000, state: "wander" },
+        { kind: "exploder", x: 3860, y: 1320, state: "idle" },
+        { kind: "walker", x: 3960, y: 1500, state: "idle" },
+        { kind: "runner", x: 4200, y: 1700, state: "idle" },
+        { kind: "spitter", x: 4560, y: 1240, state: "idle" },
+        { kind: "walker", x: 4500, y: 1650, state: "idle" },
+        { kind: "walker", x: 4700, y: 1760, state: "idle" },
+      ],
+    },
+    {
+      id: "bridge",
+      enemies: [
+        { kind: "walker", x: 5300, y: 1650, state: "idle" },
+        { kind: "walker", x: 5450, y: 1760, state: "idle" },
+        { kind: "runner", x: 5600, y: 1640, state: "idle" },
+        { kind: "walker", x: 5820, y: 1720, state: "wander" },
+      ],
+    },
+  ],
+  spawnZones: [
+    { id: "lot-w", x: 600, y: 1080 },
+    { id: "lot-n", x: 1300, y: 640 },
+    { id: "n-alley-1", x: 2760, y: 200 },
+    { id: "n-alley-2", x: 3360, y: 200 },
+    { id: "c-alley", x: 2940, y: 1300 },
+    { id: "s-lot", x: 1600, y: 2250 },
+    { id: "houses", x: 2700, y: 2200 },
+    { id: "houses-e", x: 3620, y: 2250 },
+    { id: "ne-north", x: 4400, y: 520 },
+    { id: "ne-field", x: 4700, y: 1340 },
+    { id: "pump-back", x: 4640, y: 2300 },
+    { id: "se-lot", x: 4250, y: 2300 },
+    { id: "east-n", x: 5850, y: 300 },
+    { id: "east-s", x: 5850, y: 2250 },
+  ],
+  steps: [
+    {
+      kind: "collect",
+      props: ["keys"],
+      text: "Find the truck keys in the depot office",
+      hint: "The convoy truck is locked. The keys are in the office.",
+      marker: { x: 300, y: 1640 },
+      onStart: [{ lock: "cv-truck" }, { spawn: "depot" }],
+      onDone: [
+        { unlock: "cv-truck" },
+        { hint: "Truck unlocked. One drives (E); the others take the roof gun or a seat (F)." },
+      ],
+    },
+    {
+      kind: "drive",
+      area: { x: 3700, y: 490, w: 310, h: 220 },
+      vehicle: "armored",
+      text: "Drive the convoy through the warehouse district",
+      hint: "Keep moving: infected that reach the truck tear at its hull.",
+      marker: { x: 3860, y: 600 },
+      onStart: [{ spawn: "district" }, { checkpoint: { x: 2000, y: 1900 } }],
+      horde: {
+        enemies: { walker: 8, runner: 6 },
+        zones: ["lot-w", "lot-n", "n-alley-1", "n-alley-2", "c-alley"],
+        label: "The district wakes up!",
+      },
+    },
+    {
+      kind: "drive",
+      area: { x: 4400, y: 1460, w: 460, h: 500 },
+      vehicle: "armored",
+      text: "Cross the outskirts to the pump station",
+      hint: "Spitters and exploders ahead: the gunner clears, the driver weaves.",
+      marker: { x: 4620, y: 1700 },
+      onStart: [{ spawn: "outskirts" }, { checkpoint: { x: 3880, y: 640 } }],
+      horde: {
+        enemies: { walker: 8, runner: 4, spitter: 2, exploder: 1 },
+        zones: ["c-alley", "houses", "houses-e", "ne-north"],
+        label: "Infested outskirts!",
+      },
+    },
+    {
+      kind: "interact",
+      prop: "engine",
+      text: "Repair the overheating engine while the squad holds",
+      hint: "Hold E at the truck's nose. Repairs pause when you let go: fight, then get back to it.",
+      marker: { x: 4620, y: 1700 },
+      onStart: [{ lock: "cv-truck" }, { checkpoint: { x: 4620, y: 1640 } }],
+      onDone: [{ unlock: "cv-truck" }, { hint: "Engine running. Everyone aboard: the bridge!" }],
+      horde: {
+        enemies: { walker: 12, runner: 6, spitter: 2, brute: 1 },
+        zones: ["ne-field", "pump-back", "se-lot", "houses-e"],
+        label: "They heard the engine!",
+      },
+    },
+    {
+      kind: "drive",
+      area: { x: 5720, y: 1460, w: 256, h: 500 },
+      vehicle: "armored",
+      text: "Get the convoy across the bridge",
+      hint: "Don't stop on the bridge.",
+      marker: { x: 5850, y: 1700 },
+      onStart: [{ spawn: "bridge" }, { checkpoint: { x: 4620, y: 1640 } }],
+      horde: {
+        enemies: { walker: 10, runner: 8 },
+        zones: ["pump-back", "se-lot", "ne-field", "houses-e"],
+        label: "The whole road is coming!",
+      },
+    },
+    {
+      kind: "extract",
+      area: { x: 5740, y: 1520, w: 230, h: 400 },
+      holdSec: 20,
+      text: "Hold the bridgehead until the helicopter lands",
+      hint: "Everyone still standing must be on the pad. The truck makes good cover.",
+      marker: { x: 5860, y: 1700 },
+      onStart: [{ checkpoint: { x: 5850, y: 1700 } }],
+      horde: {
+        enemies: { walker: 12, runner: 8, exploder: 2 },
+        zones: ["pump-back", "ne-field", "east-n", "east-s"],
+        label: "Hold the bridgehead!",
+      },
+    },
+  ],
+  ambient: {
+    everySec: 13,
+    maxAlive: 5,
+    kinds: ["walker", "walker", "runner"],
+    zones: ["lot-w", "n-alley-1", "houses", "se-lot"],
+  },
+  xp: 1300,
+  title: "Convoy Runner",
+  requires: "dead-district",
+};
+
+export const MISSIONS: readonly MissionDef[] = [FIRST_CONTACT, DEAD_DISTRICT, THE_CONVOY];
 
 /**
  * The rest of the planned campaign (shown in the lobby as "in development"; not playable until

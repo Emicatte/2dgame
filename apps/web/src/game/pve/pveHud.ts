@@ -2,12 +2,15 @@ import {
   bossPhase,
   DIFFICULTY,
   isDifficulty,
+  isVehicleKind,
   type MatchState,
   type MissionDef,
   missionById,
   type NetEvent,
   PLAYER,
   PVE_STATUS,
+  parseIdList,
+  VEHICLES,
   zombieByIndex,
 } from "@scrapline/shared";
 import { createStore } from "../../lib/store.ts";
@@ -82,6 +85,8 @@ export interface PveHudState {
   fadeLeft: boolean;
   /** Boss health bar (name, health, phase 1-based of `phases`). */
   boss: { name: string; hp: number; mhp: number; phase: number; phases: number } | null;
+  /** Escorted vehicle's hull (0..1), when the mission has one. */
+  escort: { frac: number; locked: boolean } | null;
 }
 
 const initial: PveHudState = {
@@ -110,6 +115,7 @@ const initial: PveHudState = {
   banner: null,
   feed: [],
   boss: null,
+  escort: null,
   fadeLeft: false,
 };
 
@@ -253,7 +259,16 @@ export const pveHud = {
           }
         : null;
     const difficulty = isDifficulty(state.pve.difficulty) ? state.pve.difficulty : "veteran";
+    const ev = mission?.escort ? state.vehicles.get(mission.escort) : undefined;
+    const escort =
+      ev && isVehicleKind(ev.kind)
+        ? {
+            frac: ev.status === 0 ? Math.max(0, ev.hp / VEHICLES[ev.kind].maxHp) : 0,
+            locked: parseIdList(state.pve.flags).has(`locked-${mission!.escort}`),
+          }
+        : null;
     pveHudStore.patch({
+      escort,
       active: true,
       mode,
       missionName: mission?.name ?? "Survival",

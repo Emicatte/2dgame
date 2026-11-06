@@ -12,6 +12,7 @@ import { HARBOR_CONFLICT } from "./harbor.ts";
 import { INDUSTRIAL_ARENA } from "./industrial.ts";
 import { MOUNTAIN_OUTPOST } from "./mountain.ts";
 import { NEON_DISTRICT } from "./neon.ts";
+import { KESSLER_ROAD } from "./outskirts.ts";
 import { type MapDef, type MapId, SHOOT_THROUGH, TALL_SOLIDS } from "./types.ts";
 import { URBAN_WARFARE } from "./urban.ts";
 import { HALVORSEN_WORKS } from "./works.ts";
@@ -30,6 +31,7 @@ export const MAPS: Record<MapId, MapDef> = {
   facility: TACTICAL_FACILITY,
   works: HALVORSEN_WORKS,
   district: DEAD_DISTRICT,
+  outskirts: KESSLER_ROAD,
 };
 
 export const MAP_IDS = Object.keys(MAPS) as MapId[];

@@ -252,6 +252,32 @@ the closed gate seals the compound, the truck's real body fits the whole route (
 while the garage is shut), the full script with the truck **driven** by an autopilot through the
 real vehicle physics (3,058 px, arrives damaged), and a browser scenario up to the radio.
 
+## 6c. The Convoy (Kessler Road)
+
+A 6000 × 2400 strip from the depot west of town, through the warehouse district and the
+outskirts, over the bridge to the airfield. The convoy is one armored carrier (`cv-truck`): one
+player drives, a second mans the roof gun, everybody else rides or walks alongside. Playable
+solo: the driver does everything, the passenger seat is optional.
+
+1. **Find the truck keys in the depot office** (a keycard prop that sets the flag `keys`). The
+   truck is **locked** until then (trigger `lock` / `unlock`: the server refuses `tryEnter`,
+   ejects anybody aboard, the client hides the enter prompt).
+2. **Drive the convoy through the warehouse district** (`drive` area D1).
+3. **Get the convoy across the outskirts to the pumping station** (D2, infected from the fields
+   on both sides of the road).
+4. **Repair the engine** (hold E 18 s at the engine, very loud): the engine prop is **attached**
+   to the truck (`attach`, position follows the vehicle every tick, offset in the vehicle's
+   frame). The truck is locked during the repair and a horde comes ("They heard the engine!").
+5. **Cross the bridge** (D3).
+6. **Hold the helipad until extraction** (20 s).
+
+The mission fails if the convoy is destroyed (`MissionDef.escort`; HUD bar "Convoy hull N%",
+"locked" while it cannot be entered). Unlocked by Dead District. Mission XP 1300 × difficulty,
+title "Convoy Runner". Tests: every point reachable, the truck's real body fits the whole route,
+a **solo** full run with the truck driven by the autopilot through the real physics (7,484 px,
+checks the repair pause and the lock), failure when the truck is destroyed, and a browser
+scenario (escort HUD, lock, keys, drive into the warehouse district).
+
 ## 7. Network protocol additions
 
 All additions use the existing channels (state patches, event batch per tick):
@@ -271,7 +297,11 @@ All additions use the existing channels (state patches, event batch per tick):
 - Settings: `mission`, `difficulty` (host only, validated: unknown missions are refused).
 - Steps: `reach`, `interact`, `collect`, `waves`, `kill`, `extract` and `drive` (a vehicle, of
   a given kind if set, in the area with every standing player; `count`/`countMax` = players in
-  the area / standing). Props: generator, keycard, panel, terminal, medical, radio.
+  the area / standing). Props: generator, keycard, panel, terminal, medical, radio, engine.
+- Vehicle lock: the trigger `lock` / `unlock` sets the flag `locked-<vehicle id>` in
+  `PveState.flags` (no new field); clients hide the enter prompt for that vehicle. A prop with
+  `attach` has its `PropState.x`/`y` rewritten every tick from the vehicle (no new field).
+  `MissionDef.escort` names the vehicle whose `hp` the HUD shows.
 - Results: `ResultsMessage.pve` (squad summary) and `PersonalResult.record.pve` with a `runId`.
   The receiving browser records a run once per id; PvP stats (kills, deaths, wins, career) are
   not touched by PvE, including when a player leaves a run in the middle (the dedicated server

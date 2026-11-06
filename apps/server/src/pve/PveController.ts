@@ -74,6 +74,9 @@ export function emptyPvePlayer(): PvePlayer {
 
 interface PropRuntime {
   def: PropDef;
+  /** Current position (follows its vehicle when attached). */
+  x: number;
+  y: number;
   active: boolean;
   used: boolean;
   prog: number;
@@ -362,9 +365,19 @@ export class PveController implements ZombieHost {
     this.rebuildWorlds(true);
     this.zw.hpMult = this.squad.enemyHp;
     for (const def of this.mission?.props ?? []) {
-      this.props.set(def.id, { def, active: false, used: false, prog: 0, by: "", lastNoiseTick: 0 });
+      this.props.set(def.id, {
+        def,
+        x: def.x,
+        y: def.y,
+        active: false,
+        used: false,
+        prog: 0,
+        by: "",
+        lastNoiseTick: 0,
+      });
     }
     for (const p of this.sim.players.values()) p.pve = emptyPvePlayer();
+    this.followVehicles();
     if (this.mission) this.startStep(0, false);
     else this.nextWaveTick = this.sim.tick + this.secTicks(4);
     this.nextAmbientTick = this.sim.tick + this.secTicks(this.mission?.ambient?.everySec ?? 999);
@@ -389,6 +402,7 @@ export class PveController implements ZombieHost {
       }
     }
     this.zw.hpMult = this.squad.enemyHp;
+    this.followVehicles();
     this.updatePlayers();
     if (this.mission) this.updateMission();
     else this.updateSurvival();
@@ -620,7 +634,7 @@ export class PveController implements ZombieHost {
       let bestD: number = PROP_REACH;
       for (const pr of this.props.values()) {
         if (!this.propUsable(pr)) continue;
-        const d = Math.hypot(pr.def.x - p.sim.x, pr.def.y - p.sim.y);
+        const d = Math.hypot(pr.x - p.sim.x, pr.y - p.sim.y);
         if (d <= bestD) {
           bestD = d;
           best = pr;
@@ -634,7 +648,7 @@ export class PveController implements ZombieHost {
       best.prog = Math.min(1, best.prog + holdTime(p) / Math.max(0.05, best.def.holdSec));
       if (best.def.noise && this.sim.tick - best.lastNoiseTick >= this.secTicks(1)) {
         best.lastNoiseTick = this.sim.tick;
-        this.zw.noise(best.def.x, best.def.y, best.def.noise);
+        this.zw.noise(best.x, best.y, best.def.noise);
       }
       if (best.prog >= 1) {
         best.used = true;
@@ -732,7 +746,37 @@ export class PveController implements ZombieHost {
       else if ("hint" in t) this.emit({ t: "pve", k: "hint", s: t.hint });
       else if ("supply" in t) this.dropSupply(t.supply);
       else if ("checkpoint" in t) this.checkpoint = { ...t.checkpoint };
+      else if ("lock" in t) this.setVehicleLock(t.lock, true);
+      else if ("unlock" in t) this.setVehicleLock(t.unlock, false);
     }
+  }
+
+  /** A locked vehicle empties and refuses passengers; clients see it through a mission flag. */
+  private setVehicleLock(id: string, locked: boolean): void {
+    const v = this.sim.vehicles.get(id);
+    if (!v) return;
+    v.locked = locked;
+    if (locked) {
+      this.flags.add(`locked-${id}`);
+      for (const pid of v.seats) {
+        const p = pid ? this.sim.players.get(pid) : undefined;
+        if (p) this.sim.leaveVehicle(p, true);
+      }
+    } else this.flags.delete(`locked-${id}`);
+  }
+
+  /** Props attached to a vehicle follow it; an escorted vehicle that is destroyed fails the run. */
+  private followVehicles(): void {
+    for (const pr of this.props.values()) {
+      const v = pr.def.attach ? this.sim.vehicles.get(pr.def.attach) : undefined;
+      if (!v) continue;
+      const c = Math.cos(v.sim.angle);
+      const sn = Math.sin(v.sim.angle);
+      pr.x = v.sim.x + c * pr.def.x - sn * pr.def.y;
+      pr.y = v.sim.y + sn * pr.def.x + c * pr.def.y;
+    }
+    const escort = this.mission?.escort ? this.sim.vehicles.get(this.mission.escort) : undefined;
+    if (escort && escort.status !== 0) this.finish(PVE_STATUS.FAILED, "The convoy was destroyed");
   }
 
   private spawnGroup(id: string): void {
@@ -762,7 +806,9 @@ export class PveController implements ZombieHost {
     } else if (s.kind === "waves") {
       this.countMax = s.waves.length;
       this.nextWaveTick = this.sim.tick + this.secTicks(2.5);
-    } else if ((s.kind === "extract" || s.kind === "drive") && s.horde) {
+    }
+    // A horde chasing the squad during the step (extraction, a drive, a repair under fire).
+    if ((s.kind === "extract" || s.kind === "drive" || s.kind === "interact") && s.horde) {
       this.waveNumber++;
       const run = this.waves.start(
         s.horde,

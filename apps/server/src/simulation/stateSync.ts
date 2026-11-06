@@ -196,10 +196,13 @@ export function syncPve(state: MatchState, sim: GameSimulation): void {
     if (!s) {
       s = new PropState();
       s.kind = pr.def.kind;
-      s.x = Math.round(pr.def.x);
-      s.y = Math.round(pr.def.y);
       ps.set(pr.def.id, s);
     }
+    // Attached props move with their vehicle.
+    const px = Math.round(pr.x);
+    const py = Math.round(pr.y);
+    if (s.x !== px) s.x = px;
+    if (s.y !== py) s.y = py;
     const usable = pr.active && !pr.used && (!pr.def.requires || pve.flags.has(pr.def.requires));
     if (s.active !== usable) s.active = usable;
     if (s.used !== pr.used) s.used = pr.used;

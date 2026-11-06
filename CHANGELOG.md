@@ -7,6 +7,12 @@
   six-step mission (apartments, radio, clinic supplies, defence from several streets, the
   survivors' truck across the city, the checkpoint). New step kind `drive`, props medical and
   radio. See `docs/v3/OUTBREAK.md` §6b.
+- **The Convoy** (chapter 3, unlocked by Dead District): Kessler Road map, an escorted armored
+  carrier (one drives, one on the roof gun, playable solo), keys that unlock it, an engine
+  repair under fire on the truck itself, the bridge and the airfield. New: triggers `lock` /
+  `unlock` for vehicles, props `attach`ed to a vehicle, a horde on `interact` steps,
+  `MissionDef.escort` (mission fails when the escort is destroyed) and its HUD hull bar. See
+  `docs/v3/OUTBREAK.md` §6c.
 - Signaling: TURN keys are stripped of pasted spaces, newlines and quotes; the health endpoint
   reports the key id's shape (`turnKey`).
 

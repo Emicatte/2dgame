@@ -36,7 +36,7 @@ input sequence. Both fixes are in the first commit of the branch.
 | 4 | Co-op: shared missions, downed/revive, failure, two-browser test | ✅ |
 | 5 | First Contact complete | ✅ scripted and tested end to end in the simulation; first two objectives verified with two real browsers; a full run by human players not done here |
 | 6 | Boss system and first boss | ✅ boss system (phases, per-phase attacks, combos, transitions, squad scaling) and The Abomination, playable as the boss of every tenth Survival wave; not yet in a mission (The Warden and Subject Zero belong to later missions) |
-| 7 | Dead District, The Convoy | Dead District ✅ (map, script, `drive` step; full run in the simulation with the truck driven; browser scenario to the radio); The Convoy not started |
+| 7 | Dead District, The Convoy | ✅ both scripted and tested: Dead District (map, script, `drive` step; full run in the simulation with the truck driven; browser scenario to the radio); The Convoy (escorted truck, lock/unlock, engine repair attached to the truck under fire; solo full run with the truck driven; failure on destruction; browser scenario to the warehouse district). Full runs by human players not done here |
 | 8 | Black Site and miniboss | not started |
 | 9 | Final Breach, Subject Zero | not started |
 | 10 | Progression polish, balance, optimisation | PvE progression done (records, titles, unlocks, dedupe); balance needs playtests |

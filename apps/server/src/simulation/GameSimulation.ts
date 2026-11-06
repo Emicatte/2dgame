@@ -222,6 +222,8 @@ export interface ServerVehicle {
   spawn: VehicleSpawnDef;
   sim: VehicleSim;
   hp: number;
+  /** PvE: out of use (a mission locks it, e.g. while it is being repaired): nobody gets in. */
+  locked?: boolean;
   /** VEHICLE_READY, VEHICLE_WRECK or VEHICLE_GONE. */
   status: number;
   /** Tick of the next status change (wreck clears, respawn). */
@@ -1461,7 +1463,7 @@ export class GameSimulation {
     // Flag carriers travel on foot: a flag must be chased down, not driven away at 100 km/h.
     if (this.carriesFlag(p)) return false;
     const target = this.enterableVehicle(p);
-    if (!target) return false;
+    if (!target || target.v.locked) return false;
     p.protectedUntil = 0;
     p.sim.vx = 0;
     p.sim.vy = 0;

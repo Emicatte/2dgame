@@ -72,6 +72,16 @@ export function PveHud() {
           </p>
         )}
         {h.mode === "survival" && <p className="pve-objective__wave mono">Infected eliminated: {h.kills}</p>}
+        {h.escort && (
+          <div className="pve-escort" data-testid="pve-escort">
+            <span className="mono">
+              Convoy hull {Math.round(h.escort.frac * 100)}%{h.escort.locked ? " · locked" : ""}
+            </span>
+            <div className={`pve-bar ${h.escort.frac < 0.35 ? "pve-bar--danger" : ""}`} aria-hidden="true">
+              <span style={{ transform: `scaleX(${h.escort.frac})` }} />
+            </div>
+          </div>
+        )}
       </section>
 
       {boss && (

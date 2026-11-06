@@ -1666,3 +1666,15 @@
 .pve-hud.is-fade-left .pve-squad {
   opacity: 0.3;
 }
+
+/* Convoy: the escorted vehicle's hull under the objective. */
+.pve-escort {
+  margin-top: 6px;
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--ink-2, #b9b4aa);
+}
+.pve-bar--danger > span {
+  background: #ff5a4a;
+}

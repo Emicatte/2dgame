@@ -394,6 +394,13 @@ export class PveLayer {
             : null;
         v = { kind: p.kind, base, glow, label, x: p.x, y: p.y };
         this.props.set(id, v);
+      } else if (v.x !== p.x || v.y !== p.y) {
+        // Attached props (the convoy's engine) move with their vehicle.
+        v.x = p.x;
+        v.y = p.y;
+        v.base.setPosition(p.x, p.y);
+        v.glow.setPosition(p.x, p.y);
+        v.label?.setPosition(p.x, p.y - 34);
       }
     });
     for (const [id, v] of this.props) {

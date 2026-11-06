@@ -4,6 +4,7 @@ import type { Rect, Vec2 } from "../sim/math.ts";
 
 export type MapId =
   | "district"
+  | "outskirts"
   | "industrial"
   | "neon"
   | "desert"

@@ -1559,8 +1559,11 @@ export class ArenaScene extends Phaser.Scene {
     const sim = this.predictor.sim;
     const teams = isTeamMode(state.mode);
     let best: { t: EnterTarget; d: number } | null = null;
+    const locked = parseIdList(state.pve.flags);
     state.vehicles.forEach((vs, id) => {
       if (!isVehicleKind(vs.kind) || vs.status !== VEHICLE_STATUS.READY) return;
+      // A mission locked it (being repaired): no "get in" prompt.
+      if (locked.has(`locked-${id}`)) return;
       const sample = this.vbuffer.sample(id, renderTick);
       if (!sample) return;
       const def = VEHICLES[vs.kind];

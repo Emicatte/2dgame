@@ -264,6 +264,22 @@ function drawProp(kind: string): HTMLCanvasElement {
       ctx.fillStyle = hex(0x6a7078);
       ctx.fillRect(-5, -15, 10, 3);
       break;
+    case "engine":
+      // An open engine bay with a wrench: the repair point at the truck's nose.
+      plate(30, 26, 0x2e3236, 0x0b0c0e);
+      ctx.fillStyle = hex(0x6a7078);
+      for (let i = -1; i <= 1; i++) ctx.fillRect(i * 8 - 3, -8, 6, 16);
+      ctx.strokeStyle = hex(0xffb36b);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-12, 12);
+      ctx.lineTo(10, -10);
+      ctx.stroke();
+      ctx.fillStyle = hex(0xffb36b);
+      ctx.beginPath();
+      ctx.arc(11, -11, 4, 0, Math.PI * 2);
+      ctx.fill();
+      break;
     case "radio":
       // A field radio with its antenna and a green dial.
       plate(34, 22, 0x3a3f2e, 0x0b0c0e);

@@ -28,6 +28,7 @@ import {
   quantizeInput,
   squadScale,
   survivalWave,
+  THE_CONVOY,
   VEHICLES,
   ZOMBIES,
 } from "@scrapline/shared";
@@ -1273,5 +1274,219 @@ describe("Dead District", () => {
     expect(result.completed).toBe(true);
     expect(result.progress).toBe(DEAD_DISTRICT.steps.length);
     expect(xp.get("alpha")!.lines[0]!.reason).toContain("Dead District");
+  });
+});
+
+/** Test autopilot: steers a vehicle through waypoints with the real driving input (W + steer). */
+function drive(
+  sim: GameSimulation,
+  driverId: string,
+  v: { sim: { x: number; y: number; angle: number } },
+  route: { x: number; y: number }[],
+  done: () => boolean,
+  maxSec: number,
+  each?: () => void,
+  log?: string[],
+): number {
+  let wp = 0;
+  let driven = 0;
+  let lx = v.sim.x;
+  let ly = v.sim.y;
+  for (let i = 0; i < maxSec * 20 && !done(); i++) {
+    const target = route[wp]!;
+    const dx = target.x - v.sim.x;
+    const dy = target.y - v.sim.y;
+    if (Math.hypot(dx, dy) < 70 && wp < route.length - 1) wp++;
+    const want = Math.atan2(dy, dx);
+    const diff = Math.atan2(Math.sin(want - v.sim.angle), Math.cos(want - v.sim.angle));
+    const steer = Math.max(-1, Math.min(1, diff * 2.5));
+    const throttle =
+      Math.abs(diff) > 0.7 ? 0.3 : Math.hypot(dx, dy) < 200 && wp < route.length - 1 ? 0.55 : 1;
+    for (const e of tick(sim, { [driverId]: { mx: steer, my: -throttle } }))
+      if (e.t === "pve") log?.push(`${e.k}${e.s ? ` ${e.s}` : ""}`);
+    each?.();
+    driven += Math.hypot(v.sim.x - lx, v.sim.y - ly);
+    lx = v.sim.x;
+    ly = v.sim.y;
+  }
+  return driven;
+}
+
+describe("The Convoy", () => {
+  const map = MAPS.outskirts;
+
+  it("every point is reachable; brutes reach the pump station; the truck fits the whole road", () => {
+    const grid = buildNavGrid(pveWorlds(map, [], new Set()).world);
+    const field = buildFlowField(grid, 1, [nearestWalkable(grid, map.spawns[0]!.x, map.spawns[0]!.y, 1)]);
+    const points = [
+      ...THE_CONVOY.spawnZones,
+      ...THE_CONVOY.props.filter((p) => !p.attach),
+      ...THE_CONVOY.groups.flatMap((g) => g.enemies),
+      ...THE_CONVOY.steps.flatMap((s) => (s.marker ? [s.marker] : [])),
+    ];
+    for (const p of points) {
+      const c = nearestWalkable(grid, p.x, p.y, 1, 4);
+      expect(c, `${JSON.stringify(p)} on the grid`).toBeGreaterThanOrEqual(0);
+      expect(field.dist[c]!, `${JSON.stringify(p)} reachable`).toBeLessThan(NAV_INF);
+    }
+    const pump = buildFlowField(grid, 2, [nearestWalkable(grid, 4620, 1700, 2)]);
+    for (const id of ["ne-field", "pump-back", "se-lot", "houses-e"]) {
+      const z = THE_CONVOY.spawnZones.find((x) => x.id === id)!;
+      expect(pump.dist[nearestWalkable(grid, z.x, z.y, 2, 6)]!, `brute from ${id}`).toBeLessThan(NAV_INF);
+    }
+    const def = VEHICLES.armored;
+    const world = pveWorlds(map, [], new Set()).world;
+    const route = [
+      { x: 760, y: 1900 },
+      { x: 2000, y: 1900 },
+      { x: 2000, y: 600 },
+      { x: 3900, y: 600 },
+      { x: 3900, y: 1700 },
+      { x: 5850, y: 1700 },
+    ];
+    let heading = 0;
+    for (let i = 0; i + 1 < route.length; i++) {
+      const a = route[i]!;
+      const b = route[i + 1]!;
+      const next = Math.atan2(b.y - a.y, b.x - a.x);
+      for (let k = 0; k <= 8; k++) {
+        const ang = heading + ((next - heading) * k) / 8;
+        expect(bodyFits(world, { x: a.x, y: a.y, angle: ang }, def), `turn at ${a.x},${a.y}`).toBe(true);
+      }
+      heading = next;
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      for (let d = 0; d <= len; d += 16) {
+        const x = a.x + ((b.x - a.x) * d) / len;
+        const y = a.y + ((b.y - a.y) * d) / len;
+        expect(
+          bodyFits(world, { x, y, angle: heading }, def),
+          `drive at ${Math.round(x)},${Math.round(y)}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  function convoy(players: string[]) {
+    const sim = makeSim("outskirts", 17);
+    sim.setPve({ mode: "outbreak", mission: THE_CONVOY, difficulty: "recruit" });
+    sim.resetForMatch();
+    const ps = players.map((id) => addPlayer(sim, id));
+    sim.resetForMatch();
+    for (const p of ps) p.protectedUntil = Number.MAX_SAFE_INTEGER;
+    const truck = sim.vehicles.get("cv-truck")!;
+    return { sim, pve: sim.pve!, ps, truck };
+  }
+
+  it("solo: keys, three drives, a repair under fire, the bridge and the bridgehead", () => {
+    const { sim, pve, ps, truck } = convoy(["alpha"]);
+    const a = ps[0]!;
+    const log: string[] = [];
+    const clearNear = () => {
+      for (const z of pve.zw.zombies.values())
+        if (!z.dead && Math.hypot(z.x - a.sim.x, z.y - a.sim.y) < 650)
+          pve.damageZombie(z.id, 99999, a, false, z.x, z.y);
+    };
+    const run = (sec: number, input: Record<string, Partial<InputFrame>> = {}, until?: () => boolean) => {
+      for (let i = 0; i < sec * 20 && !until?.(); i++) {
+        for (const e of tick(sim, input)) if (e.t === "pve") log.push(`${e.k}${e.s ? ` ${e.s}` : ""}`);
+        clearNear();
+      }
+    };
+    const enter = () => (sim as unknown as { tryEnter(p: ServerPlayer): boolean }).tryEnter(a);
+    // 1. Locked until the keys are found.
+    place(a, truck.sim.x - 70, truck.sim.y);
+    expect(enter()).toBe(false);
+    place(a, 220, 1690);
+    run(3, { alpha: { buttons: BTN.INTERACT } }, () => pve.stepIndex === 1);
+    expect(pve.stepIndex).toBe(1);
+    place(a, truck.sim.x - 70, truck.sim.y);
+    expect(enter()).toBe(true);
+    expect(a.vehicle).toBe("cv-truck");
+    expect(a.seat).toBe(0);
+    // 2–3. Through the warehouse district, then the outskirts.
+    let driven = drive(
+      sim,
+      "alpha",
+      truck,
+      [
+        { x: 2000, y: 1900 },
+        { x: 2000, y: 600 },
+        { x: 3860, y: 600 },
+      ],
+      () => pve.stepIndex === 2,
+      120,
+      clearNear,
+      log,
+    );
+    expect(pve.stepIndex).toBe(2);
+    driven += drive(
+      sim,
+      "alpha",
+      truck,
+      [
+        { x: 3900, y: 650 },
+        { x: 3900, y: 1700 },
+        { x: 4620, y: 1700 },
+      ],
+      () => pve.stepIndex === 3,
+      120,
+      clearNear,
+      log,
+    );
+    expect(pve.stepIndex).toBe(3);
+    // 4. The repair: the truck locks and empties; the engine is at its nose; hold E (with pauses).
+    expect(a.vehicle).toBeFalsy();
+    expect(enter()).toBe(false);
+    const engine = pve.props.get("engine")!;
+    expect(Math.hypot(engine.x - truck.sim.x, engine.y - truck.sim.y)).toBeCloseTo(62, 0);
+    place(a, engine.x + Math.cos(truck.sim.angle) * 30, engine.y + Math.sin(truck.sim.angle) * 30);
+    run(8, { alpha: { buttons: BTN.INTERACT } });
+    const mid = engine.prog;
+    expect(mid).toBeGreaterThan(0.3);
+    run(3); // let go: progress pauses, it does not reset
+    expect(engine.prog).toBeCloseTo(mid, 5);
+    run(15, { alpha: { buttons: BTN.INTERACT } }, () => pve.stepIndex === 4);
+    expect(pve.stepIndex).toBe(4);
+    expect(log.some((l) => l.startsWith("wave They heard the engine"))).toBe(true);
+    // 5. Over the bridge.
+    place(a, truck.sim.x - Math.cos(truck.sim.angle) * 70, truck.sim.y - Math.sin(truck.sim.angle) * 70);
+    expect(enter()).toBe(true);
+    driven += drive(
+      sim,
+      "alpha",
+      truck,
+      [
+        { x: 5000, y: 1700 },
+        { x: 5850, y: 1700 },
+      ],
+      () => pve.stepIndex === 5,
+      120,
+      clearNear,
+      log,
+    );
+    expect(pve.stepIndex).toBe(5);
+    // 6. The bridgehead.
+    sim.leaveVehicle(a, true);
+    place(a, 5860, 1720);
+    run(30, {}, () => pve.status !== PVE_STATUS.RUNNING);
+    console.log(
+      `[mission] The Convoy (solo): truck driven ${Math.round(driven)} px, hull ${truck.hp}; ${log.join(" | ")}`,
+    );
+    expect(pve.status).toBe(PVE_STATUS.COMPLETE);
+    expect(driven).toBeGreaterThan(5000);
+    const { result } = pve.results(0);
+    expect(result.completed).toBe(true);
+    expect(result.progress).toBe(THE_CONVOY.steps.length);
+  });
+
+  it("the mission fails when the convoy truck is destroyed", () => {
+    const { sim, pve, truck } = convoy(["alpha", "bravo"]);
+    tick(sim);
+    expect(pve.status).toBe(PVE_STATUS.RUNNING);
+    sim.damageVehicle(truck, 999_999, null, truck.sim.x, truck.sim.y);
+    tick(sim);
+    tick(sim);
+    expect(pve.status).toBe(PVE_STATUS.FAILED);
+    expect(pve.results(0).result.reason).toContain("convoy");
   });
 });
