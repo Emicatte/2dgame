@@ -71,6 +71,10 @@ describe("host mode netcode (120 ms RTT, real time)", () => {
     let predictedShots = 0;
     let transitionCorrections = 0;
     let serverShots = 0;
+    // Shots are compared by input sequence after the warm-up: a shot predicted just before the
+    // counters reset can reach the host (and come back as an event) just after it, which made a
+    // plain count differ by one now and then without any disagreement between the two sides.
+    let countFromSeq = Number.POSITIVE_INFINITY;
     guest.onStateChange((s) => {
       state = s;
       if (s.phase !== "countdown" && s.phase !== "playing") return;
@@ -82,7 +86,8 @@ describe("host mode netcode (120 ms RTT, real time)", () => {
       metrics.onPatch(me.ack, predictor.pendingCount, performance.now());
     });
     guest.onMessage(S2C.EVENTS, (m) => {
-      for (const e of m as NetEvent[]) if (e.t === "shot" && e.p === guest.sessionId) serverShots++;
+      for (const e of m as NetEvent[])
+        if (e.t === "shot" && e.p === guest.sessionId && e.s > countFromSeq) serverShots++;
     });
 
     guest.send(C2S.READY, { ready: true });
@@ -119,7 +124,7 @@ describe("host mode netcode (120 ms RTT, real time)", () => {
             viewTick: Math.max(0, clock.renderTick()),
           });
           predictor.predict(f, alive, (e) => {
-            if (e.kind === "shot") predictedShots++;
+            if (e.kind === "shot" && e.shot.seq > countFromSeq) predictedShots++;
           });
           outbox.push(f);
           metrics.generated++;
@@ -150,6 +155,7 @@ describe("host mode netcode (120 ms RTT, real time)", () => {
       predictor.resetStats();
       predictedShots = 0;
       serverShots = 0;
+      countFromSeq = predictor.lastSeq;
       await sleep(5000);
       generating = false;
       // Settle: every input acknowledged, prediction equals the host's authoritative state.
