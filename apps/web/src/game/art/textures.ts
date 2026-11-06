@@ -1,5 +1,6 @@
 import { SKINS, type SkinDef, WEAPON_LIST, type WeaponDef } from "@scrapline/shared";
 import type Phaser from "phaser";
+import { weaponShape } from "../combat/weaponFx.ts";
 import { hex, makeCanvas, radialGlow, roundRect, shade } from "./canvas.ts";
 import { generateVehicleTextures } from "./vehicleArt.ts";
 
@@ -17,7 +18,11 @@ export const TEX = {
   glow: "glow",
   glowSoft: "glow-soft",
   muzzle: "muzzle",
+  muzzleStar: "muzzle-star",
+  muzzleWide: "muzzle-wide",
+  muzzleBrake: "muzzle-brake",
   tracer: "tracer",
+  beam: "beam",
   spark: "spark",
   smoke: "smoke",
   debris: "debris",
@@ -112,16 +117,8 @@ function drawSoldier(skin: SkinDef): HTMLCanvasElement {
 
 function drawWeapon(w: WeaponDef): HTMLCanvasElement {
   const S = TEX_SCALE;
-  const shapes: Record<string, { len: number; h: number }> = {
-    pistol: { len: 16, h: 6 },
-    rifle: { len: 34, h: 7 },
-    smg: { len: 24, h: 7 },
-    shotgun: { len: 32, h: 8 },
-    sniper: { len: 46, h: 7 },
-    mg: { len: 40, h: 9 },
-    doorgun: { len: 32, h: 8 },
-  };
-  const sh = shapes[w.id] ?? { len: 24, h: 7 };
+  // Geometry shared with the muzzle position (combat/weaponFx.ts): keep both in step.
+  const sh = weaponShape(w);
   const [c, ctx] = makeCanvas((sh.len + 4) * S, (sh.h + 10) * S);
   ctx.scale(S, S);
   ctx.translate(2, (sh.h + 10) / 2);
@@ -209,6 +206,113 @@ function drawMuzzle(): HTMLCanvasElement {
   return c;
 }
 
+/** Pistol / SMG: a small four-point star around a hot core. Root at (4, 16) like `muzzle`. */
+function drawMuzzleStar(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(64, 32);
+  ctx.translate(4, 16);
+  const g = ctx.createLinearGradient(0, 0, 44, 0);
+  g.addColorStop(0, "rgba(255,255,235,1)");
+  g.addColorStop(0.4, "rgba(255,214,130,0.9)");
+  g.addColorStop(1, "rgba(255,140,50,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(2, -3);
+  ctx.lineTo(44, 0);
+  ctx.lineTo(2, 3);
+  ctx.closePath();
+  ctx.fill();
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(4, 0);
+    ctx.lineTo(17, side * 11);
+    ctx.lineTo(9, side * 1.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.beginPath();
+  ctx.ellipse(5, 0, 5, 3.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  return c;
+}
+
+/** Shotgun: a wide fan with ragged tongues. Root at (4, 24). */
+function drawMuzzleWide(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(64, 48);
+  ctx.translate(4, 24);
+  const g = ctx.createLinearGradient(0, 0, 58, 0);
+  g.addColorStop(0, "rgba(255,255,235,1)");
+  g.addColorStop(0.3, "rgba(255,200,110,0.95)");
+  g.addColorStop(1, "rgba(255,110,30,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, -5);
+  ctx.lineTo(30, -17);
+  ctx.lineTo(44, -12);
+  ctx.lineTo(58, -2);
+  ctx.lineTo(50, 4);
+  ctx.lineTo(40, 15);
+  ctx.lineTo(26, 18);
+  ctx.lineTo(0, 5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.beginPath();
+  ctx.ellipse(7, 0, 8, 5.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  return c;
+}
+
+/** Sniper: short forward cone plus the side jets of a muzzle brake. Root at (4, 20). */
+function drawMuzzleBrake(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(64, 40);
+  ctx.translate(4, 20);
+  const g = ctx.createLinearGradient(0, 0, 48, 0);
+  g.addColorStop(0, "rgba(255,255,245,1)");
+  g.addColorStop(0.4, "rgba(255,226,160,0.9)");
+  g.addColorStop(1, "rgba(255,150,60,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, -4);
+  ctx.lineTo(48, 0);
+  ctx.lineTo(0, 4);
+  ctx.closePath();
+  ctx.fill();
+  const side = ctx.createLinearGradient(0, 0, 0, 18);
+  side.addColorStop(0, "rgba(255,240,200,0.95)");
+  side.addColorStop(1, "rgba(255,150,60,0)");
+  ctx.fillStyle = side;
+  for (const s of [-1, 1]) {
+    ctx.save();
+    ctx.scale(1, s);
+    ctx.beginPath();
+    ctx.moveTo(6, 1);
+    ctx.lineTo(2, 18);
+    ctx.lineTo(9, 17);
+    ctx.lineTo(10, 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.beginPath();
+  ctx.ellipse(6, 0, 6, 3.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  return c;
+}
+
+/** Uniform streak with soft edges, stretched along a whole shot path (sniper trail, glows). */
+function drawBeam(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(64, 8);
+  const g = ctx.createLinearGradient(0, 0, 0, 8);
+  g.addColorStop(0, "rgba(255,255,255,0)");
+  g.addColorStop(0.5, "rgba(255,255,255,1)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 8);
+  return c;
+}
+
 function drawTracer(): HTMLCanvasElement {
   // Horizontal streak: transparent tail → bright head. Scaled on X to the shot length.
   const [c, ctx] = makeCanvas(128, 8);
@@ -235,8 +339,9 @@ function drawSpark(): HTMLCanvasElement {
 
 function drawSmoke(): HTMLCanvasElement {
   const [c, ctx] = makeCanvas(48, 48);
+  // Dense core: impact dust needs it; muzzle / vehicle smoke emit at a lower alpha.
   const g = ctx.createRadialGradient(24, 24, 2, 24, 24, 24);
-  g.addColorStop(0, "rgba(220,220,220,0.5)");
+  g.addColorStop(0, "rgba(220,220,220,0.85)");
   g.addColorStop(1, "rgba(220,220,220,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 48, 48);
@@ -327,7 +432,11 @@ export function generateTextures(scene: Phaser.Scene): void {
   add(scene, TEX.glow, radialGlow(128, 1, 1.6));
   add(scene, TEX.glowSoft, radialGlow(256, 0.9, 2.6));
   add(scene, TEX.muzzle, drawMuzzle());
+  add(scene, TEX.muzzleStar, drawMuzzleStar());
+  add(scene, TEX.muzzleWide, drawMuzzleWide());
+  add(scene, TEX.muzzleBrake, drawMuzzleBrake());
   add(scene, TEX.tracer, drawTracer());
+  add(scene, TEX.beam, drawBeam());
   add(scene, TEX.spark, drawSpark());
   add(scene, TEX.smoke, drawSmoke());
   add(scene, TEX.debris, drawDebris());

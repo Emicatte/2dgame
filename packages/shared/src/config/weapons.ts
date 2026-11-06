@@ -8,6 +8,8 @@ export type WeaponId = "pistol" | "rifle" | "smg" | "shotgun" | "sniper" | "mg" 
 export type FireMode = "semi" | "auto";
 /** "mounted": vehicle weapons, only usable from their seat (never in loadouts or pickups). */
 export type WeaponSlotKind = "primary" | "secondary" | "mounted";
+/** Visual family of a weapon (tracer, muzzle flash, crosshair kick, animation set). Client only. */
+export type WeaponFxCategory = "pistol" | "rifle" | "smg" | "shotgun" | "sniper" | "mounted";
 
 export interface WeaponDef {
   id: WeaponId;
@@ -51,6 +53,12 @@ export interface WeaponDef {
     shake: number;
     /** Laser sight visible to everyone: counterplay for long-range weapons. */
     laserSight: boolean;
+    /** Visual family; the client derives one from the definition when absent. */
+    category?: WeaponFxCategory;
+    /** Rotational kick of the weapon sprite per shot, in degrees. */
+    recoilRotDeg?: number;
+    /** Manual action animated after every shot (shell ejected mid-cycle). */
+    cycle?: "pump" | "bolt";
   };
   /** Parameters for the procedural sound synthesizer on the client. */
   sound: {
@@ -96,6 +104,8 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       recoilKickPx: 3,
       shake: 0.6,
       laserSight: false,
+      category: "pistol",
+      recoilRotDeg: 4,
     },
     sound: { body: 140, pitch: 1.25, decay: 0.12, noise: 0.7, crack: 0.5, gain: 0.55 },
   },
@@ -131,6 +141,8 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       recoilKickPx: 4,
       shake: 0.8,
       laserSight: false,
+      category: "rifle",
+      recoilRotDeg: 1.6,
     },
     sound: { body: 110, pitch: 1, decay: 0.16, noise: 0.85, crack: 0.65, gain: 0.6 },
   },
@@ -166,6 +178,8 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       recoilKickPx: 2.5,
       shake: 0.45,
       laserSight: false,
+      category: "smg",
+      recoilRotDeg: 1.2,
     },
     sound: { body: 170, pitch: 1.5, decay: 0.08, noise: 0.75, crack: 0.45, gain: 0.45 },
   },
@@ -201,6 +215,9 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       recoilKickPx: 8,
       shake: 2.2,
       laserSight: false,
+      category: "shotgun",
+      recoilRotDeg: 6,
+      cycle: "pump",
     },
     sound: { body: 70, pitch: 0.7, decay: 0.32, noise: 1, crack: 0.8, gain: 0.8 },
   },
@@ -236,6 +253,9 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       recoilKickPx: 10,
       shake: 2.8,
       laserSight: true,
+      category: "sniper",
+      recoilRotDeg: 7,
+      cycle: "bolt",
     },
     sound: { body: 60, pitch: 0.6, decay: 0.45, noise: 0.9, crack: 1, gain: 0.85 },
   },
@@ -272,6 +292,8 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       recoilKickPx: 3,
       shake: 0.9,
       laserSight: false,
+      category: "mounted",
+      recoilRotDeg: 1,
     },
     sound: { body: 95, pitch: 0.85, decay: 0.18, noise: 0.9, crack: 0.7, gain: 0.65 },
   },
@@ -307,6 +329,8 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       recoilKickPx: 2,
       shake: 0.7,
       laserSight: false,
+      category: "mounted",
+      recoilRotDeg: 0.8,
     },
     sound: { body: 100, pitch: 0.95, decay: 0.15, noise: 0.85, crack: 0.6, gain: 0.6 },
   },

@@ -263,6 +263,33 @@
   color: var(--accent-ink);
 }
 
+.seg--wrap {
+  flex-wrap: wrap;
+}
+
+.seg--wrap button {
+  padding: 0 10px;
+}
+
+.setting-row--stack {
+  grid-template-columns: 1fr;
+  justify-items: start;
+  gap: 10px;
+}
+
+.xh-preview {
+  display: block;
+  border: 1px solid var(--line-2);
+  cursor: default;
+}
+
+.xh-preview__label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 /* ------------------------------------------------------------------ lobby */
 
 .lobby {

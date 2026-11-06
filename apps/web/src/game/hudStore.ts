@@ -100,6 +100,8 @@ export interface HudState {
     msgsOut: number;
     entities: number;
     fx: number;
+    /** Live effect counts against the quality caps (Effects.detail()). */
+    fxDetail: string;
   };
 }
 
@@ -151,6 +153,7 @@ export const hudStore = createStore<HudState>({
     msgsOut: 0,
     entities: 0,
     fx: 0,
+    fxDetail: "",
   },
 });
 

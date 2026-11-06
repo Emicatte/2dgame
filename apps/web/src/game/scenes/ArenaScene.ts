@@ -11,11 +11,9 @@ import {
   clamp,
   closestOnBody,
   collisionWorldFor,
-  currentSpreadDeg,
   DEFAULT_MAP,
   ENTER_REACH,
   encodeInput,
-  fireIntervalSteps,
   type HitTarget,
   hashString,
   type InputFrame,
@@ -61,6 +59,11 @@ import { renderMap } from "../art/mapRenderer.ts";
 import { TEX, TEX_SCALE } from "../art/textures.ts";
 import { sfx } from "../audio/sfx.ts";
 import { autopilot } from "../bench/autopilot.ts";
+import { projectOntoRay, visualAim } from "../combat/aim.ts";
+import { Crosshair } from "../combat/Crosshair.ts";
+import { type CrosshairFrame, classifyHit, crosshairFrame } from "../combat/crosshairModel.ts";
+import { budgetFor } from "../combat/fxBudget.ts";
+import { localWeaponAnim, type WeaponAnimState } from "../combat/weaponAnim.ts";
 import { Effects } from "../effects/Effects.ts";
 import { FlagView, PointView } from "../entities/ObjectiveView.ts";
 import { PlayerView } from "../entities/PlayerView.ts";
@@ -150,10 +153,10 @@ export class ArenaScene extends Phaser.Scene {
   private clock = new ServerClock();
   private buffer = new SnapshotBuffer();
   private effects!: Effects;
-  private crosshair!: Phaser.GameObjects.Graphics;
-  private hitMarker!: Phaser.GameObjects.Graphics;
-  private hitMarkerLife = 0;
-  private hitMarkerLethal = false;
+  private crosshair!: Crosshair;
+  private readonly crosshairState = {} as CrosshairFrame;
+  private readonly muzzle = { x: 0, y: 0 };
+  private readonly localAnim: WeaponAnimState = {};
   private accumulator = 0;
   private outbox: InputFrame[] = [];
   private eventQueue: QueuedEvent[] = [];
@@ -178,10 +181,9 @@ export class ArenaScene extends Phaser.Scene {
 
   create(): void {
     this.controls = new InputManager();
-    this.effects = new Effects(this);
+    this.effects = new Effects(this, () => this.map);
     this.perf = new PerfRecorder(this.game, () => this.children.length);
-    this.crosshair = this.add.graphics().setDepth(1000).setScrollFactor(0);
-    this.hitMarker = this.add.graphics().setDepth(1001).setScrollFactor(0);
+    this.crosshair = new Crosshair(this);
     this.predictor = new Predictor(collisionWorldFor(this.map), 0, airWorldFor(this.map));
     this.loadMap(this.map);
     this.applyQuality();
@@ -328,12 +330,16 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private applyQuality() {
-    const high = settingsStore.get().quality === "high";
-    for (const l of this.lightImages) l.img.setVisible(high || l.base > 0.45);
+    const quality = settingsStore.get().quality;
+    const budget = budgetFor(quality);
+    this.effects?.setQuality(quality);
+    const min = budget.lightMinIntensity;
+    for (const l of this.lightImages) l.img.setVisible(min <= 0 || l.base > min);
     const cam = this.cameras.main;
     if (this.renderer.type === Phaser.WEBGL) {
       cam.filters.external.clear();
-      if (high) cam.filters.external.addVignette(0.5, 0.5, 0.95, 0.35);
+      // The vignette is a full-screen pass: High only.
+      if (budget.vignette) cam.filters.external.addVignette(0.5, 0.5, 0.95, 0.35);
     }
   }
 
@@ -679,10 +685,10 @@ export class ArenaScene extends Phaser.Scene {
       switch (ev.t) {
         case "hit":
           if (ev.p === self) {
-            this.hitMarkerLife = 140;
-            this.hitMarkerLethal = ev.k;
+            const kind = classifyHit({ dmg: ev.dmg, lethal: ev.k });
+            this.crosshair.registerHit(kind);
             sfx.hitMarker(ev.k);
-            this.effects.damageNumber(ev.x, ev.y, ev.dmg, ev.k);
+            this.effects.damageNumber(ev.x, ev.y, ev.dmg, ev.k, { crit: kind === "crit" });
             hudStore.patch({ hitConfirm: hudStore.get().hitConfirm + 1 });
           }
           if (ev.v === self) {
@@ -696,10 +702,11 @@ export class ArenaScene extends Phaser.Scene {
           }
           break;
         case "kill":
+          if (ev.k === self && ev.v !== self) this.crosshair.registerHit("kill");
           if (ev.v === self) {
             this.killedBy = ev.k;
             const me = this.views.get(self);
-            if (me) this.effects.death(me.root.x, me.root.y, 0xff7a2e);
+            if (me) this.effects.enemyDeath(me.root.x, me.root.y, { color: 0xff7a2e });
             sfx.death(true);
           }
           break;
@@ -718,10 +725,9 @@ export class ArenaScene extends Phaser.Scene {
           break;
         case "vhit":
           if (ev.p === self) {
-            this.hitMarkerLife = 140;
-            this.hitMarkerLethal = false;
+            this.crosshair.registerHit("armor");
             sfx.armorHit();
-            this.effects.damageNumber(ev.x, ev.y, ev.dmg, false);
+            this.effects.damageNumber(ev.x, ev.y, ev.dmg, false, { armored: true });
             hudStore.patch({ hitConfirm: hudStore.get().hitConfirm + 1 });
           }
           break;
@@ -766,38 +772,37 @@ export class ArenaScene extends Phaser.Scene {
           const def = weaponByIndex(ev.w);
           const view = this.views.get(ev.p);
           if (!def || !view?.visibleAlive) break;
-          const ox = view.root.x;
-          const oy = view.root.y;
-          const aim = (ev.a[0] ?? 0) / 1000;
-          const mx = ox + Math.cos(aim) * 30;
-          const my = oy + Math.sin(aim) * 30;
+          // Pellets end where the server traced them (impacts sit on the wall that stopped them);
+          // tracers leave the barrel as it is drawn on this timeline.
           const ends = ev.a.map((a, i) => {
             const ang = a / 1000;
             const d = ev.d[i] ?? 0;
             return {
-              x: ev.x + Math.cos(ang) * d + (ox - ev.x),
-              y: ev.y + Math.sin(ang) * d + (oy - ev.y),
+              x: ev.x + Math.cos(ang) * d,
+              y: ev.y + Math.sin(ang) * d,
               wall: d < def.rangePx - 1,
               player: false,
             };
           });
-          this.effects.shot(def, mx, my, aim, ends);
+          const tip = view.muzzleTip(this.muzzle);
+          this.effects.shot(def, tip.x, tip.y, view.drawnAim, ends);
           view.recoil(def);
-          const s = spatial(ox, oy);
+          const s = spatial(view.root.x, view.root.y);
           sfx.shot(def, s.distance, s.pan);
           break;
         }
         case "hit": {
           const from = this.views.get(ev.p);
           const angle = from ? Math.atan2(ev.y - from.root.y, ev.x - from.root.x) : 0;
-          this.effects.playerHit(ev.x, ev.y, angle, ev.k);
+          const crit = classifyHit({ dmg: ev.dmg, lethal: false }) === "crit";
+          this.effects.enemyHit(ev.x, ev.y, angle, { lethal: ev.k, weakSpot: crit });
           break;
         }
         case "kill": {
           if (ev.v !== self) {
             const v = this.views.get(ev.v);
             if (v) {
-              this.effects.death(v.root.x, v.root.y, 0xc8622f);
+              this.effects.enemyDeath(v.root.x, v.root.y, { color: 0xc8622f });
               const s = spatial(v.root.x, v.root.y);
               sfx.death(false, s.distance, s.pan);
             }
@@ -839,9 +844,14 @@ export class ArenaScene extends Phaser.Scene {
             }
           }
           break;
-        case "vhit":
-          if (ev.p !== self) this.effects.impact(ev.x, ev.y, Math.random() * Math.PI * 2);
+        case "vhit": {
+          const from = this.views.get(ev.p);
+          const angle = from
+            ? Math.atan2(ev.y - from.root.y, ev.x - from.root.x)
+            : Math.random() * Math.PI * 2;
+          this.effects.hullHit(ev.x, ev.y, angle);
           break;
+        }
         case "wreck": {
           this.effects.explosion(ev.x, ev.y);
           const s = spatial(ev.x, ev.y);
@@ -1104,10 +1114,13 @@ export class ArenaScene extends Phaser.Scene {
       };
     });
     const aim = sim.aim;
-    const rx = (me?.root.x ?? ox) + Math.cos(aim) * 30;
-    const ry = (me?.root.y ?? oy) + Math.sin(aim) * 30;
-    this.effects.shot(def, rx, ry, aim, ends);
+    // Tracers start on the real ray (predicted origin through the crosshair), at the point nearest
+    // to the barrel tip as drawn: see combat/aim.ts for the remaining sub-step difference.
+    const tip = me ? me.muzzleTip(this.muzzle) : { x: ox + Math.cos(aim) * 30, y: oy + Math.sin(aim) * 30 };
+    const m = projectOntoRay(ox, oy, aim, tip.x, tip.y, this.muzzle);
+    this.effects.shot(def, m.x, m.y, aim, ends);
     me?.recoil(def);
+    this.crosshair.onShot(def);
     sfx.shot(def, 0, 0, true);
     const shake = def.fx.shake * settingsStore.get().screenShake;
     if (shake > 0) this.cameras.main.shake(70, 0.0012 * shake);
@@ -1264,16 +1277,18 @@ export class ArenaScene extends Phaser.Scene {
         if (id === self) {
           const s = this.predictor.sim;
           const sl = s.slots[s.slot];
+          const p = this.input_pointer();
           view.update(
             at.x,
             at.y,
-            this.aimAngle(),
+            visualAim(at.x, at.y, p.worldX, p.worldY, this.aimAngle()),
             ps.alive,
             sl?.id ?? NO_WEAPON,
             ps.hp,
             ps.protected,
             dtSec,
             0,
+            localWeaponAnim(s, this.localAnim),
           );
         } else {
           const sample = this.buffer.sample(id, renderTick);
@@ -1287,6 +1302,7 @@ export class ArenaScene extends Phaser.Scene {
             false,
             dtSec,
             0,
+            { reloading: !!sample?.reloading },
           );
         }
         continue;
@@ -1297,9 +1313,12 @@ export class ArenaScene extends Phaser.Scene {
         const x = Phaser.Math.Linear(this.prevRender.x, s.x, alpha) + this.predictor.offsetX;
         const y = Phaser.Math.Linear(this.prevRender.y, s.y, alpha) + this.predictor.offsetY;
         const slot = s.slots[s.slot];
-        const aim = this.aimAngle();
+        // The drawn body faces the cursor's world point, so its barrel points through the crosshair.
+        const p = this.input_pointer();
+        const aim = visualAim(x, y, p.worldX, p.worldY, this.aimAngle());
         const laser = this.laserLength(x, y, aim, slot?.id ?? NO_WEAPON);
-        view.update(x, y, aim, ps.alive, slot?.id ?? NO_WEAPON, ps.hp, ps.protected, dtSec, laser);
+        const anim = localWeaponAnim(s, this.localAnim);
+        view.update(x, y, aim, ps.alive, slot?.id ?? NO_WEAPON, ps.hp, ps.protected, dtSec, laser, anim);
       } else {
         const sample = this.buffer.sample(id, renderTick);
         if (!sample) {
@@ -1317,6 +1336,7 @@ export class ArenaScene extends Phaser.Scene {
           sample.protected,
           dtSec,
           laser,
+          { reloading: sample.reloading },
         );
       }
     }
@@ -1390,84 +1410,41 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   private drawCrosshair() {
-    const g = this.crosshair;
-    g.clear();
+    const dt = this.game.loop.delta;
     // Benchmark autopilot aims by itself: a mouse crosshair would contradict the shown aim.
-    if (autopilot.get()) return;
-    const pointer = this.game.input.activePointer;
-    const color = Phaser.Display.Color.HexStringToColor(settingsStore.get().crosshairColor).color;
-    const sim = this.predictor.sim;
-    const def = activeWeapon(sim);
+    if (autopilot.get()) return this.crosshair.clear(dt);
     const me = this.views.get(this.room?.sessionId ?? "");
     if (!me?.visibleAlive || uiStore.get().menuOpen) {
       this.game.canvas.style.cursor = "default";
+      this.crosshair.clear(dt);
       return;
     }
     this.game.canvas.style.cursor = "none";
-    const cam = this.cameras.main;
-    const dist = Math.hypot(pointer.worldX - sim.x, pointer.worldY - sim.y);
-    const spreadDeg = def ? currentSpreadDeg(sim, def) : 2;
-    const gap = clamp(Math.tan((spreadDeg * Math.PI) / 180) * dist * cam.zoom, 4, 120);
-    const x = pointer.x;
-    const y = pointer.y;
-    const len = 7;
-    g.lineStyle(4, 0x0b0c0e, 0.7);
-    for (const [dx, dy] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ] as const) {
-      g.lineBetween(x + dx * gap, y + dy * gap, x + dx * (gap + len), y + dy * (gap + len));
-    }
-    g.lineStyle(2, color, 1);
-    for (const [dx, dy] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ] as const) {
-      g.lineBetween(x + dx * gap, y + dy * gap, x + dx * (gap + len), y + dy * (gap + len));
-    }
-    g.fillStyle(color, 1).fillCircle(x, y, 1.5);
-    // Reload ring
-    if (sim.reload > 0 && def) {
-      const total = secToSteps(def.reloadSec);
-      const prog = 1 - sim.reload / total;
-      g.lineStyle(3, 0x0b0c0e, 0.6)
-        .beginPath()
-        .arc(x, y, gap + len + 8, 0, Math.PI * 2)
-        .strokePath();
-      g.lineStyle(3, 0xffd27a, 1)
-        .beginPath()
-        .arc(x, y, gap + len + 8, -Math.PI / 2, -Math.PI / 2 + prog * Math.PI * 2)
-        .strokePath();
-    } else if (def && sim.cooldown > 0 && fireIntervalSteps(def) > 20) {
-      const prog = 1 - sim.cooldown / fireIntervalSteps(def);
-      g.lineStyle(2, color, 0.5)
-        .beginPath()
-        .arc(x, y, gap + len + 6, -Math.PI / 2, -Math.PI / 2 + prog * Math.PI * 2)
-        .strokePath();
-    }
-    // Hit marker
-    const hm = this.hitMarker;
-    hm.clear();
-    if (this.hitMarkerLife > 0) {
-      this.hitMarkerLife -= this.game.loop.delta;
-      const a = Math.max(0, this.hitMarkerLife / 140);
-      const c = this.hitMarkerLethal ? 0xff5a3d : 0xffffff;
-      hm.lineStyle(2.5, c, a);
-      const r0 = 6;
-      const r1 = 13;
-      for (const s of [
-        [1, 1],
-        [1, -1],
-        [-1, 1],
-        [-1, -1],
-      ] as const) {
-        hm.lineBetween(x + s[0] * r0, y + s[1] * r0, x + s[0] * r1, y + s[1] * r1);
-      }
-    }
+    const pointer = this.input_pointer();
+    const sim = this.predictor.sim;
+    const mount = this.predictor.mount;
+    const ride = this.env.ridePose;
+    const seat = mount
+      ? {
+          // Drivers and pilots never fire (fixedStep drops the button); other seats only in their arc.
+          canFire: mount.seat !== 0 && mount.seatDef.arc > 0,
+          inSector: !!ride && inSector(mount.seatDef, ride.angle, this.aimAngle()),
+        }
+      : null;
+    const frame = crosshairFrame(
+      {
+        screenX: pointer.x,
+        screenY: pointer.y,
+        worldX: pointer.worldX,
+        worldY: pointer.worldY,
+        zoom: this.cameras.main.zoom,
+        sim,
+        def: activeWeapon(sim),
+        seat,
+      },
+      this.crosshairState,
+    );
+    this.crosshair.draw(frame, dt);
   }
 
   private animateLights() {
@@ -1601,6 +1578,7 @@ export class ArenaScene extends Phaser.Scene {
         msgsOut: Math.round(this.stats.msgsRate),
         entities: this.children.length,
         fx: this.effects.active,
+        fxDetail: this.effects.detail(),
       },
     });
     void this.localAliveSince;
