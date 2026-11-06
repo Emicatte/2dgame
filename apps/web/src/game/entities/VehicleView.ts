@@ -1,5 +1,6 @@
 import { TEAMS, VEHICLES, type VehicleDef, type VehicleKind } from "@scrapline/shared";
 import Phaser from "phaser";
+import type { GraphicsQuality } from "../../lib/settings.ts";
 import { TEX, TEX_SCALE } from "../art/textures.ts";
 import { VTEX } from "../art/vehicleArt.ts";
 
@@ -125,7 +126,7 @@ export class VehicleView {
     this.root.setDepth(DEPTH_GROUND);
   }
 
-  update(r: VehicleRender, dtSec: number, quality: "high" | "low"): void {
+  update(r: VehicleRender, dtSec: number, quality: GraphicsQuality): void {
     const visible = r.status !== 2;
     this.root.setVisible(visible);
     if (!visible) return;

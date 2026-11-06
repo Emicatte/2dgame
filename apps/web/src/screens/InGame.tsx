@@ -412,6 +412,7 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
               `net in      ${hud.debug.kbIn} KB/s`,
               `net out     ${hud.debug.kbOut} KB/s (${hud.debug.msgsOut} msg/s)`,
               `objects     ${hud.debug.entities}  fx ${hud.debug.fx}`,
+              `fx live     ${hud.debug.fxDetail}`,
             ].join("\n")}
           </div>
         )}

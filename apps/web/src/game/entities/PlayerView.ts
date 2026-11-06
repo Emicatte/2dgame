@@ -1,6 +1,10 @@
 import { NO_WEAPON, PLAYER, TEAMS, type WeaponDef, weaponByIndex } from "@scrapline/shared";
 import Phaser from "phaser";
 import { TEX, TEX_SCALE } from "../art/textures.ts";
+import type { Point } from "../combat/aim.ts";
+import { type AnimInput, WeaponAnimator, type WeaponAnimState } from "../combat/weaponAnim.ts";
+import { barrelTipFromOrigin, WEAPON_HOLD_PX } from "../combat/weaponFx.ts";
+import { Effects } from "../effects/Effects.ts";
 
 const NAME_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
   fontFamily: "Chakra Petch, sans-serif",
@@ -12,8 +16,12 @@ const NAME_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
 
 /**
  * Visual representation of one player. Body faces the aim direction, feet step along the movement
- * direction, the weapon kicks back on every shot. Purely cosmetic: position comes from prediction
- * (local player) or interpolation (remote players).
+ * direction, the weapon kicks back on every shot (distance and rotation per weapon family), works
+ * its pump / bolt, dips while reloading and comes up after a swap. Purely cosmetic: position comes
+ * from prediction (local player) or interpolation (remote players).
+ *
+ * The weapon sits on the aim axis through the body centre (no sideways offset), so its barrel and
+ * the muzzle flash line up with the shot ray; see combat/aim.ts for the remaining difference.
  */
 export class PlayerView {
   readonly root: Phaser.GameObjects.Container;
@@ -31,7 +39,13 @@ export class PlayerView {
   private skin = "";
   private stepPhase = 0;
   private moveAngle = 0;
-  private kick = 0;
+  private readonly anim = new WeaponAnimator();
+  private readonly animIn: AnimInput = { def: undefined, moving: 0, stepPhase: 0 };
+  /** Barrel tip relative to the root, unscaled (as drawn this frame). */
+  private tipX = 0;
+  private tipY = 0;
+  /** Direction the weapon sprite points this frame (aim + animation). */
+  drawnAim = 0;
   private lastX = 0;
   private lastY = 0;
   private hpShown = 100;
@@ -141,7 +155,15 @@ export class PlayerView {
   }
 
   recoil(def: WeaponDef): void {
-    this.kick = Math.min(14, this.kick + def.fx.recoilKickPx);
+    this.anim.fire(def);
+  }
+
+  /** World position of the drawn barrel tip (last rendered frame). */
+  muzzleTip(out: Point = { x: 0, y: 0 }): Point {
+    const k = this.root.scaleX;
+    out.x = this.root.x + this.tipX * k;
+    out.y = this.root.y + this.tipY * k;
+    return out;
   }
 
   /** Called every rendered frame. `world` allows trimming the laser at walls. */
@@ -155,6 +177,7 @@ export class PlayerView {
     isProtected: boolean,
     dtSec: number,
     laserLength: number,
+    animState?: WeaponAnimState,
   ): void {
     this.root.setPosition(x, y);
     this.visibleAlive = alive;
@@ -162,6 +185,7 @@ export class PlayerView {
     if (!alive) {
       this.lastX = x;
       this.lastY = y;
+      this.anim.reset();
       return;
     }
     const def = this.setWeapon(weaponIndex);
@@ -183,14 +207,35 @@ export class PlayerView {
     this.footL.setPosition(fx * s * stride + px * 7, fy * s * stride + py * 7).setRotation(this.moveAngle);
     this.footR.setPosition(-fx * s * stride - px * 7, -fy * s * stride - py * 7).setRotation(this.moveAngle);
 
-    this.kick = Math.max(0, this.kick - dtSec * 90);
     const bob = 1 + Math.abs(s) * 0.025 * Math.min(1, speed / PLAYER.maxSpeed);
     this.body.setRotation(aim).setScale(bob / TEX_SCALE);
-    const wx = Math.cos(aim) * (8 - this.kick);
-    const wy = Math.sin(aim) * (8 - this.kick);
-    this.weapon
-      .setPosition(wx + Math.cos(aim + Math.PI / 2) * 3, wy + Math.sin(aim + Math.PI / 2) * 3)
-      .setRotation(aim);
+    const ai = this.animIn;
+    ai.def = def;
+    ai.reload = animState?.reload;
+    ai.reloading = animState?.reloading;
+    ai.swap = animState?.swap;
+    ai.moving = this.seated ? 0 : Math.min(1, speed / PLAYER.maxSpeed);
+    ai.stepPhase = this.stepPhase;
+    const pose = this.anim.update(dtSec * 1000, weaponIndex, ai);
+    // The grip stays on the aim axis; recoil, pump, bolt, reload and draw pull it back along that
+    // axis and turn the weapon about the grip.
+    const hold = WEAPON_HOLD_PX - pose.back;
+    const wAim = aim + pose.rot;
+    const gx = Math.cos(aim) * hold;
+    const gy = Math.sin(aim) * hold;
+    this.weapon.setPosition(gx, gy).setRotation(wAim);
+    this.drawnAim = wAim;
+    const tip = def ? barrelTipFromOrigin(def) : 0;
+    this.tipX = gx + Math.cos(wAim) * tip;
+    this.tipY = gy + Math.sin(wAim) * tip;
+    if (pose.eject && def) {
+      const k = this.root.scaleX;
+      Effects.of(this.scene)?.shellEject(
+        x + (gx + Math.cos(wAim) * tip * 0.4) * k,
+        y + (gy + Math.sin(wAim) * tip * 0.4) * k,
+        aim,
+      );
+    }
 
     this.ring.setAlpha(isProtected ? 0.5 + Math.sin(performance.now() / 90) * 0.25 : 0);
 

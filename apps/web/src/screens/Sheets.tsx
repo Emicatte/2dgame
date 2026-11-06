@@ -18,8 +18,19 @@ import {
   type WeaponId,
 } from "@scrapline/shared";
 import { useCallback, useEffect, useState } from "react";
+import { CrosshairPreview } from "../components/CrosshairPreview.tsx";
 import { Button, hexColor, LevelChip, Panel, SheetHeader } from "../components/ui.tsx";
-import { ACTION_LABELS, type Action, DEFAULT_SETTINGS, keyLabel, settingsStore } from "../lib/settings.ts";
+import {
+  ACTION_LABELS,
+  type Action,
+  CROSSHAIR_LIMITS,
+  CROSSHAIR_STYLES,
+  type CrosshairStyle,
+  DEFAULT_SETTINGS,
+  GRAPHICS_QUALITIES,
+  keyLabel,
+  settingsStore,
+} from "../lib/settings.ts";
 import { useStore } from "../lib/store.ts";
 import { api } from "../net/api.ts";
 import { session } from "../net/session.ts";
@@ -533,6 +544,52 @@ export function SettingsSheet({ onBack }: { onBack: () => void }) {
     </div>
   );
 
+  const range = (
+    key: "crosshairSize" | "crosshairOpacity" | "crosshairThickness",
+    label: string,
+    lim: { min: number; max: number; step: number },
+    format: (v: number) => string,
+  ) => (
+    <div className="setting-row">
+      <label htmlFor={key}>{label}</label>
+      <div className="row">
+        <input
+          id={key}
+          className="slider"
+          type="range"
+          min={lim.min}
+          max={lim.max}
+          step={lim.step}
+          value={s[key]}
+          onChange={(e) => settingsStore.patch({ [key]: Number(e.target.value) } as never)}
+        />
+        <span className="mono" style={{ width: 52, textAlign: "right" }}>
+          {format(s[key])}
+        </span>
+      </div>
+    </div>
+  );
+
+  const check = (key: "crosshairOutline" | "crosshairDynamic" | "showDebug", id: string, label: string) => (
+    <div className="setting-row">
+      <label htmlFor={id}>{label}</label>
+      <input
+        id={id}
+        type="checkbox"
+        checked={s[key]}
+        onChange={(e) => settingsStore.patch({ [key]: e.target.checked } as never)}
+      />
+    </div>
+  );
+
+  const STYLE_LABELS: Record<CrosshairStyle, string> = {
+    cross: "Cross",
+    dot: "Dot",
+    circle: "Circle",
+    tactical: "Tactical",
+    minimal: "Minimal",
+  };
+
   const bindings = s.bindings;
   const conflicts = new Set(Object.values(bindings).filter((code, i, arr) => arr.indexOf(code) !== i));
 
@@ -559,7 +616,7 @@ export function SettingsSheet({ onBack }: { onBack: () => void }) {
               <div className="setting-row">
                 <span>Quality</span>
                 <fieldset className="seg" aria-label="Graphics quality">
-                  {(["low", "high"] as const).map((q) => (
+                  {GRAPHICS_QUALITIES.map((q) => (
                     <button
                       key={q}
                       type="button"
@@ -572,6 +629,24 @@ export function SettingsSheet({ onBack }: { onBack: () => void }) {
                 </fieldset>
               </div>
               {slider("screenShake", "Screen shake", 1.5)}
+              {check("showDebug", "dbg", "Show FPS / network overlay")}
+            </Panel>
+            <Panel title="Crosshair">
+              <div className="setting-row setting-row--stack">
+                <CrosshairPreview settings={s} />
+                <fieldset className="seg seg--wrap" aria-label="Crosshair style">
+                  {CROSSHAIR_STYLES.map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      aria-pressed={s.crosshairStyle === st}
+                      onClick={() => settingsStore.patch({ crosshairStyle: st })}
+                    >
+                      {STYLE_LABELS[st]}
+                    </button>
+                  ))}
+                </fieldset>
+              </div>
               <div className="setting-row">
                 <label htmlFor="xh">Crosshair color</label>
                 <input
@@ -581,15 +656,16 @@ export function SettingsSheet({ onBack }: { onBack: () => void }) {
                   onChange={(e) => settingsStore.patch({ crosshairColor: e.target.value })}
                 />
               </div>
-              <div className="setting-row">
-                <label htmlFor="dbg">Show FPS / network overlay</label>
-                <input
-                  id="dbg"
-                  type="checkbox"
-                  checked={s.showDebug}
-                  onChange={(e) => settingsStore.patch({ showDebug: e.target.checked })}
-                />
-              </div>
+              {range("crosshairSize", "Size", CROSSHAIR_LIMITS.size, (v) => `${v.toFixed(2)}x`)}
+              {range(
+                "crosshairOpacity",
+                "Opacity",
+                CROSSHAIR_LIMITS.opacity,
+                (v) => `${Math.round(v * 100)}%`,
+              )}
+              {range("crosshairThickness", "Thickness", CROSSHAIR_LIMITS.thickness, (v) => `${v} px`)}
+              {check("crosshairOutline", "xh-outline", "Dark outline (readable on light maps)")}
+              {check("crosshairDynamic", "xh-dynamic", "Dynamic spread (gap shows the real spread)")}
             </Panel>
           </div>
           <Panel title="Controls · click a key, then press the new one (Esc cancels)">

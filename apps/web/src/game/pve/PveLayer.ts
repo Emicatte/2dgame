@@ -25,17 +25,6 @@ import type { Effects } from "../effects/Effects.ts";
  * projectiles are drawn from the synchronized state and events. Nothing here decides anything.
  */
 
-/** Enemy hit/death effects (Combat Visual Overhaul API) with a fallback to the base effects. */
-interface EnemyFx {
-  enemyHit?(
-    x: number,
-    y: number,
-    fromAngle: number,
-    opts: { lethal: boolean; color?: number; armored?: boolean; weakSpot?: boolean; boss?: boolean },
-  ): void;
-  enemyDeath?(x: number, y: number, opts: { color?: number; size?: number; boss?: boolean }): void;
-}
-
 export function enemyHitFx(
   effects: Effects,
   x: number,
@@ -43,9 +32,7 @@ export function enemyHitFx(
   angle: number,
   opts: { lethal: boolean; color?: number; armored?: boolean; weakSpot?: boolean; boss?: boolean },
 ): void {
-  const fx = effects as Effects & EnemyFx;
-  if (fx.enemyHit) fx.enemyHit(x, y, angle, opts);
-  else effects.playerHit(x, y, angle, opts.lethal);
+  effects.enemyHit(x, y, angle, opts);
 }
 
 export function enemyDeathFx(
@@ -54,9 +41,7 @@ export function enemyDeathFx(
   y: number,
   opts: { color?: number; size?: number; boss?: boolean },
 ): void {
-  const fx = effects as Effects & EnemyFx;
-  if (fx.enemyDeath) fx.enemyDeath(x, y, opts);
-  else effects.death(x, y, opts.color ?? 0xb9c48f);
+  effects.enemyDeath(x, y, opts);
 }
 
 interface ZSample {
@@ -409,7 +394,11 @@ export class PveLayer {
     switch (ev.t) {
       case "zdie": {
         const def = zombieByIndex(ev.k);
-        enemyDeathFx(this.effects, ev.x, ev.y, { color: def?.accent ?? 0xb9c48f, size: def?.radius ?? 16 });
+        enemyDeathFx(this.effects, ev.x, ev.y, {
+          color: def?.accent ?? 0xb9c48f,
+          size: def?.radius ?? 16,
+          boss: !!def?.boss,
+        });
         break;
       }
       case "zhit": {
@@ -469,7 +458,11 @@ export class PveLayer {
   ): void {
     if (!this.active) return;
     const cam = this.scene.cameras.main;
-    this.dark.setSize(this.scene.scale.width, this.scene.scale.height);
+    // Camera zoom also scales scroll-factor-0 objects around the screen centre: oversize the
+    // quad so it covers the whole view at any zoom.
+    const w = this.scene.scale.width;
+    const h = this.scene.scale.height;
+    this.dark.setPosition(-w, -h).setSize(w * 3, h * 3);
     this.dark.setAlpha(this.power ? 0.26 : 0.42);
     this.lantern.setPosition(focus.x, focus.y);
     void cam;
