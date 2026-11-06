@@ -94,7 +94,7 @@ export function applyPveRun(prev: PveProgress, rec: PveRecord): PveApplyResult {
   if (prev.seen.includes(rec.runId)) {
     return { progress: prev, recorded: false, newTitles: [], unlocked: [], personalBest: false };
   }
-  const p: PveProgress = structuredClone(prev);
+  const p: PveProgress = JSON.parse(JSON.stringify(prev)) as PveProgress;
   p.seen = [...p.seen, rec.runId].slice(-MAX_SEEN_RUNS);
   p.runs += 1;
   p.kills += Math.max(0, Math.floor(rec.kills));

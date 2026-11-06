@@ -588,3 +588,110 @@ describe("First Contact mission script", () => {
     expect(kbps).toBeLessThan(20);
   });
 });
+
+describe("combat edge cases", () => {
+  it("two players hitting the same enemy in the same tick: one death, one credit, no negative health", () => {
+    const sim = makeSim();
+    const pve = startPve(sim, "survival");
+    pve.waves.stop();
+    pve.nextWaveTick = 0;
+    const a = addPlayer(sim, "alpha");
+    const b = addPlayer(sim, "bravo");
+    place(a, 1300, 1100);
+    place(b, 1300, 1160);
+    const z = pve.zw.spawn("walker", 1500, 1130, { state: "idle" });
+    z.speedMult = 0;
+    z.hp = 20;
+    const ev = tick(sim, {
+      alpha: { buttons: BTN.FIRE, aim: Math.atan2(1130 - 1100, 200) },
+      bravo: { buttons: BTN.FIRE, aim: Math.atan2(1130 - 1160, 200) },
+    });
+    const deaths = ev.filter((e) => e.t === "zdie" && e.z === z.id);
+    expect(deaths).toHaveLength(1);
+    expect(z.hp).toBe(0);
+    expect(a.stats.kills + b.stats.kills).toBe(1);
+    expect(pve.kills).toBe(1);
+  });
+
+  it("vehicles plough through enemies (credited to the driver) and enemies damage a vehicle's hull", () => {
+    const sim = makeSim("facility");
+    const pve = startPve(sim, "survival");
+    pve.waves.stop();
+    pve.nextWaveTick = 0;
+    const a = addPlayer(sim, "alpha");
+    const v = [...sim.vehicles.values()].find((x) => x.def.kind === "car")!;
+    expect(v).toBeDefined();
+    place(a, v.sim.x, v.sim.y);
+    // Seat the player as the driver and launch the car at a walker.
+    (sim as unknown as { takeSeat(p: ServerPlayer, v: unknown, s: number): void }).takeSeat(a, v, 0);
+    v.sim.vx = Math.cos(v.sim.angle) * 450;
+    v.sim.vy = Math.sin(v.sim.angle) * 450;
+    const front = { x: v.sim.x + Math.cos(v.sim.angle) * 48, y: v.sim.y + Math.sin(v.sim.angle) * 48 };
+    const z = pve.zw.spawn("walker", front.x, front.y, { state: "idle" });
+    pve.vehicleContacts(v, a);
+    expect(z.hp).toBeLessThan(z.maxHp);
+    // A walker next to the hull attacks the vehicle its target sits in.
+    const hp0 = v.hp;
+    v.sim.vx = 0;
+    v.sim.vy = 0;
+    const w = pve.zw.spawn(
+      "walker",
+      v.sim.x - Math.sin(v.sim.angle) * 50,
+      v.sim.y + Math.cos(v.sim.angle) * 50,
+      {
+        state: "hunt",
+      },
+    );
+    for (let i = 0; i < 40 && v.hp === hp0; i++) tick(sim);
+    expect(v.hp).toBeLessThan(hp0);
+    expect(w.target).toBe("alpha");
+  });
+});
+
+describe("performance budget", () => {
+  it("authoritative tick cost grows gently with the number of enemies (4 players)", () => {
+    const rows: string[] = [];
+    for (const n of [10, 20, 30, 40, MAX_ZOMBIES]) {
+      const sim = makeSim("works", 5);
+      const pve = startPve(sim, "survival");
+      pve.waves.stop();
+      pve.nextWaveTick = 0;
+      for (const [i, id] of ["a1", "a2", "a3", "a4"].entries()) {
+        const p = addPlayer(sim, id);
+        place(p, 1400 + i * 60, 1100);
+        p.protectedUntil = Number.MAX_SAFE_INTEGER;
+      }
+      const kinds = [
+        "walker",
+        "runner",
+        "walker",
+        "spitter",
+        "walker",
+        "brute",
+        "walker",
+        "exploder",
+        "stalker",
+      ] as const;
+      for (let i = 0; i < n; i++) {
+        const zone = FIRST_CONTACT.spawnZones[i % FIRST_CONTACT.spawnZones.length]!;
+        pve.zw.spawn(kinds[i % kinds.length]!, zone.x + (i % 3) * 36, zone.y + Math.floor(i / 7) * 12, {
+          state: "hunt",
+        });
+      }
+      const costs: number[] = [];
+      for (let i = 0; i < 20 * 15; i++) {
+        // Keep the count constant: enemies that reach the squad are replaced far away.
+        const t0 = performance.now();
+        tick(sim);
+        costs.push(performance.now() - t0);
+      }
+      costs.sort((x, y) => x - y);
+      const avg = costs.reduce((s, c) => s + c, 0) / costs.length;
+      const p99 = costs[Math.floor(costs.length * 0.99)]!;
+      rows.push(`${String(n).padStart(2)} enemies: avg ${avg.toFixed(2)} ms, p99 ${p99.toFixed(2)} ms`);
+      // Budget: the host's browser also renders; the simulation must stay a small part of a 50 ms tick.
+      expect(p99).toBeLessThan(25);
+    }
+    console.log(`[budget] 4 players, server tick cost by enemy count\n${rows.join("\n")}`);
+  });
+});
