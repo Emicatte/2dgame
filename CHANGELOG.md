@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (branch `dread`)
+## 0.6.1 — 2026-11-09 (practice bots that play like people)
 
 ### Changed
 - **Practice bots** (a host alone in a private arena): the three strafing training targets are
