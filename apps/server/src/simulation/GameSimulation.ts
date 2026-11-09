@@ -133,6 +133,8 @@ export interface ServerPlayer {
   interactFrames: number;
   /** Interact was pressed (not just held) this tick: picks up one item from the ground. */
   interactPress: boolean;
+  /** Left the running match but still in the room: out until the next match. */
+  away: boolean;
   connected: boolean;
   joinedTick: number;
   /** Buttons of the previous applied frame (edge detection for enter / exit / seat change). */
@@ -511,6 +513,7 @@ export class GameSimulation {
       interact: false,
       interactFrames: 0,
       interactPress: false,
+      away: false,
       connected: true,
       joinedTick: this.tick,
       prevButtons: 0,
@@ -595,6 +598,7 @@ export class GameSimulation {
       p.stats = emptyStats();
       p.joinedTick = this.tick;
       p.alive = false;
+      p.away = false;
     }
     // PREPARING: the mode assigns sides and rounds before anybody spawns.
     this.ctl?.reset();
@@ -1148,7 +1152,17 @@ export class GameSimulation {
     return { x: pick.x, y: pick.y };
   }
 
+  /** Leaves the running match (stays in the room): out, no death counted, no respawn. */
+  leaveMatch(p: ServerPlayer): void {
+    this.leaveVehicle(p, true);
+    this.dropFlag(p);
+    p.alive = false;
+    p.respawnTick = 0;
+    p.away = true;
+  }
+
   spawn(p: ServerPlayer, freshMatch: boolean): void {
+    if (p.away) return;
     const pos = this.pve ? this.pve.spawnPoint(p) : (this.ctl?.spawnPoint(p) ?? this.chooseSpawn(p.id));
     p.pve.downed = false;
     const keepAim = p.sim.aim;

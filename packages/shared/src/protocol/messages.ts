@@ -25,6 +25,8 @@ export const C2S = {
   ABILITY: "ab",
   /** Results: vote for the next map. */
   VOTE: "vote",
+  /** Leave the running match but stay in the room (back in at the next match). */
+  LEAVE_MATCH: "leaveMatch",
 } as const;
 
 /** Server → client message types. */

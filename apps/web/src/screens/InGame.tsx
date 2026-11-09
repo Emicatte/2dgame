@@ -346,8 +346,17 @@ function PauseMenu({ onClose, onSettings }: { onClose: () => void; onSettings: (
             Resume
           </Button>
           <Button onClick={onSettings}>Settings</Button>
-          <Button variant="danger" onClick={() => void session.leave()}>
+          <Button
+            onClick={() => {
+              session.leaveMatch();
+              onClose();
+            }}
+            data-testid="leave-match"
+          >
             Leave match
+          </Button>
+          <Button variant="danger" onClick={() => void session.leave()} data-testid="leave-arena">
+            Leave arena
           </Button>
         </div>
       </div>

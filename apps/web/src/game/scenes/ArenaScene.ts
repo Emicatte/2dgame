@@ -1461,7 +1461,7 @@ export class ArenaScene extends Phaser.Scene {
       this.updateHud(dt, false);
       return;
     }
-    this.controls.enabled = !uiStore.get().menuOpen;
+    this.controls.enabled = !uiStore.get().menuOpen && !sessionStore.get().away;
     if (!this.clock.ready) return;
 
     this.sampleEdgeInputs();

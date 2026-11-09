@@ -59,7 +59,9 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
     typeof __PUBLIC_ORIGIN__ === "string" && __PUBLIC_ORIGIN__ ? __PUBLIC_ORIGIN__ : location.origin;
   const inviteUrl = `${origin}${location.pathname}?join=${s.code}`;
   const myTeam = self?.team === 1 || self?.team === 2 ? self.team : null;
-  const canHost = isHost && isPrivate;
+  // Left the running match: waits here (settings read-only, no ready/start) until the next one.
+  const waiting = s.phase !== "lobby";
+  const canHost = isHost && isPrivate && !waiting;
 
   async function copy(kind: "room" | "team") {
     const url = kind === "team" && myTeam ? `${inviteUrl}&team=${myTeam}` : inviteUrl;
@@ -460,7 +462,12 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
 
           <Panel>
             <div className="stack">
-              {!isPrivate && (
+              {waiting && (
+                <div className="countdown-banner" data-testid="away-banner">
+                  <span>Match in progress: you are back in for the next one</span>
+                </div>
+              )}
+              {!isPrivate && !waiting && (
                 <div className="countdown-banner" aria-live="polite">
                   {startsIn !== null ? (
                     <>
@@ -472,7 +479,7 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                   )}
                 </div>
               )}
-              {canHost ? (
+              {waiting ? null : canHost ? (
                 <Button
                   variant="primary"
                   size="lg"
@@ -509,8 +516,8 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                   Loadout
                 </Button>
                 <span className="spacer" />
-                <Button variant="danger" onClick={() => void session.leave()}>
-                  Leave
+                <Button variant="danger" onClick={() => void session.leave()} data-testid="leave-arena">
+                  Leave arena
                 </Button>
               </div>
             </div>
