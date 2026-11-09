@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (branch `dread`)
+## 0.6.2 — 2026-11-09 (the crosshair moves with the player)
 
 ### Fixed
 - **The crosshair moves with the player.** The camera lagged behind the player (and stopped at
