@@ -93,10 +93,11 @@ describe("weapon damage falloff", () => {
 
   it("every weapon kills within a sane number of hits at close range", () => {
     for (const w of Object.values(WEAPONS)) {
-      const perShot = w.damage * w.pellets;
+      // Rockets do all their damage by area; the minigun trades damage per round for its rate.
+      const perShot = w.splash ? w.splash.damage : w.damage * w.pellets;
       const shotsToKill = Math.ceil(100 / perShot);
       expect(shotsToKill).toBeGreaterThanOrEqual(1);
-      expect(shotsToKill).toBeLessThanOrEqual(8);
+      expect(shotsToKill).toBeLessThanOrEqual(w.rpm >= 1200 ? 10 : 8);
     }
   });
 });

@@ -8,6 +8,7 @@ import {
   MODES,
   type NetEvent,
   PLAYER,
+  SHIELD,
   TEAMS,
   weaponByIndex,
 } from "@scrapline/shared";
@@ -504,6 +505,14 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
                     style={{ width: `${hpFrac * 100}%` }}
                   />
                 </div>
+                {hud.shield > 0 && (
+                  <div className="health__bar shield__bar" data-testid="hud-shield">
+                    <div
+                      className="shield__fill"
+                      style={{ width: `${Math.min(1, hud.shield / SHIELD.max) * 100}%` }}
+                    />
+                  </div>
+                )}
               </div>
               <div className={`dash-meter ${hud.dashProgress >= 1 ? "is-ready" : ""}`}>
                 <span>Dash</span>

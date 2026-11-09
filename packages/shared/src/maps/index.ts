@@ -8,6 +8,7 @@ import { bodyFits } from "../sim/vehicle.ts";
 import { MILITARY_AIRBASE } from "./airbase.ts";
 import { BLACK_SITE } from "./blacksite.ts";
 import { FINAL_BREACH } from "./breach.ts";
+import { withChests } from "./chests.ts";
 import { SALVAGE_DEPOT } from "./depot.ts";
 import { DESERT_OUTPOST } from "./desert.ts";
 import { DEAD_DISTRICT } from "./district.ts";
@@ -24,7 +25,7 @@ import { HALVORSEN_WORKS } from "./works.ts";
 
 export * from "./types.ts";
 
-export const MAPS: Record<MapId, MapDef> = {
+const BASE_MAPS: Record<MapId, MapDef> = {
   industrial: INDUSTRIAL_ARENA,
   neon: NEON_DISTRICT,
   desert: DESERT_OUTPOST,
@@ -41,6 +42,11 @@ export const MAPS: Record<MapId, MapDef> = {
   blacksite: BLACK_SITE,
   breach: FINAL_BREACH,
 };
+
+/** Every map, with its loot chests added to the pickups. */
+export const MAPS: Record<MapId, MapDef> = Object.fromEntries(
+  Object.entries(BASE_MAPS).map(([id, m]) => [id, withChests(m)]),
+) as Record<MapId, MapDef>;
 
 export const MAP_IDS = Object.keys(MAPS) as MapId[];
 /** Maps offered to competitive modes (PvE maps excluded). */

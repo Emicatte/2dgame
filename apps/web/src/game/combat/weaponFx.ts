@@ -181,6 +181,10 @@ export const WEAPON_SHAPES: Readonly<Record<string, { len: number; h: number }>>
   sniper: { len: 46, h: 7 },
   mg: { len: 40, h: 9 },
   doorgun: { len: 32, h: 8 },
+  carbine: { len: 30, h: 7 },
+  battlerifle: { len: 38, h: 7 },
+  minigun: { len: 40, h: 10 },
+  rpg: { len: 44, h: 8 },
 };
 
 export function weaponShape(def: Pick<WeaponDef, "id">): { len: number; h: number } {

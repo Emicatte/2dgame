@@ -4,10 +4,24 @@
  *
  * Numeric `index` is what travels on the wire; keep indices stable once a release ships.
  */
-export type WeaponId = "pistol" | "rifle" | "smg" | "shotgun" | "sniper" | "mg" | "doorgun";
+export type WeaponId =
+  | "pistol"
+  | "rifle"
+  | "smg"
+  | "shotgun"
+  | "sniper"
+  | "mg"
+  | "doorgun"
+  | "carbine"
+  | "battlerifle"
+  | "minigun"
+  | "rpg";
 export type FireMode = "semi" | "auto";
-/** "mounted": vehicle weapons, only usable from their seat (never in loadouts or pickups). */
-export type WeaponSlotKind = "primary" | "secondary" | "mounted";
+/**
+ * "mounted": vehicle weapons, only usable from their seat (never in loadouts or pickups).
+ * "loot": found in chests only (never in loadouts).
+ */
+export type WeaponSlotKind = "primary" | "secondary" | "mounted" | "loot";
 /** Visual family of a weapon (tracer, muzzle flash, crosshair kick, animation set). Client only. */
 export type WeaponFxCategory = "pistol" | "rifle" | "smg" | "shotgun" | "sniper" | "mounted";
 
@@ -43,6 +57,8 @@ export interface WeaponDef {
   minDamageMult: number;
   moveSpeedMult: number;
   swapSec: number;
+  /** Explosive (rocket): no direct damage; everything within `radius` of the impact takes up to `damage`. */
+  splash?: { radius: number; damage: number };
   /** Visual-only feedback. */
   fx: {
     tracerColor: number;
@@ -259,6 +275,156 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     },
     sound: { body: 60, pitch: 0.6, decay: 0.45, noise: 0.9, crack: 1, gain: 0.85 },
   },
+  // ----- loot weapons: found in chests only (indices 7+)
+  carbine: {
+    id: "carbine",
+    index: 7,
+    name: "Talon Carbine",
+    blurb: "Fast-firing assault rifle. Less damage per round, very controllable.",
+    slotKind: "loot",
+    fireMode: "auto",
+    damage: 15,
+    pellets: 1,
+    rpm: 760,
+    magSize: 32,
+    reserveAmmo: 128,
+    reloadSec: 1.6,
+    spreadDeg: 0.9,
+    bloomPerShotDeg: 0.6,
+    maxBloomDeg: 6,
+    bloomRecoveryDegPerSec: 14,
+    movingSpreadDeg: 1.6,
+    evenPelletSpread: false,
+    rangePx: 1300,
+    falloffStartPx: 650,
+    minDamageMult: 0.6,
+    moveSpeedMult: 0.95,
+    swapSec: 0.3,
+    fx: {
+      tracerColor: 0x9fffb0,
+      tracerWidth: 2,
+      tracerSpeed: 6200,
+      muzzleScale: 0.85,
+      recoilKickPx: 3,
+      shake: 0.7,
+      laserSight: false,
+      category: "rifle",
+      recoilRotDeg: 1.3,
+    },
+    sound: { body: 120, pitch: 1.1, decay: 0.14, noise: 0.8, crack: 0.6, gain: 0.55 },
+  },
+  battlerifle: {
+    id: "battlerifle",
+    index: 8,
+    name: "Vanguard BR",
+    blurb: "Semi-automatic heavy assault rifle. Hard-hitting, rewards every shot.",
+    slotKind: "loot",
+    fireMode: "semi",
+    damage: 34,
+    pellets: 1,
+    rpm: 330,
+    magSize: 20,
+    reserveAmmo: 80,
+    reloadSec: 2,
+    spreadDeg: 0.5,
+    bloomPerShotDeg: 1.2,
+    maxBloomDeg: 5,
+    bloomRecoveryDegPerSec: 10,
+    movingSpreadDeg: 2.5,
+    evenPelletSpread: false,
+    rangePx: 1700,
+    falloffStartPx: 1000,
+    minDamageMult: 0.75,
+    moveSpeedMult: 0.9,
+    swapSec: 0.36,
+    fx: {
+      tracerColor: 0xffe08a,
+      tracerWidth: 2.4,
+      tracerSpeed: 7000,
+      muzzleScale: 1.1,
+      recoilKickPx: 6,
+      shake: 1.3,
+      laserSight: false,
+      category: "rifle",
+      recoilRotDeg: 3.5,
+    },
+    sound: { body: 85, pitch: 0.85, decay: 0.22, noise: 0.85, crack: 0.8, gain: 0.7 },
+  },
+  minigun: {
+    id: "minigun",
+    index: 9,
+    name: "Grinder minigun",
+    blurb: "A wall of bullets. Huge drum, slow to carry, slow to reload.",
+    slotKind: "loot",
+    fireMode: "auto",
+    damage: 11,
+    pellets: 1,
+    rpm: 1300,
+    magSize: 150,
+    reserveAmmo: 150,
+    reloadSec: 4.2,
+    spreadDeg: 2.4,
+    bloomPerShotDeg: 0.25,
+    maxBloomDeg: 6,
+    bloomRecoveryDegPerSec: 8,
+    movingSpreadDeg: 3,
+    evenPelletSpread: false,
+    rangePx: 1250,
+    falloffStartPx: 600,
+    minDamageMult: 0.55,
+    moveSpeedMult: 0.72,
+    swapSec: 0.9,
+    fx: {
+      tracerColor: 0xffb347,
+      tracerWidth: 2,
+      tracerSpeed: 6500,
+      muzzleScale: 1.2,
+      recoilKickPx: 2,
+      shake: 0.9,
+      laserSight: false,
+      category: "mounted",
+      recoilRotDeg: 0.8,
+    },
+    sound: { body: 95, pitch: 0.9, decay: 0.12, noise: 0.95, crack: 0.5, gain: 0.55 },
+  },
+  rpg: {
+    id: "rpg",
+    index: 10,
+    name: "Hammer RPG",
+    blurb: "Rocket launcher. Explodes on impact: area damage, one rocket per reload.",
+    slotKind: "loot",
+    fireMode: "semi",
+    damage: 0,
+    pellets: 1,
+    rpm: 60,
+    magSize: 1,
+    reserveAmmo: 4,
+    reloadSec: 2.4,
+    spreadDeg: 0.6,
+    bloomPerShotDeg: 0,
+    maxBloomDeg: 0,
+    bloomRecoveryDegPerSec: 0,
+    movingSpreadDeg: 4,
+    evenPelletSpread: false,
+    rangePx: 1500,
+    falloffStartPx: 1500,
+    minDamageMult: 1,
+    moveSpeedMult: 0.82,
+    swapSec: 0.7,
+    splash: { radius: 130, damage: 110 },
+    fx: {
+      tracerColor: 0xff7a2e,
+      tracerWidth: 5,
+      tracerSpeed: 1800,
+      muzzleScale: 1.6,
+      recoilKickPx: 9,
+      shake: 2.4,
+      laserSight: false,
+      category: "mounted",
+      recoilRotDeg: 6,
+    },
+    sound: { body: 55, pitch: 0.5, decay: 0.5, noise: 1, crack: 0.4, gain: 0.85 },
+  },
   // ----- mounted (vehicle) weapons: used from a gunner seat, infinite reserve, reload = cooldown
   mg: {
     id: "mg",
@@ -355,6 +521,34 @@ export function weaponByIndex(index: number): WeaponDef | undefined {
 export function isWeaponId(value: unknown): value is WeaponId {
   return typeof value === "string" && value in WEAPONS;
 }
+
+/** Weapons a chest can give, with relative weights (loot weapons are chest-only). */
+export const CHEST_WEAPONS: readonly { id: WeaponId; weight: number }[] = [
+  { id: "carbine", weight: 5 },
+  { id: "battlerifle", weight: 4 },
+  { id: "shotgun", weight: 3 },
+  { id: "smg", weight: 3 },
+  { id: "sniper", weight: 2 },
+  { id: "minigun", weight: 2 },
+  { id: "rpg", weight: 1 },
+];
+
+/** Picks a chest weapon from a random number in [0, 1). */
+export function rollChestWeapon(r: number): WeaponId {
+  const total = CHEST_WEAPONS.reduce((s, w) => s + w.weight, 0);
+  let x = r * total;
+  for (const w of CHEST_WEAPONS) {
+    x -= w.weight;
+    if (x < 0) return w.id;
+  }
+  return CHEST_WEAPONS[0]!.id;
+}
+
+/** Shields (Fortnite style): absorb damage before health. A chest gives `perChest`, up to `max`. */
+export const SHIELD = { max: 100, perChest: 50 } as const;
+
+/** Chests: opened with interact, then closed for this long. */
+export const CHEST_RESPAWN_SEC = 40;
 
 export function fireIntervalSec(w: WeaponDef): number {
   return 60 / w.rpm;

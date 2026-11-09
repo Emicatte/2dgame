@@ -30,6 +30,12 @@
 - Career counters per mode (stored in the career JSON) and two daily challenges; mode XP capped
   per match and only for completed matches.
 - `apps/server/scripts/modebench.ts`: tick cost and bandwidth per mode.
+- **Loot chests, new weapons, shields.** Chests on every PvP map (4, 8 on the large maps; opened
+  with E, back after 40 s) give a random weapon, +50 shield and full ammo. Four chest-only weapons:
+  Talon Carbine and Vanguard BR (assault rifles), Grinder minigun, Hammer RPG (explodes on impact:
+  area damage with falloff, never to the shooter or teammates, damages vehicles). Shields (up to
+  100) absorb damage before health; HUD shield bar. Off in Gun Game and the round modes (their
+  pickup rules), and in co-op.
 
 ### Changed
 - Events raised between ticks (mode abilities) go out with the next tick instead of being dropped.

@@ -51,6 +51,15 @@ Adding a weapon: add an entry to `WEAPONS` with a new stable `index`; the simula
 sound synthesizer (parameters in `sound`) and sprite generator pick it up. Skins per weapon are a
 planned extension of the cosmetic system.
 
+### Loot chests and shields (0.7.0)
+
+Chests on every PvP map (`packages/shared/src/maps/chests.ts`) open with E and give a random
+weapon (`CHEST_WEAPONS`, weighted), +50 shield (max 100, absorbed before health) and full ammo,
+then stay closed for 40 s. Chest-only weapons (`slotKind: "loot"`, never in loadouts): Talon
+Carbine (fast assault rifle), Vanguard BR (semi-automatic battle rifle), Grinder minigun (1300 rpm,
+150-round drum, slow to carry), Hammer RPG (one rocket per reload, explodes on impact: up to 110
+damage within 130 px, no self or team damage). Numbers are data in `config/weapons.ts`.
+
 ### Slots and pickups
 
 Slot 1 = chosen primary, slot 2 = Warden P9, slot 3 = weapon picked up on the map (E). Weapon

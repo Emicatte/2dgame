@@ -135,6 +135,8 @@ interface EnterTarget {
   seat: number;
 }
 /** Visible world area stays the same on every screen size (fairness across resolutions). */
+/** Interact prompt next to a loot chest. */
+const CHEST_PROMPT = "Open chest";
 const VIEW_W = 1600;
 const VIEW_H = 900;
 
@@ -625,7 +627,14 @@ export class ArenaScene extends Phaser.Scene {
     }
     this.pickupViews.clear();
     for (const p of map.pickups) {
-      const color = p.kind === "health" ? 0xff6b6b : p.kind === "ammo" ? 0xffd27a : 0x9fe7ff;
+      const color =
+        p.kind === "health"
+          ? 0xff6b6b
+          : p.kind === "ammo"
+            ? 0xffd27a
+            : p.kind === "chest"
+              ? 0xffc53d
+              : 0x9fe7ff;
       const glow = this.add
         .image(p.x, p.y, TEX.glow)
         .setBlendMode(Phaser.BlendModes.ADD)
@@ -643,7 +652,9 @@ export class ArenaScene extends Phaser.Scene {
           ? TEX.pickupHealth
           : p.kind === "ammo"
             ? TEX.pickupAmmo
-            : TEX.weapon(p.weapon ?? "rifle");
+            : p.kind === "chest"
+              ? TEX.pickupChest
+              : TEX.weapon(p.weapon ?? "rifle");
       const icon = this.add
         .image(p.x, p.y, iconKey)
         .setScale((p.kind === "weapon" ? 1.1 : 0.8) / TEX_SCALE)
@@ -983,7 +994,23 @@ export class ArenaScene extends Phaser.Scene {
           }
           break;
         case "pickup":
-          if (ev.p === self) sfx.pickup();
+          if (ev.p === self) {
+            sfx.pickup();
+            if (ev.kind === "chest") {
+              const w = ev.w !== undefined ? weaponByIndex(ev.w) : undefined;
+              gameEvents.emit("notice", { text: `Chest: ${w?.name ?? "weapon"} + shield`, tone: "good" });
+            }
+          }
+          break;
+        case "boom":
+          // Rocket impacts (PvE blasts have their own feedback in the PvE layer).
+          if (!this.pve.active) {
+            this.effects.explosion(ev.x, ev.y);
+            const s = this.listenerSpatial(ev.x, ev.y);
+            sfx.explosion(s.distance, s.pan);
+            const d = Math.hypot(this.predictor.sim.x - ev.x, this.predictor.sim.y - ev.y);
+            if (d < ev.r * 2) this.cameras.main.shake(180, 0.008 * settingsStore.get().screenShake);
+          }
           break;
         case "seat":
           if (ev.p === self) sfx.door(true);
@@ -2104,7 +2131,7 @@ export class ArenaScene extends Phaser.Scene {
     const weapon = this.predictor.mount ? null : this.nearbyWeaponPickup();
     const interact = this.enterTarget
       ? `Enter ${this.enterTarget.def.name} as ${this.enterTarget.def.seats[this.enterTarget.seat]!.role}`
-      : (this.enterBlocked ?? (weapon ? `Take ${weapon}` : null));
+      : (this.enterBlocked ?? (weapon ? (weapon === CHEST_PROMPT ? weapon : `Take ${weapon}`) : null));
     if (this.pve.active) this.updatePveHud(state, serverTick);
     const killerName = this.killedBy ? (state.players.get(this.killedBy)?.name ?? "someone") : null;
     const keySlots = ["1", "2", "3"];
@@ -2112,6 +2139,7 @@ export class ArenaScene extends Phaser.Scene {
       ready: true,
       alive: !!me?.alive,
       hp: me?.hp ?? 0,
+      shield: me?.shield ?? 0,
       weaponId: def?.id ?? null,
       weaponName: def?.name ?? "",
       mag: slot?.mag ?? 0,
@@ -2428,11 +2456,12 @@ export class ArenaScene extends Phaser.Scene {
     const sim = this.predictor.sim;
     if (!this.predictorAlive) return null;
     for (const p of this.map.pickups) {
-      if (p.kind !== "weapon" || !p.weapon) continue;
+      if (p.kind !== "chest" && (p.kind !== "weapon" || !p.weapon)) continue;
       const pv = this.pickupViews.get(p.id);
       if (!pv?.active) continue;
       if (Math.hypot(p.x - sim.x, p.y - sim.y) <= PLAYER.interactRadius) {
-        const def: WeaponDef = WEAPONS[p.weapon];
+        if (p.kind === "chest") return CHEST_PROMPT;
+        const def: WeaponDef = WEAPONS[p.weapon!];
         return def.name;
       }
     }

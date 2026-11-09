@@ -30,6 +30,7 @@ export const TEX = {
   ring: "ring",
   pickupHealth: "pickup-health",
   pickupAmmo: "pickup-ammo",
+  pickupChest: "pickup-chest",
   pickupBase: "pickup-base",
   laser: "laser",
 } as const;
@@ -150,6 +151,35 @@ function drawWeapon(w: WeaponDef): HTMLCanvasElement {
     ctx.fill();
     ctx.fillStyle = hex(0x9fe7ff, 0.9);
     ctx.fillRect(sh.len * 0.25 + 1, -sh.h / 2 - 2.2, 2, 2);
+  }
+  if (w.id === "minigun") {
+    // Barrel cluster and the drum under the body.
+    ctx.fillStyle = hex(0x3a3d44);
+    for (const dy of [-2.6, 0, 2.6]) {
+      roundRect(ctx, sh.len * 0.5, dy - 1, sh.len * 0.5, 2, 1);
+      ctx.fill();
+    }
+    ctx.fillStyle = hex(0x1e2024);
+    roundRect(ctx, sh.len * 0.2, sh.h / 2 - 1, 8, 6, 2);
+    ctx.fill();
+  }
+  if (w.id === "rpg") {
+    // Launch tube with the warhead sticking out.
+    ctx.fillStyle = hex(0x4a5a3a);
+    roundRect(ctx, sh.len * 0.05, -sh.h / 2, sh.len * 0.8, sh.h, 3);
+    ctx.fill();
+    ctx.fillStyle = hex(0x6b6f76);
+    ctx.beginPath();
+    ctx.moveTo(sh.len * 0.85, -sh.h / 2 + 1);
+    ctx.lineTo(sh.len + 1, 0);
+    ctx.lineTo(sh.len * 0.85, sh.h / 2 - 1);
+    ctx.closePath();
+    ctx.fill();
+  }
+  if (w.id === "carbine" || w.id === "battlerifle") {
+    ctx.fillStyle = hex(0x1e2024);
+    roundRect(ctx, sh.len * 0.3, sh.h / 2 - 1, 4, w.id === "battlerifle" ? 4 : 6, 1);
+    ctx.fill();
   }
   if (w.id === "shotgun") {
     ctx.fillStyle = hex(0x6b4a30);
@@ -390,6 +420,27 @@ function drawLaser(): HTMLCanvasElement {
   return c;
 }
 
+function drawChest(): HTMLCanvasElement {
+  const S = TEX_SCALE;
+  const [c, ctx] = makeCanvas(40 * S, 40 * S);
+  ctx.scale(S, S);
+  ctx.fillStyle = hex(0x3a2614);
+  roundRect(ctx, 5, 10, 30, 24, 3);
+  ctx.fill();
+  ctx.fillStyle = hex(0x8a5a2b);
+  roundRect(ctx, 5, 8, 30, 22, 3);
+  ctx.fill();
+  ctx.fillStyle = hex(0xa8743a);
+  roundRect(ctx, 5, 8, 30, 8, 3);
+  ctx.fill();
+  ctx.fillStyle = hex(0xe0b04a);
+  ctx.fillRect(5, 15, 30, 2);
+  ctx.fillRect(18, 13, 4, 7);
+  ctx.fillStyle = hex(0x2a1a0c);
+  ctx.fillRect(19.2, 16.5, 1.6, 2);
+  return c;
+}
+
 function drawPickup(kind: "health" | "ammo" | "base"): HTMLCanvasElement {
   const S = TEX_SCALE;
   const size = 40 * S;
@@ -445,6 +496,7 @@ export function generateTextures(scene: Phaser.Scene): void {
   add(scene, TEX.laser, drawLaser());
   add(scene, TEX.pickupHealth, drawPickup("health"));
   add(scene, TEX.pickupAmmo, drawPickup("ammo"));
+  add(scene, TEX.pickupChest, drawChest());
   add(scene, TEX.pickupBase, drawPickup("base"));
   generateVehicleTextures(scene);
 }

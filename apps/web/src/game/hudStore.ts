@@ -56,6 +56,8 @@ export interface HudState {
   alive: boolean;
   hp: number;
   maxHp: number;
+  /** Shield points from chests (0 = none). */
+  shield: number;
   weaponId: string | null;
   weaponName: string;
   mag: number;
@@ -110,6 +112,7 @@ export const hudStore = createStore<HudState>({
   alive: false,
   hp: 100,
   maxHp: 100,
+  shield: 0,
   weaponId: null,
   weaponName: "",
   mag: 0,

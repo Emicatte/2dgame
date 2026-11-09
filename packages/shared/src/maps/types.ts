@@ -98,7 +98,8 @@ export interface LightDef extends Vec2 {
   group?: "power" | "alarm" | "emergency";
 }
 
-export type PickupKind = "health" | "ammo" | "weapon";
+/** "chest": opened with interact, gives a random weapon, shield and ammo (CHEST_WEAPONS, SHIELD). */
+export type PickupKind = "health" | "ammo" | "weapon" | "chest";
 
 export interface PickupDef extends Vec2 {
   id: string;

@@ -27,6 +27,7 @@ export function syncPlayerState(ps: PlayerState, p: ServerPlayer, tick: number, 
   ps.y = pub ? pub.y : s.y;
   ps.aim = pub ? pub.aim : s.aim;
   ps.hp = p.hp;
+  ps.shield = p.shield;
   ps.kills = p.stats.kills;
   ps.deaths = p.stats.deaths;
   ps.streak = p.stats.streak;

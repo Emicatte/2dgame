@@ -18,6 +18,8 @@ export const PlayerState = schema(
     y: t.float32().default(0),
     aim: t.float32().default(0),
     hp: t.uint8().default(0),
+    /** Shield points (absorb damage before health), 0..SHIELD.max. */
+    shield: t.uint8().default(0),
     kills: t.uint16().default(0),
     deaths: t.uint16().default(0),
     streak: t.uint8().default(0),

@@ -2,6 +2,7 @@ import {
   AIRBORNE_ALT,
   airWorldFor,
   BTN,
+  CHEST_RESPAWN_SEC,
   type Circle,
   type CollisionWorld,
   canDamage,
@@ -41,7 +42,9 @@ import {
   RAM_CREDIT_SEC,
   refillAmmo,
   resolveCircle,
+  rollChestWeapon,
   type SeatDef,
+  SHIELD,
   type ShotIntent,
   type SimEvent,
   SLOT_PICKUP,
@@ -107,6 +110,8 @@ export interface ServerPlayer {
   sim: PlayerSim;
   alive: boolean;
   hp: number;
+  /** Shield points from chests: absorb damage before health. */
+  shield: number;
   respawnTick: number;
   protectedUntil: number;
   queue: InputFrame[];
@@ -474,6 +479,7 @@ export class GameSimulation {
       sim: createPlayerSim(spawn.x, spawn.y, init.primary),
       alive: false,
       hp: 0,
+      shield: 0,
       respawnTick: 0,
       protectedUntil: 0,
       queue: [],
@@ -877,6 +883,21 @@ export class GameSimulation {
       s: shot.seq,
     });
 
+    if (weapon.splash) {
+      // Rockets: no direct hit damage, the explosion at the end of the flight does it all.
+      const a = shot.angles[0] ?? 0;
+      const d = Math.max(0, (dists[0] ?? 0) - 4);
+      const before = shooter.stats.damageDealt;
+      this.explode(
+        shooter,
+        shot.ox + Math.cos(a) * d,
+        shot.oy + Math.sin(a) * d,
+        weapon.index,
+        weapon.splash,
+      );
+      if (shooter.stats.damageDealt > before) shooter.stats.shotsHit += 1;
+      return;
+    }
     if (damageByTarget.size > 0) shooter.stats.shotsHit += 1;
     if (this.pve) this.pve.zw.noise(shot.ox, shot.oy, shotNoise(weapon));
     const objectHits: ObjectHit[] = [];
@@ -932,7 +953,7 @@ export class GameSimulation {
     if (!target.alive) return;
     const shielded = target.protectedUntil > this.tick;
     const dmg = shielded ? 0 : Math.max(1, Math.round(raw));
-    target.hp = Math.max(0, target.hp - dmg);
+    this.applyDamage(target, dmg);
     if (attacker && attacker !== target) attacker.stats.damageDealt += dmg;
     const lethal = target.hp === 0;
     this.events.push({
@@ -951,6 +972,39 @@ export class GameSimulation {
     if (lethal) this.kill(target, attacker && attacker !== target ? attacker : null, weapon);
   }
 
+  /** The shield takes the damage first, health the rest. */
+  private applyDamage(target: ServerPlayer, dmg: number): void {
+    const absorbed = Math.min(target.shield, dmg);
+    target.shield -= absorbed;
+    target.hp = Math.max(0, target.hp - (dmg - absorbed));
+  }
+
+  /** Rocket impact: damage falls off from the centre; the shooter and teammates are spared. */
+  private explode(
+    shooter: ServerPlayer,
+    x: number,
+    y: number,
+    weapon: number,
+    splash: { radius: number; damage: number },
+  ): void {
+    this.events.push({ t: "boom", x: Math.round(x), y: Math.round(y), r: splash.radius });
+    for (const t of this.players.values()) {
+      if (!t.alive || t.vehicle || !canDamage(shooter, t, this.rules)) continue;
+      if (this.ctl && !this.ctl.playerTargetable(t)) continue;
+      const d = Math.hypot(t.sim.x - x, t.sim.y - y);
+      if (d > splash.radius + PLAYER.radius) continue;
+      if (!hasLineOfSight(this.shotWorld, x, y, t.sim.x, t.sim.y)) continue;
+      const k = 1 - Math.max(0, d - PLAYER.radius) / splash.radius;
+      this.damagePlayer(t, splash.damage * Math.max(0.25, k), shooter, weapon, t.sim.x, t.sim.y);
+    }
+    for (const v of this.vehicles.values()) {
+      if (v.status !== VEHICLE_READY || v.sim.alt >= AIRBORNE_ALT) continue;
+      if (!canDamage(shooter, { id: `veh:${v.id}`, team: this.vehicleTeam(v) }, this.rules)) continue;
+      if (Math.hypot(v.sim.x - x, v.sim.y - y) > splash.radius + 40) continue;
+      this.damageVehicle(v, splash.damage, shooter, x, y);
+    }
+  }
+
   /** PvE: damage from an enemy or a hazard (`attackerId` "z:<id>" or ""). */
   damagePlayerFrom(
     target: ServerPlayer,
@@ -963,7 +1017,7 @@ export class GameSimulation {
     if (!target.alive) return;
     const shielded = target.protectedUntil > this.tick;
     const dmg = shielded ? 0 : Math.max(1, Math.round(raw));
-    target.hp = Math.max(0, target.hp - dmg);
+    this.applyDamage(target, dmg);
     const lethal = target.hp === 0;
     this.events.push({
       t: "hit",
@@ -1077,6 +1131,7 @@ export class GameSimulation {
     p.sim.aim = keepAim;
     p.alive = true;
     p.hp = PLAYER.maxHealth;
+    p.shield = 0;
     p.respawnTick = 0;
     p.protectedUntil = this.tick + this.secToTicks(PLAYER.spawnProtectionSeconds);
     if (!freshMatch) p.stats.streak = 0;
@@ -1092,7 +1147,8 @@ export class GameSimulation {
       }
       for (const p of this.players.values()) {
         if (!p.alive || p.vehicle || p.pve.downed) continue;
-        const reach = pk.def.kind === "weapon" ? PLAYER.interactRadius : PICKUP_RADIUS;
+        const reach =
+          pk.def.kind === "weapon" || pk.def.kind === "chest" ? PLAYER.interactRadius : PICKUP_RADIUS;
         if (distSq(p.sim.x, p.sim.y, pk.def.x, pk.def.y) > reach * reach) continue;
         let taken = false;
         if (pk.def.kind === "health" && p.hp < PLAYER.maxHealth) {
@@ -1103,6 +1159,16 @@ export class GameSimulation {
         } else if (pk.def.kind === "weapon" && pk.def.weapon && p.interact) {
           giveWeapon(p.sim, pk.def.weapon);
           taken = true;
+        } else if (pk.def.kind === "chest" && p.interact) {
+          // A random weapon, shield and full ammo.
+          const w = rollChestWeapon(this.rng());
+          giveWeapon(p.sim, w);
+          refillAmmo(p.sim);
+          p.shield = Math.min(SHIELD.max, p.shield + SHIELD.perChest);
+          this.events.push({ t: "pickup", p: p.id, id: pk.def.id, kind: "chest", w: WEAPONS[w].index });
+          pk.active = false;
+          pk.respawnTick = this.tick + this.secToTicks(CHEST_RESPAWN_SEC);
+          break;
         }
         if (taken) {
           pk.active = false;
