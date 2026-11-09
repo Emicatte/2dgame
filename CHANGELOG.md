@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (branch `dread`)
+## 0.6.3 — 2026-11-09 (infected never spawn behind closed doors)
 
 ### Fixed
 - **Outbreak: no more infected spawning behind closed doors.** When the squad stood where every
