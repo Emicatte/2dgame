@@ -79,7 +79,7 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
           <LevelChip level={p.level} />
           <span>{p.name}</span>
           {host && isPrivate && <span className="badge badge--accent">Host</span>}
-          {bot && <span className="badge">Training target</span>}
+          {bot && <span className="badge">Bot</span>}
           {!p.connected && <span className="badge badge--warn">Reconnecting</span>}
         </span>
         <span className={`badge ${p.ready || (host && isPrivate) ? "badge--good" : ""}`}>

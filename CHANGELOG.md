@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased (branch `dread`)
+
+### Changed
+- **Practice bots** (a host alone in a private arena): the three strafing training targets are
+  now bots that play like people (Rook, Vex, Kestrel). They look for enemies they can actually
+  see, react after a moment, aim imperfectly and fire in bursts, keep their weapon's distance
+  while strafing, break line of sight to reload or when hurt, go for a medkit, hunt where they
+  last saw you, and fight each other in free-for-all. Same brain in host mode and on the
+  dedicated server (`apps/server/src/bots/BotBrain.ts`). Practice matches still record nothing.
+
 ## 0.6.0 — 2026-11-09 (the full Outbreak campaign: Dead District, The Convoy, Black Site, Final Breach)
 
 ### Added

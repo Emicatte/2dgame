@@ -32,6 +32,7 @@ import {
 } from "@scrapline/shared";
 import { z } from "zod";
 // The dedicated server's simulation, state mirroring and scoring run unchanged in the host's tab.
+import { BOT_NAMES, BotDriver } from "../../../server/src/bots/BotBrain.ts";
 import { type ComputedResult, computeResults, resultRows } from "../../../server/src/players/results.ts";
 import { applyPveSettings, buildPveResults, pveOver } from "../../../server/src/pve/pveRoom.ts";
 import { MatchRules } from "../../../server/src/rules/MatchRules.ts";
@@ -144,7 +145,7 @@ export class HostRoom {
   private readonly pending = new Set<PeerLink>();
   private readonly lastInputTick = new Map<string, number>();
   private readonly bots = new Set<string>();
-  private botSeq = 0;
+  private readonly botDriver = new BotDriver();
   private practiceMatch = false;
   private disposed = false;
   private stopTicker: (() => void) | null = null;
@@ -820,7 +821,7 @@ export class HostRoom {
         const id = `bot:${i}`;
         this.bots.add(id);
         this.addPlayer(id, {
-          name: `Target ${i}`,
+          name: BOT_NAMES[i - 1] ?? `Bot ${i}`,
           skin: "ash",
           level: 1,
           primary: "rifle",
@@ -837,26 +838,13 @@ export class HostRoom {
         this.lastInputTick.delete(id);
       }
       this.bots.clear();
+      this.botDriver.clear();
     }
   }
 
+  /** Practice bots play like people (see BotBrain): they move, take cover and shoot back. */
   private driveBots() {
-    if (this.bots.size === 0) return;
-    let k = 0;
-    for (const id of this.bots) {
-      k++;
-      const phase = Math.floor((this.sim.tick + k * 13) / (25 + k * 7)) % 2;
-      const frames = [0, 1, 2].map(() => ({
-        seq: ++this.botSeq,
-        mx: phase === 0 ? 1 : -1,
-        my: 0,
-        aim: Math.PI,
-        buttons: 0,
-        slot: -1,
-        viewTick: this.sim.tick,
-      }));
-      this.sim.enqueue(id, frames);
-    }
+    if (this.bots.size > 0) this.botDriver.drive(this.sim, this.bots);
   }
 
   // ------------------------------------------------------------------ state

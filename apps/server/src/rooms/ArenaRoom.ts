@@ -41,6 +41,7 @@ import {
   type XpLine,
 } from "@scrapline/shared";
 import { z } from "zod";
+import { BOT_NAMES, BotDriver } from "../bots/BotBrain.ts";
 import { uniqueRoomCode } from "../matchmaking/roomCodes.ts";
 import type { MatchPlayerResult } from "../persistence/repository.ts";
 import { type ComputedResult, computeResults, personalResult, resultRows } from "../players/results.ts";
@@ -124,6 +125,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   private readonly replacedSessions = new Set<string>();
   /** Training targets present while a private room has a single human (solo practice). */
   private readonly bots = new Set<string>();
+  private readonly botDriver = new BotDriver();
   private practiceMatch = false;
 
   override async onCreate(options: CreateOptions = {}) {
@@ -683,8 +685,8 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   // ---------------------------------------------------------------- practice targets
 
   /**
-   * Solo players in a private room get three strafing training targets, so the arena is
-   * playable alone. Targets disappear as soon as a second human joins. Practice matches never
+   * Solo players in a private room get three practice bots that play like people, so the arena
+   * is playable alone. Targets disappear as soon as a second human joins. Practice matches never
    * award XP or touch persistent stats (nothing to farm).
    */
   private syncPracticeTargets() {
@@ -698,7 +700,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
         this.sim.addPlayer({
           id,
           playerId: "",
-          name: `Target ${i}`,
+          name: BOT_NAMES[i - 1] ?? `Bot ${i}`,
           skin: "ash",
           level: 1,
           primary: "rifle",
@@ -708,7 +710,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
         this.rules.assign(id);
         const ps = new PlayerState();
         Object.assign(ps, {
-          name: `Target ${i}`,
+          name: BOT_NAMES[i - 1] ?? `Bot ${i}`,
           skin: "ash",
           level: 1,
           primary: "rifle",
@@ -725,29 +727,13 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
         this.views.delete(id);
       }
       this.bots.clear();
+      this.botDriver.clear();
     }
   }
 
-  private botSeq = 0;
-
-  /** Targets strafe on a slow deterministic pattern and never shoot back. */
+  /** Practice bots play like people (see BotBrain): they move, take cover and shoot back. */
   private driveBots() {
-    if (this.bots.size === 0) return;
-    let k = 0;
-    for (const id of this.bots) {
-      k++;
-      const phase = Math.floor((this.sim.tick + k * 13) / (25 + k * 7)) % 2;
-      const frames = [0, 1, 2].map(() => ({
-        seq: ++this.botSeq,
-        mx: phase === 0 ? 1 : -1,
-        my: 0,
-        aim: Math.PI,
-        buttons: 0,
-        slot: -1,
-        viewTick: this.sim.tick,
-      }));
-      this.sim.enqueue(id, frames);
-    }
+    if (this.bots.size > 0) this.botDriver.drive(this.sim, this.bots);
   }
 
   private sendPracticeResults(standings: ServerPlayer[]) {

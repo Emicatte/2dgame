@@ -18,7 +18,15 @@ const ARGS = [
 interface Hooks {
   selfId(): string | null;
   phase(): string | null;
-  players(): { id: string; x: number; y: number; alive: boolean }[];
+  players(): {
+    id: string;
+    x: number;
+    y: number;
+    alive: boolean;
+    hp: number;
+    kills: number;
+    deaths: number;
+  }[];
   pve(): { dark: boolean } | null;
   net(): {
     stalled: boolean;
@@ -51,6 +59,11 @@ const phaseIs = (page: Page, phase: string, timeout = 20_000) =>
     phase,
     { timeout },
   );
+
+const SHOTS = process.env.E2E_SHOTS_DIR;
+async function shot(page: Page, name: string) {
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` });
+}
 
 let browsers: Browser[] = [];
 test.afterEach(async () => {
@@ -141,4 +154,51 @@ test("host mode: create, Team Deathmatch invite link, play, reload and resume, h
   await a.close();
   await expect(b.getByText("The host closed the arena.")).toBeVisible({ timeout: 15_000 });
   await expect(b.getByTestId("join-room")).toBeVisible();
+});
+
+test("host alone: the practice bots move, fight and hurt the host", async () => {
+  test.setTimeout(150_000);
+  browsers = [await chromium.launch({ executablePath: CHROME, headless: true, args: ARGS })];
+  const a = await (await browsers[0]!.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+  a.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
+  await onboard(a, "Solo");
+  await a.getByTestId("create-room").click();
+  await a.getByTestId("create-submit").click();
+  await expect(a.getByTestId("host-hint")).toBeVisible({ timeout: 15_000 });
+  await expect(a.getByText("Bot", { exact: true })).toHaveCount(3);
+  await a.getByTestId("start-match").click();
+  await phaseIs(a, "playing", 30_000);
+  const selfId = (await hooks(a, (h) => h.selfId()))!;
+  const start = (await hooks(a, (h) => h.players())).filter((p) => p.id.startsWith("bot:"));
+  expect(start.length).toBe(3);
+  let lowest = 100;
+  let botDamage = 0;
+  let moved = 0;
+  for (let i = 0; i < 40; i++) {
+    await a.waitForTimeout(500);
+    const ps = await hooks(a, (h) => h.players());
+    const me = ps.find((p) => p.id === selfId)!;
+    lowest = Math.min(lowest, me.alive ? me.hp : 0);
+    botDamage = Math.max(
+      botDamage,
+      ps.filter((p) => p.id.startsWith("bot:")).reduce((n, p) => n + p.kills + p.deaths, 0),
+    );
+    moved = Math.max(
+      moved,
+      ...ps
+        .filter((p) => p.id.startsWith("bot:"))
+        .map((p) => {
+          const s0 = start.find((b) => b.id === p.id)!;
+          return Math.hypot(p.x - s0.x, p.y - s0.y);
+        }),
+    );
+    if (i === 10 || i === 25) await shot(a, `bots-${i}`);
+    if (lowest < 100 && moved > 200) break;
+  }
+  console.log(
+    `[bots e2e] host hp low ${lowest}, bot kills+deaths ${botDamage}, max bot travel ${Math.round(moved)} px`,
+  );
+  expect(moved).toBeGreaterThan(200);
+  // They shoot: the host (standing still) gets hit, or the bots already traded kills.
+  expect(lowest < 100 || botDamage > 0).toBe(true);
 });
