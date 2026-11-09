@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.1 — unreleased (branch `loot-drops`)
+
+### Changed
+- **Chest loot falls on the ground.** An opened chest drops a weapon, a shield cell and an ammo box
+  next to it; nothing is given automatically. Weapons are taken with E (one per press, the nearest):
+  into the free pickup slot, otherwise in place of the held weapon (the sidearm is never replaced),
+  and the weapon you had stays on the ground with its ammo, for anyone. The same goes for the map's
+  weapon pickups. Ammo and shield cells are taken by walking over them.
+- **Shield cells are carried** (up to 3, HUD counter) and used with X (rebindable): +50 shield, up
+  to 100. A cell is kept when the shield is already full. Cells are lost on death.
+- Items on the ground disappear after 45 s (at most 48 at once). Protocol: input button
+  `BTN.SHIELD` (32), `MatchState.drops`, `PlayerState.cells`.
+
 ## 0.7.0 — unreleased (branch `modes-expansion`: Gun Game, Hide & Seek, Prop Hunt, the mode system)
 
 ### Added
@@ -31,7 +44,8 @@
   per match and only for completed matches.
 - `apps/server/scripts/modebench.ts`: tick cost and bandwidth per mode.
 - **Loot chests, new weapons, shields.** Chests on every PvP map (4, 8 on the large maps; opened
-  with E, back after 40 s) give a random weapon, +50 shield and full ammo. Four chest-only weapons:
+  with E, back after 40 s) give a random weapon, +50 shield and full ammo (0.7.1: dropped on the
+  ground instead, see above). Four chest-only weapons:
   Talon Carbine and Vanguard BR (assault rifles), Grinder minigun, Hammer RPG (explodes on impact:
   area damage with falloff, never to the shooter or teammates, damages vehicles). Shields (up to
   100) absorb damage before health; HUD shield bar. Off in Gun Game and the round modes (their

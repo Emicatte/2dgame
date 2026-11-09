@@ -35,6 +35,7 @@ unlocks and daily challenges, and private rooms you can share with a link.
 | Hide & Seek (Classic, Infection, Blackout), Prop Hunt (transform, lock, taunt, decoy, hints) | Done (0.7.0): secrets kept off the wire (per-viewer views and events), verified by decoding what each client receives (unit, host mode, two-browser E2E); balance not playtested |
 | Salvage Depot party map, Play screen, next-map vote, mode career stats | Done (0.7.0) |
 | Loot chests (random weapon, shield, ammo), Talon Carbine, Vanguard BR, Grinder minigun, Hammer RPG, shields | Done (0.7.0): unit tests (chest, shield, rocket splash) and a browser test (open a chest with E) |
+| Chest loot on the ground: choose the weapon, swapped weapon stays on the ground, shield cells carried and used with X | Done (0.7.1): unit tests (drops, swap, cells) and a browser test (chest → take weapon → cell → X) |
 | Infection, Sabotage, Bounty Hunt, Extraction, Chaos Arena, Vehicle Pursuit / Convoy, Boss Rush | Designed and planned (shown as "Planned" on the Play screen), not built: [docs/v4/MODES.md §6](docs/v4/MODES.md) |
 | Performance | CPU cost per frame measured (small); server tick cost per mode measured (`scripts/modebench.ts`); **60 FPS on a real GPU not yet verified**: run `/bench.html` on target hardware |
 
@@ -74,7 +75,8 @@ pnpm dev:server     # migrations run automatically at boot
 | R | Reload |
 | Shift | Dash |
 | 1 / 2 / 3 | Primary / sidearm / picked-up weapon |
-| E | Pick up weapon · enter / leave a vehicle · hold: revive a teammate, use mission objects (Outbreak) · Prop Hunt: copy the object in front |
+| E | Pick up weapon (the one you hold stays on the ground) · open a chest · enter / leave a vehicle · hold: revive a teammate, use mission objects (Outbreak) · Prop Hunt: copy the object in front |
+| X | Use a shield cell |
 | Q / C / T / G | Prop Hunt: choose an object / lock position / taunt / decoy |
 | F | Change seat in a vehicle |
 | W / S, A / D (driving) | Throttle / brake-reverse, steer; Shift = handbrake |

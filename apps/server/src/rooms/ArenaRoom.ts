@@ -57,7 +57,13 @@ import { MatchRules } from "../rules/MatchRules.ts";
 import { verifyToken } from "../security/tokens.ts";
 import { getServices } from "../services.ts";
 import { GameSimulation, type ServerPlayer } from "../simulation/GameSimulation.ts";
-import { syncObjectives, syncPlayerState, syncPve, syncVehicles } from "../simulation/stateSync.ts";
+import {
+  syncDrops,
+  syncObjectives,
+  syncPlayerState,
+  syncPve,
+  syncVehicles,
+} from "../simulation/stateSync.ts";
 
 interface AuthData {
   playerId: string;
@@ -903,6 +909,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     this.rules.sync();
     this.syncPickups(false);
     syncVehicles(this.state, this.sim);
+    syncDrops(this.state, this.sim);
     syncObjectives(this.state, this.sim);
     syncPve(this.state, this.sim);
     const viewers: [string, StateView][] = [];

@@ -13,9 +13,10 @@ import { describe, expect, it } from "vitest";
 describe("2.0 protocol validation", () => {
   const frame = (b: number) => ({ s: 1, x: 0, y: 0, a: 0, b, w: -1, v: 0 });
 
-  it("accepts the seat-change button and rejects unknown button bits", () => {
+  it("accepts the seat-change and shield buttons and rejects unknown button bits", () => {
     expect(inputBatchSchema.safeParse({ i: [frame(BTN.SEAT | BTN.INTERACT | BTN.FIRE)] }).success).toBe(true);
-    expect(inputBatchSchema.safeParse({ i: [frame(32)] }).success).toBe(false);
+    expect(inputBatchSchema.safeParse({ i: [frame(BTN.SHIELD)] }).success).toBe(true);
+    expect(inputBatchSchema.safeParse({ i: [frame(64)] }).success).toBe(false);
     expect(inputBatchSchema.safeParse({ i: [frame(-1)] }).success).toBe(false);
   });
 

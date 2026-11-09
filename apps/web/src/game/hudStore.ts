@@ -58,6 +58,8 @@ export interface HudState {
   maxHp: number;
   /** Shield points from chests (0 = none). */
   shield: number;
+  /** Shield cells carried. */
+  cells: number;
   weaponId: string | null;
   weaponName: string;
   mag: number;
@@ -113,6 +115,7 @@ export const hudStore = createStore<HudState>({
   hp: 100,
   maxHp: 100,
   shield: 0,
+  cells: 0,
   weaponId: null,
   weaponName: "",
   mag: 0,

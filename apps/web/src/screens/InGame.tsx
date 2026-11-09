@@ -513,6 +513,15 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
                     />
                   </div>
                 )}
+                {hud.cells > 0 && (
+                  <div className="shield-cells" data-testid="hud-cells">
+                    <kbd>{keyLabel(settings.bindings.shield)}</kbd>
+                    <span className="stencil">Shield cells</span>
+                    <span className="mono">
+                      {hud.cells}/{SHIELD.maxCells}
+                    </span>
+                  </div>
+                )}
               </div>
               <div className={`dash-meter ${hud.dashProgress >= 1 ? "is-ready" : ""}`}>
                 <span>Dash</span>

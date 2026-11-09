@@ -20,6 +20,8 @@ export const PlayerState = schema(
     hp: t.uint8().default(0),
     /** Shield points (absorb damage before health), 0..SHIELD.max. */
     shield: t.uint8().default(0),
+    /** Shield cells carried (used with BTN.SHIELD), 0..SHIELD.maxCells. */
+    cells: t.uint8().default(0),
     kills: t.uint16().default(0),
     deaths: t.uint16().default(0),
     streak: t.uint8().default(0),
@@ -97,6 +99,20 @@ export const PickupState = schema(
   "PickupState",
 );
 export type PickupState = SchemaType<typeof PickupState>;
+
+/** An item lying on the ground: chest loot or a swapped-out weapon. */
+export const DropState = schema(
+  {
+    /** "weapon" | "shield" | "ammo". */
+    kind: t.string().default("ammo"),
+    /** Weapon index (weapon drops only). */
+    w: t.uint8().default(0),
+    x: t.float32().default(0),
+    y: t.float32().default(0),
+  },
+  "DropState",
+);
+export type DropState = SchemaType<typeof DropState>;
 
 /**
  * One vehicle. Everybody receives all of it: the driver reconciles its prediction from these
@@ -362,6 +378,7 @@ export const MatchState = schema(
     firstBloodDone: t.boolean().default(false),
     players: t.map(PlayerState),
     pickups: t.map(PickupState),
+    drops: t.map(DropState),
     vehicles: t.map(VehicleState),
     /** Domination points ("A", "B", "C") or CTF flags ("1", "2"); empty in other modes. */
     objectives: t.map(ObjectiveState),

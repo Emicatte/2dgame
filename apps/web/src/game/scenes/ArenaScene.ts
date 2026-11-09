@@ -176,6 +176,8 @@ export class ArenaScene extends Phaser.Scene {
   /** Collision worlds with the current mission doors (null outside PvE maps with doors). */
   private doorWorlds: { world: CollisionWorld; shotWorld: CollisionWorld } | null = null;
   private pickupViews = new Map<string, PickupView>();
+  /** Items on the ground (MatchState.drops); weapon drops carry their weapon index. */
+  private dropViews = new Map<string, PickupView & { w: number | null }>();
   private views = new Map<string, PlayerView>();
   private modes!: ModeLayer;
   /** Prop Hunt bakes the map without its objects (they are drawn live): which variant is loaded. */
@@ -296,6 +298,14 @@ export class ArenaScene extends Phaser.Scene {
         return { x: (x - cam.worldView.x) * cam.zoom, y: (y - cam.worldView.y) * cam.zoom };
       },
       predictor: () => ({ corrections: this.predictor.corrections, pending: this.predictor.pendingCount }),
+      /** Items on the ground (chest loot, swapped-out weapons). */
+      drops: () => {
+        const out: { id: string; kind: string; x: number; y: number }[] = [];
+        this.room?.state?.drops.forEach((d, id) => {
+          out.push({ id, kind: d.kind, x: d.x, y: d.y });
+        });
+        return out;
+      },
       /** Round modes / Gun Game, as this client received them (E2E secrecy checks). */
       mode: () => {
         const st = this.room?.state;
@@ -626,6 +636,7 @@ export class ArenaScene extends Phaser.Scene {
       pv.glow.destroy();
     }
     this.pickupViews.clear();
+    this.clearDropViews();
     for (const p of map.pickups) {
       const color =
         p.kind === "health"
@@ -926,6 +937,7 @@ export class ArenaScene extends Phaser.Scene {
       const v = this.pickupViews.get(id);
       if (v) v.active = pk.active;
     });
+    this.syncDropViews(state);
 
     if (phase !== this.lastPhase) this.onPhaseChange(this.lastPhase, phase);
     this.lastPhase = phase;
@@ -996,10 +1008,6 @@ export class ArenaScene extends Phaser.Scene {
         case "pickup":
           if (ev.p === self) {
             sfx.pickup();
-            if (ev.kind === "chest") {
-              const w = ev.w !== undefined ? weaponByIndex(ev.w) : undefined;
-              gameEvents.emit("notice", { text: `Chest: ${w?.name ?? "weapon"} + shield`, tone: "good" });
-            }
           }
           break;
         case "boom":
@@ -1298,7 +1306,7 @@ export class ArenaScene extends Phaser.Scene {
           if (ev.p !== self) this.effects.spawn(ev.x, ev.y);
           break;
         case "pickup": {
-          const pv = this.pickupViews.get(ev.id);
+          const pv = this.pickupViews.get(ev.id) ?? this.dropViews.get(ev.id);
           if (pv) this.effects.pickup(pv.x, pv.y);
           break;
         }
@@ -1554,6 +1562,7 @@ export class ArenaScene extends Phaser.Scene {
     if (i.isDown("reload")) buttons |= BTN.RELOAD;
     if (i.isDown("dash")) buttons |= BTN.DASH;
     if (i.isDown("interact")) buttons |= BTN.INTERACT;
+    if (i.isDown("shield")) buttons |= BTN.SHIELD;
     if (this.seatPending) {
       buttons |= BTN.SEAT;
       this.seatPending = false;
@@ -2067,9 +2076,54 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
+  private syncDropViews(state: MatchState) {
+    for (const [id, v] of this.dropViews) {
+      if (state.drops.has(id)) continue;
+      v.base.destroy();
+      v.icon.destroy();
+      v.glow.destroy();
+      this.dropViews.delete(id);
+    }
+    state.drops.forEach((d, id) => {
+      if (this.dropViews.has(id)) return;
+      const weapon = d.kind === "weapon" ? weaponByIndex(d.w) : undefined;
+      const color = d.kind === "shield" ? 0x5ab8ff : d.kind === "ammo" ? 0xffd27a : 0x9fe7ff;
+      const glow = this.add
+        .image(d.x, d.y, TEX.glow)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setTint(color)
+        .setAlpha(0.35)
+        .setDisplaySize(70, 70)
+        .setDepth(8);
+      const base = this.add
+        .image(d.x, d.y, TEX.pickupBase)
+        .setScale(0.8 / TEX_SCALE)
+        .setTint(color)
+        .setDepth(9);
+      const icon = this.add
+        .image(
+          d.x,
+          d.y,
+          weapon ? TEX.weapon(weapon.id) : d.kind === "ammo" ? TEX.pickupAmmo : TEX.pickupShield,
+        )
+        .setScale((weapon ? 1.1 : 0.7) / TEX_SCALE)
+        .setDepth(10);
+      this.dropViews.set(id, { id, base, icon, glow, x: d.x, y: d.y, active: true, w: weapon ? d.w : null });
+    });
+  }
+
+  private clearDropViews() {
+    for (const v of this.dropViews.values()) {
+      v.base.destroy();
+      v.icon.destroy();
+      v.glow.destroy();
+    }
+    this.dropViews.clear();
+  }
+
   private animatePickups() {
     const t = performance.now() / 1000;
-    for (const pv of this.pickupViews.values()) {
+    for (const pv of [...this.pickupViews.values(), ...this.dropViews.values()]) {
       pv.icon.setVisible(pv.active);
       pv.glow.setVisible(pv.active);
       pv.base.setAlpha(pv.active ? 0.9 : 0.25);
@@ -2140,6 +2194,7 @@ export class ArenaScene extends Phaser.Scene {
       alive: !!me?.alive,
       hp: me?.hp ?? 0,
       shield: me?.shield ?? 0,
+      cells: me?.cells ?? 0,
       weaponId: def?.id ?? null,
       weaponName: def?.name ?? "",
       mag: slot?.mag ?? 0,
@@ -2455,6 +2510,16 @@ export class ArenaScene extends Phaser.Scene {
   private nearbyWeaponPickup(): string | null {
     const sim = this.predictor.sim;
     if (!this.predictorAlive) return null;
+    // Same rule as the server: the nearest weapon on the ground within reach.
+    let best: string | null = null;
+    let bestD: number = PLAYER.interactRadius;
+    for (const d of this.dropViews.values()) {
+      const dist = Math.hypot(d.x - sim.x, d.y - sim.y);
+      if (d.w === null || dist > bestD) continue;
+      best = weaponByIndex(d.w)?.name ?? null;
+      bestD = dist;
+    }
+    if (best) return best;
     for (const p of this.map.pickups) {
       if (p.kind !== "chest" && (p.kind !== "weapon" || !p.weapon)) continue;
       const pv = this.pickupViews.get(p.id);

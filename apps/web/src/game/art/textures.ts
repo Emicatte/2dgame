@@ -31,6 +31,7 @@ export const TEX = {
   pickupHealth: "pickup-health",
   pickupAmmo: "pickup-ammo",
   pickupChest: "pickup-chest",
+  pickupShield: "pickup-shield",
   pickupBase: "pickup-base",
   laser: "laser",
 } as const;
@@ -441,6 +442,24 @@ function drawChest(): HTMLCanvasElement {
   return c;
 }
 
+/** Shield cell: a blue capsule. */
+function drawShieldCell(): HTMLCanvasElement {
+  const S = TEX_SCALE;
+  const [c, ctx] = makeCanvas(40 * S, 40 * S);
+  ctx.scale(S, S);
+  ctx.fillStyle = "#1d4f86";
+  roundRect(ctx, 12, 7, 16, 28, 6);
+  ctx.fill();
+  ctx.fillStyle = "#5ab8ff";
+  roundRect(ctx, 12, 5, 16, 28, 6);
+  ctx.fill();
+  ctx.fillStyle = "#d8eeff";
+  ctx.fillRect(16, 9, 3, 18);
+  ctx.fillStyle = "#c9d2dc";
+  ctx.fillRect(14, 3, 12, 4);
+  return c;
+}
+
 function drawPickup(kind: "health" | "ammo" | "base"): HTMLCanvasElement {
   const S = TEX_SCALE;
   const size = 40 * S;
@@ -497,6 +516,7 @@ export function generateTextures(scene: Phaser.Scene): void {
   add(scene, TEX.pickupHealth, drawPickup("health"));
   add(scene, TEX.pickupAmmo, drawPickup("ammo"));
   add(scene, TEX.pickupChest, drawChest());
+  add(scene, TEX.pickupShield, drawShieldCell());
   add(scene, TEX.pickupBase, drawPickup("base"));
   generateVehicleTextures(scene);
 }
