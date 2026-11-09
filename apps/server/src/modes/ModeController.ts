@@ -211,8 +211,9 @@ export abstract class BaseMode implements ModeController {
   configure(_opts: { rounds: number; variant: string }): void {}
 
   /** Humans and practice bots currently in the match. */
+  /** Players taking part in the match (not those who left it and wait in the room). */
   protected players(): ServerPlayer[] {
-    return [...this.sim.players.values()];
+    return [...this.sim.players.values()].filter((p) => !p.away);
   }
 
   protected emit(ev: NetEvent): void {

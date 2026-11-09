@@ -82,7 +82,7 @@ pnpm dev:server     # migrations run automatically at boot
 | W / S, A / D (driving) | Throttle / brake-reverse, steer; Shift = handbrake |
 | W A S D, mouse (flying) | Move, nose follows the mouse; Shift = take off / land |
 | Tab (hold) | Scoreboard |
-| Esc | Menu |
+| Esc | Menu: resume, settings, leave match (stay in the arena for the next one), leave arena |
 
 All keys can be rebound in Settings (bindings use physical key positions, so AZERTY works).
 

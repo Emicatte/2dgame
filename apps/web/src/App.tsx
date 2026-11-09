@@ -101,7 +101,9 @@ export function App() {
   } else if (profile.status === "anonymous") {
     screen = <Onboarding />;
   } else if (inRoom) {
-    if (sess.phase === "lobby") screen = <Lobby onOpenLoadout={() => setOverlay("loadout")} />;
+    // Left the match (still in the room): the lobby until the next match.
+    if (sess.phase === "lobby" || (sess.away && sess.phase !== "results"))
+      screen = <Lobby onOpenLoadout={() => setOverlay("loadout")} />;
     else if (sess.phase === "results") screen = <Results />;
     else screen = <InGame onSettings={() => setOverlay("settings")} />;
   } else {

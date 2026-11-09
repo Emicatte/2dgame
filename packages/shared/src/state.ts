@@ -22,6 +22,8 @@ export const PlayerState = schema(
     shield: t.uint8().default(0),
     /** Shield cells carried (used with BTN.SHIELD), 0..SHIELD.maxCells. */
     cells: t.uint8().default(0),
+    /** Left the running match but still in the room: back in at the next match. */
+    away: t.boolean().default(false),
     kills: t.uint16().default(0),
     deaths: t.uint16().default(0),
     streak: t.uint8().default(0),

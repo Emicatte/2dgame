@@ -539,6 +539,18 @@ export class HostRoom {
     this.syncPracticeTargets();
   }
 
+  /** Leaves the running match but stays in the room. Nobody left playing: the match ends. */
+  private handleLeaveMatch(id: string) {
+    const p = this.sim.players.get(id);
+    const phase = this.state.phase;
+    if (!p || p.away || (phase !== "countdown" && phase !== "playing")) return;
+    this.sim.leaveMatch(p);
+    this.notice(`${p.name} left the match`, "info");
+    if ([...this.sim.players.values()].some((q) => !q.away && !this.bots.has(q.id))) return;
+    if (phase === "playing") this.endMatch("opponents-left");
+    else this.backToLobby();
+  }
+
   private kick(id: string, code: number, reason: string) {
     const seat = this.seats.get(id);
     if (!seat) return;
@@ -593,6 +605,9 @@ export class HostRoom {
         if (msg && p && this.state.phase === "playing") this.sim.ctl?.ability(p, msg);
         return;
       }
+      case C2S.LEAVE_MATCH:
+        this.handleLeaveMatch(id);
+        return;
       case C2S.VOTE: {
         const msg = parse(voteSchema);
         if (msg && this.state.phase === "results") this.rules.vote(id, msg.map);

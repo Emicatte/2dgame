@@ -54,7 +54,7 @@ test("chest: loot drops on the ground, weapon taken with E, shield cell kept and
     // Teleport next to the first chest of Industrial Arena (authoritative sim, dev/E2E builds only)
     // and do the whole sequence. The practice bots may shoot the player meanwhile: retry.
     let done = false;
-    for (let attempt = 0; attempt < 6 && !done; attempt++) {
+    for (let attempt = 0; attempt < 14 && !done; attempt++) {
       await teleport(185, 1408);
       await page.waitForTimeout(500);
       if ((await drops()).length === 0) {
@@ -67,7 +67,11 @@ test("chest: loot drops on the ground, weapon taken with E, shield cell kept and
       const loot = await drops();
       const weapon = loot.find((d) => d.kind === "weapon");
       const cell = loot.find((d) => d.kind === "shield");
-      if (!weapon || !cell) continue;
+      if (!weapon || !cell) {
+        // A bot killed us midway (loot partly used, chest closed for 40 s): wait for it to reopen.
+        await page.waitForTimeout(6000);
+        continue;
+      }
       // Nothing was given automatically: the weapon waits on the ground.
       await teleport(weapon.x, weapon.y);
       await page.waitForTimeout(700);

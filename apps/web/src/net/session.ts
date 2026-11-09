@@ -115,6 +115,8 @@ export interface SessionState {
   };
   /** Results: maps offered for the next match. */
   voteMaps: string[];
+  /** This player left the running match and waits in the room for the next one. */
+  away: boolean;
 }
 
 const initialState: SessionState = {
@@ -147,6 +149,7 @@ const initialState: SessionState = {
   difficulty: "veteran",
   round: { stage: "", end: 0, num: 0, of: 0, variant: "", dark: false, seekers: 0, hiders: 0, winner: 0 },
   voteMaps: [],
+  away: false,
 };
 
 export const sessionStore = createStore<SessionState>({ ...initialState });
@@ -406,6 +409,7 @@ class GameSession {
       difficulty: state.pve?.difficulty || "veteran",
       round: roundOf(state, s.round),
       voteMaps: state.voteMaps ? state.voteMaps.split(",") : [],
+      away: !!this.room && !!state.players.get(this.room.sessionId)?.away,
     });
   }
 
@@ -417,6 +421,11 @@ class GameSession {
   /** Results: vote for the next map. */
   voteMap(map: MapId) {
     this.send(C2S.VOTE, { map });
+  }
+
+  /** Leaves the running match only: stays in the room (and team) for the next match. */
+  leaveMatch() {
+    this.send(C2S.LEAVE_MATCH, {});
   }
 
   send(type: string, payload?: unknown) {

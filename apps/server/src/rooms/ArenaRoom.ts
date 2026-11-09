@@ -215,6 +215,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       const p = this.sim.players.get(client.sessionId);
       if (p && this.state.phase === "playing") this.sim.ctl?.ability(p, msg);
     });
+    this.onMessage(C2S.LEAVE_MATCH, (client) => this.handleLeaveMatch(client.sessionId));
     this.onMessage(C2S.VOTE, voteSchema, (client, msg) => {
       if (this.state.phase === "results") this.rules.vote(client.sessionId, msg.map);
     });
@@ -431,6 +432,18 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     const { dropped } = this.sim.enqueue(client.sessionId, frames);
     this.lastInputTick.set(client.sessionId, this.state.tick);
     if (dropped > 0) getServices().log.debug({ sessionId: client.sessionId, dropped }, "inputs dropped");
+  }
+
+  /** Leaves the running match but stays in the room. Nobody left playing: the match ends. */
+  private handleLeaveMatch(id: string) {
+    const p = this.sim.players.get(id);
+    const phase = this.state.phase;
+    if (!p || p.away || (phase !== "countdown" && phase !== "playing")) return;
+    this.sim.leaveMatch(p);
+    this.notice(`${p.name} left the match`, "info");
+    if ([...this.sim.players.values()].some((q) => !q.away && !this.bots.has(q.id))) return;
+    if (phase === "playing") this.endMatch("opponents-left");
+    else this.backToLobby();
   }
 
   private handleReady(client: Client, ready: boolean) {

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.2 — unreleased (branch `leave-match`)
+
+### Fixed
+- **"Leave match" no longer leaves the arena.** The in-game menu has two buttons: *Leave match*
+  takes you out of the running match only (no death counted, no respawn) and back to the arena's
+  lobby, still in the room and in your team, back in automatically at the next match; *Leave
+  arena* leaves the room as before (the lobby's "Leave" is now "Leave arena" too). Round modes
+  leave players who left the match out of side rotation. If no human is left playing, the match
+  ends (results) instead of running empty. Protocol: `C2S.LEAVE_MATCH`, `PlayerState.away`.
+
 ## 0.7.1 — unreleased (branch `loot-drops`)
 
 ### Changed
