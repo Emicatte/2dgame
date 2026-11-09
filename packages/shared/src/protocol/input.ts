@@ -9,6 +9,8 @@ export const BTN = {
   INTERACT: 8,
   /** In a vehicle: move to the next free seat. */
   SEAT: 16,
+  /** Use a carried shield cell. */
+  SHIELD: 32,
 } as const;
 
 export const AIM_SCALE = 10_000;
@@ -88,7 +90,7 @@ export const wireInputSchema = z.object({
     .int()
     .min(-Math.ceil(Math.PI * AIM_SCALE) - 1)
     .max(Math.ceil(Math.PI * AIM_SCALE) + 1),
-  b: z.number().int().min(0).max(31),
+  b: z.number().int().min(0).max(63),
   w: z.number().int().min(-1).max(2),
   v: z
     .number()

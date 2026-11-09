@@ -544,11 +544,17 @@ export function rollChestWeapon(r: number): WeaponId {
   return CHEST_WEAPONS[0]!.id;
 }
 
-/** Shields (Fortnite style): absorb damage before health. A chest gives `perChest`, up to `max`. */
-export const SHIELD = { max: 100, perChest: 50 } as const;
+/**
+ * Shields (Fortnite style): absorb damage before health. Chests drop shield cells; a player carries
+ * up to `maxCells` and uses one (+`perCell`, up to `max`) whenever they want.
+ */
+export const SHIELD = { max: 100, perCell: 50, maxCells: 3 } as const;
 
 /** Chests: opened with interact, then closed for this long. */
 export const CHEST_RESPAWN_SEC = 40;
+
+/** Items on the ground (chest loot, swapped-out weapons): gone after `ttlSec`, at most `max` at once. */
+export const DROPS = { ttlSec: 45, max: 48 } as const;
 
 export function fireIntervalSec(w: WeaponDef): number {
   return 60 / w.rpm;

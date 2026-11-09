@@ -11,13 +11,13 @@ import {
   collisionWorldFor,
   createPlayerSim,
   createVehicleSim,
+  DROPS,
   damageAtDistance,
   distSq,
   ENTER_REACH,
   findExitSpot,
   fullSlot,
   type GameMode,
-  giveWeapon,
   type HitTarget,
   hasLineOfSight,
   type InputFrame,
@@ -52,6 +52,7 @@ import {
   shotWorldFor,
   stepPlayer,
   stepVehicle,
+  takeWeapon,
   teamSpawns,
   tracePellet,
   VEHICLES,
@@ -110,8 +111,10 @@ export interface ServerPlayer {
   sim: PlayerSim;
   alive: boolean;
   hp: number;
-  /** Shield points from chests: absorb damage before health. */
+  /** Shield points: absorb damage before health. */
   shield: number;
+  /** Shield cells carried, used with BTN.SHIELD. */
+  cells: number;
   respawnTick: number;
   protectedUntil: number;
   queue: InputFrame[];
@@ -128,6 +131,8 @@ export interface ServerPlayer {
    * jittery link neither slows nor speeds them up.
    */
   interactFrames: number;
+  /** Interact was pressed (not just held) this tick: picks up one item from the ground. */
+  interactPress: boolean;
   connected: boolean;
   joinedTick: number;
   /** Buttons of the previous applied frame (edge detection for enter / exit / seat change). */
@@ -253,6 +258,17 @@ interface PickupRuntime {
   respawnTick: number;
 }
 
+/** An item on the ground: chest loot or a swapped-out weapon (with the ammo it had). */
+export interface Drop {
+  kind: "weapon" | "shield" | "ammo";
+  weapon: WeaponId | null;
+  mag: number;
+  reserve: number;
+  x: number;
+  y: number;
+  expiresTick: number;
+}
+
 export type StepMode = "frozen" | "live";
 
 export interface SimOptions {
@@ -334,6 +350,8 @@ export class GameSimulation {
   tick = 0;
   readonly players = new Map<string, ServerPlayer>();
   readonly pickups = new Map<string, PickupRuntime>();
+  readonly drops = new Map<string, Drop>();
+  private dropSeq = 0;
   readonly vehicles = new Map<string, ServerVehicle>();
   airWorld: CollisionWorld;
   /** What bullets meet at ground level (water and fences only stop movement). */
@@ -464,6 +482,7 @@ export class GameSimulation {
 
   private resetPickups(): void {
     this.pickups.clear();
+    this.drops.clear();
     for (const def of this.map.pickups) {
       // A mode may switch pickup kinds off (Gun Game: no weapon pickups); they never come back.
       const allowed = this.ctl?.pickupAllowed(def.kind) ?? true;
@@ -480,6 +499,7 @@ export class GameSimulation {
       alive: false,
       hp: 0,
       shield: 0,
+      cells: 0,
       respawnTick: 0,
       protectedUntil: 0,
       queue: [],
@@ -490,6 +510,7 @@ export class GameSimulation {
       queueFloorTicks: 0,
       interact: false,
       interactFrames: 0,
+      interactPress: false,
       connected: true,
       joinedTick: this.tick,
       prevButtons: 0,
@@ -607,6 +628,7 @@ export class GameSimulation {
     for (const p of this.players.values()) {
       p.interact = false;
       p.interactFrames = 0;
+      p.interactPress = false;
       // Inputs are consumed at real-time rate. Credit accrues with real elapsed time (so a stalled
       // server catches up); idle time is banked only while the queue is empty and only up to
       // maxInputCreditSeconds, which is what stops a modified client from moving faster than real
@@ -644,6 +666,7 @@ export class GameSimulation {
         if (!p.alive && p.respawnTick > 0 && this.tick >= p.respawnTick) this.spawn(p, false);
       }
       this.updatePickups();
+      this.updateDrops();
       this.updateVehicleLifecycle();
       this.updateObjectives();
       this.pve?.step();
@@ -716,7 +739,9 @@ export class GameSimulation {
     if (canAct && !downed && !entered && (frame.buttons & BTN.INTERACT) !== 0) {
       p.interact = true;
       p.interactFrames++;
+      if ((pressed & BTN.INTERACT) !== 0) p.interactPress = true;
     }
+    if (canAct && !downed && (pressed & BTN.SHIELD) !== 0) this.useShieldCell(p);
     p.lastProcessedSeq = frame.seq;
     p.inputStats.processed++;
     for (const s of shots) this.resolveShot(p, s.shot, s.view, false);
@@ -1132,6 +1157,7 @@ export class GameSimulation {
     p.alive = true;
     p.hp = PLAYER.maxHealth;
     p.shield = 0;
+    p.cells = 0;
     p.respawnTick = 0;
     p.protectedUntil = this.tick + this.secToTicks(PLAYER.spawnProtectionSeconds);
     if (!freshMatch) p.stats.streak = 0;
@@ -1157,15 +1183,18 @@ export class GameSimulation {
         } else if (pk.def.kind === "ammo") {
           taken = refillAmmo(p.sim);
         } else if (pk.def.kind === "weapon" && pk.def.weapon && p.interact) {
-          giveWeapon(p.sim, pk.def.weapon);
+          this.dropSlot(takeWeapon(p.sim, pk.def.weapon), p.sim.x, p.sim.y);
+          p.interactPress = false;
           taken = true;
         } else if (pk.def.kind === "chest" && p.interact) {
-          // A random weapon, shield and full ammo.
+          // The loot falls on the ground around the chest: a random weapon, a shield cell, ammo.
           const w = rollChestWeapon(this.rng());
-          giveWeapon(p.sim, w);
-          refillAmmo(p.sim);
-          p.shield = Math.min(SHIELD.max, p.shield + SHIELD.perChest);
+          const { x, y } = pk.def;
+          this.addDrop({ kind: "weapon", weapon: w, mag: -1, reserve: -1, ...this.dropSpot(x, y, -0.6) });
+          this.addDrop({ kind: "shield", weapon: null, mag: 0, reserve: 0, ...this.dropSpot(x, y, 0.9) });
+          this.addDrop({ kind: "ammo", weapon: null, mag: 0, reserve: 0, ...this.dropSpot(x, y, 2.4) });
           this.events.push({ t: "pickup", p: p.id, id: pk.def.id, kind: "chest", w: WEAPONS[w].index });
+          p.interactPress = false; // the press that opened the chest does not also pick the weapon
           pk.active = false;
           pk.respawnTick = this.tick + this.secToTicks(CHEST_RESPAWN_SEC);
           break;
@@ -1179,6 +1208,71 @@ export class GameSimulation {
           break;
         }
       }
+    }
+  }
+
+  /** A point next to (x, y) in direction `angle`, or (x, y) itself when a wall is in the way. */
+  private dropSpot(x: number, y: number, angle: number): { x: number; y: number } {
+    const tx = x + Math.cos(angle) * 44;
+    const ty = y + Math.sin(angle) * 44;
+    const ex = x + Math.cos(angle) * 60;
+    const ey = y + Math.sin(angle) * 60;
+    return hasLineOfSight(this.world, x, y, ex, ey) ? { x: tx, y: ty } : { x, y };
+  }
+
+  private addDrop(d: Omit<Drop, "expiresTick">): void {
+    if (this.drops.size >= DROPS.max) this.drops.delete(this.drops.keys().next().value!);
+    this.drops.set(`d${++this.dropSeq}`, { ...d, expiresTick: this.tick + this.secToTicks(DROPS.ttlSec) });
+  }
+
+  /** Leaves a swapped-out weapon on the ground with the ammo it had. */
+  private dropSlot(slot: WeaponSlotState | null, x: number, y: number): void {
+    const def = slot ? weaponByIndex(slot.id) : undefined;
+    if (!slot || !def) return;
+    this.addDrop({ kind: "weapon", weapon: def.id, mag: slot.mag, reserve: slot.reserve, x, y });
+  }
+
+  private useShieldCell(p: ServerPlayer): void {
+    if (p.cells <= 0 || p.shield >= SHIELD.max) return;
+    p.cells--;
+    p.shield = Math.min(SHIELD.max, p.shield + SHIELD.perCell);
+  }
+
+  /**
+   * Ammo and shield cells are taken by walking over them (when useful); a weapon needs an interact
+   * press, one item per press (the nearest), so the weapon just dropped is not picked up again.
+   */
+  private updateDrops(): void {
+    for (const [id, d] of this.drops) if (this.tick >= d.expiresTick) this.drops.delete(id);
+    if (this.drops.size === 0) return;
+    for (const p of this.players.values()) {
+      if (!p.alive || p.vehicle || p.pve.downed) continue;
+      let nearest: string | null = null;
+      let nearestD = PLAYER.interactRadius * PLAYER.interactRadius;
+      for (const [id, d] of this.drops) {
+        const dd = distSq(p.sim.x, p.sim.y, d.x, d.y);
+        if (d.kind === "weapon") {
+          if (p.interactPress && dd <= nearestD) {
+            nearest = id;
+            nearestD = dd;
+          }
+          continue;
+        }
+        if (dd > PICKUP_RADIUS * PICKUP_RADIUS) continue;
+        const take = d.kind === "ammo" ? refillAmmo(p.sim) : p.cells < SHIELD.maxCells;
+        if (take) {
+          if (d.kind === "shield") p.cells++;
+          this.drops.delete(id);
+          this.events.push({ t: "pickup", p: p.id, id, kind: d.kind === "ammo" ? "ammo" : "shield" });
+        }
+      }
+      const d = nearest ? this.drops.get(nearest) : undefined;
+      if (!nearest || !d?.weapon) continue;
+      this.drops.delete(nearest);
+      const ammo = d.mag >= 0 ? { mag: d.mag, reserve: d.reserve } : undefined;
+      this.dropSlot(takeWeapon(p.sim, d.weapon, ammo), p.sim.x, p.sim.y);
+      p.interactPress = false;
+      this.events.push({ t: "pickup", p: p.id, id: nearest, kind: "weapon", w: WEAPONS[d.weapon].index });
     }
   }
 

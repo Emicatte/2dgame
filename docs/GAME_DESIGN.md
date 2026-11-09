@@ -53,9 +53,20 @@ planned extension of the cosmetic system.
 
 ### Loot chests and shields (0.7.0)
 
-Chests on every PvP map (`packages/shared/src/maps/chests.ts`) open with E and give a random
-weapon (`CHEST_WEAPONS`, weighted), +50 shield (max 100, absorbed before health) and full ammo,
-then stay closed for 40 s. Chest-only weapons (`slotKind: "loot"`, never in loadouts): Talon
+Chests on every PvP map (`packages/shared/src/maps/chests.ts`) open with E and drop their loot
+on the ground next to them: a random weapon (`CHEST_WEAPONS`, weighted), a shield cell and an ammo
+box; then they stay closed for 40 s. Nothing is given automatically (0.7.1):
+
+- **Weapons** on the ground are taken with E, one per press (the nearest within reach). A weapon
+  goes in the free pickup slot; with that slot taken, it replaces the held weapon (holding the
+  sidearm: the pickup slot; the sidearm is never replaced). The weapon you had stays on the ground
+  with the ammo it had, and anyone can take it. Same rule for the map's weapon pickups. Taking a
+  weapon you already carry adds its ammo instead.
+- **Shield cells** are taken by walking over them, up to 3 carried (HUD counter), and used when
+  you decide with X (rebindable): +50 shield, max 100, absorbed before health. Cells are lost on
+  death; with a full shield the cell is kept.
+- **Ammo boxes** are taken by walking over them when something is missing.
+- Items on the ground vanish after 45 s, at most 48 at once (`DROPS` in `config/weapons.ts`). Chest-only weapons (`slotKind: "loot"`, never in loadouts): Talon
 Carbine (fast assault rifle), Vanguard BR (semi-automatic battle rifle), Grinder minigun (1300 rpm,
 150-round drum, slow to carry), Hammer RPG (one rocket per reload, explodes on impact: up to 110
 damage within 130 px, no self or team damage). Numbers are data in `config/weapons.ts`.

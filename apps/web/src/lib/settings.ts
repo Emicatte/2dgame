@@ -11,6 +11,7 @@ export type Action =
   | "slot2"
   | "slot3"
   | "interact"
+  | "shield"
   | "seat"
   | "scoreboard"
   | "propMenu"
@@ -29,6 +30,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   slot2: "Sidearm",
   slot3: "Picked-up weapon",
   interact: "Interact / pick up / enter-exit vehicle",
+  shield: "Use a shield cell",
   seat: "Change vehicle seat",
   scoreboard: "Scoreboard",
   propMenu: "Prop Hunt: choose an object to turn into",
@@ -49,6 +51,7 @@ export const DEFAULT_BINDINGS: Record<Action, string> = {
   slot2: "Digit2",
   slot3: "Digit3",
   interact: "KeyE",
+  shield: "KeyX",
   seat: "KeyF",
   scoreboard: "Tab",
   propMenu: "KeyQ",

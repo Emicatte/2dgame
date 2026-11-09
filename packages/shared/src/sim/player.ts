@@ -341,6 +341,36 @@ export function giveWeapon(s: PlayerSim, weaponId: WeaponId): void {
   s.bloom = 0;
 }
 
+/**
+ * Picks a weapon up from the ground. Already carried: its ammo is added to that one. Otherwise it
+ * goes in the free pickup slot, or replaces the held weapon (the sidearm is never replaced: then
+ * the pickup slot). Returns the weapon left on the ground, if any. Server-only.
+ */
+export function takeWeapon(
+  s: PlayerSim,
+  weaponId: WeaponId,
+  ammo?: { mag: number; reserve: number },
+): WeaponSlotState | null {
+  const def = WEAPONS[weaponId];
+  const carried = s.slots.find((sl) => sl.id === def.index);
+  if (carried) {
+    if (def.reserveAmmo >= 0) {
+      const add = ammo ? ammo.mag + ammo.reserve : def.magSize + def.reserveAmmo;
+      carried.reserve = Math.min(def.reserveAmmo, carried.reserve + add);
+    }
+    return null;
+  }
+  const target =
+    s.slots[SLOT_PICKUP]!.id === NO_WEAPON || s.slot !== SLOT_PRIMARY ? SLOT_PICKUP : SLOT_PRIMARY;
+  const old = s.slots[target]!;
+  s.slots[target] = ammo ? { id: def.index, mag: ammo.mag, reserve: ammo.reserve } : fullSlot(weaponId);
+  s.slot = target;
+  s.reload = 0;
+  s.swap = secToSteps(def.swapSec);
+  s.bloom = 0;
+  return old.id === NO_WEAPON ? null : { ...old };
+}
+
 /** Refills reserve ammo of every carried weapon. Returns true if anything changed. */
 export function refillAmmo(s: PlayerSim): boolean {
   let changed = false;

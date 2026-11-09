@@ -2124,3 +2124,12 @@
   background: var(--signal);
   box-shadow: 0 0 6px rgba(79, 216, 255, 0.6);
 }
+
+.shield-cells {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--signal);
+}

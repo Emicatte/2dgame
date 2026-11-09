@@ -1,5 +1,6 @@
 import {
   ATTACK_KINDS,
+  DropState,
   formatIdList,
   HazardState,
   type MatchState,
@@ -8,6 +9,7 @@ import {
   type PlayerState,
   PropState,
   VehicleState,
+  WEAPONS,
   ZombieState,
 } from "@scrapline/shared";
 import type { GameSimulation, ServerPlayer } from "./GameSimulation.ts";
@@ -28,6 +30,7 @@ export function syncPlayerState(ps: PlayerState, p: ServerPlayer, tick: number, 
   ps.aim = pub ? pub.aim : s.aim;
   ps.hp = p.hp;
   ps.shield = p.shield;
+  ps.cells = p.cells;
   ps.kills = p.stats.kills;
   ps.deaths = p.stats.deaths;
   ps.streak = p.stats.streak;
@@ -63,6 +66,20 @@ export function syncPlayerState(ps: PlayerState, p: ServerPlayer, tick: number, 
   ps.swap = s.swap;
   ps.bloom = s.bloom;
   ps.trigger = s.trigger;
+}
+
+/** Mirrors the items on the ground (they never move: created and removed only). */
+export function syncDrops(state: MatchState, sim: GameSimulation): void {
+  for (const id of [...state.drops.keys()]) if (!sim.drops.has(id)) state.drops.delete(id);
+  for (const [id, d] of sim.drops) {
+    if (state.drops.has(id)) continue;
+    const ds = new DropState();
+    ds.kind = d.kind;
+    ds.w = d.weapon ? WEAPONS[d.weapon].index : 0;
+    ds.x = d.x;
+    ds.y = d.y;
+    state.drops.set(id, ds);
+  }
 }
 
 /**

@@ -45,6 +45,7 @@ import { applyPveSettings, buildPveResults } from "../../../server/src/pve/pveRo
 import { MatchRules } from "../../../server/src/rules/MatchRules.ts";
 import { GameSimulation, type ServerPlayer } from "../../../server/src/simulation/GameSimulation.ts";
 import {
+  syncDrops,
   syncObjectives,
   syncPlayerState,
   syncPve,
@@ -926,6 +927,7 @@ export class HostRoom {
     this.rules.sync();
     this.syncPickups(false);
     syncVehicles(this.state, this.sim);
+    syncDrops(this.state, this.sim);
     syncObjectives(this.state, this.sim);
     syncPve(this.state, this.sim);
     // Guests get only what their StateView holds; the host's own tab reads the full local state

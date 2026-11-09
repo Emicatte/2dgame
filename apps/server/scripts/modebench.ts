@@ -23,7 +23,7 @@ import {
 import { syncModeState } from "../src/modes/sync.ts";
 import { MatchRules } from "../src/rules/MatchRules.ts";
 import { GameSimulation } from "../src/simulation/GameSimulation.ts";
-import { syncPlayerState, syncVehicles } from "../src/simulation/stateSync.ts";
+import { syncDrops, syncPlayerState, syncVehicles } from "../src/simulation/stateSync.ts";
 
 const SECONDS = 60;
 const PLAYERS = 8;
@@ -97,6 +97,7 @@ function bench(mode: GameMode, map: MapId) {
     for (const [id, p] of sim.players) syncPlayerState(state.players.get(id)!, p, sim.tick, sim);
     rules.sync();
     syncVehicles(state, sim);
+    syncDrops(state, sim);
     syncModeState(state, sim, views);
     const it = { offset: 0 };
     encoder.encode(it);

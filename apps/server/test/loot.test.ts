@@ -3,6 +3,7 @@ import {
   CHEST_WEAPONS,
   MAPS,
   NET,
+  NO_WEAPON,
   PLAYER,
   PRIMARY_WEAPONS,
   quantizeInput,
@@ -48,7 +49,7 @@ describe("loot: chests, shields, new weapons", () => {
     for (let r = 0; r < 1; r += 0.01) expect(CHEST_WEAPONS.map((w) => w.id)).toContain(rollChestWeapon(r));
   });
 
-  it("every PvP map has chests; opening one (interact) gives a weapon, shield and ammo, then it closes", () => {
+  it("every PvP map has chests; opening one drops a weapon, a shield cell and ammo on the ground", () => {
     for (const id of ["industrial", "urban", "depot"] as const)
       expect(MAPS[id].pickups.filter((p) => p.kind === "chest").length).toBeGreaterThanOrEqual(4);
     const { sim, a } = setup();
@@ -56,9 +57,74 @@ describe("loot: chests, shields, new weapons", () => {
     a.sim.x = chest.x + 20;
     a.sim.y = chest.y;
     frame(sim, a, BTN.INTERACT);
-    expect(a.shield).toBe(SHIELD.perChest);
-    expect(a.sim.slots[2]!.id).not.toBe(255);
     expect(sim.pickups.get(chest.id)!.active).toBe(false);
+    const kinds = [...sim.drops.values()].map((d) => d.kind).sort();
+    expect(kinds).toEqual(["ammo", "shield", "weapon"]);
+    // Nothing is given automatically: the weapon stays on the ground until picked.
+    expect(a.sim.slots[2]!.id).toBe(NO_WEAPON);
+    expect(a.shield).toBe(0);
+  });
+
+  it("picking a weapon from the ground takes the free slot, then swaps the held one, which stays on the ground", () => {
+    const { sim, a } = setup();
+    const drop = (weapon: "minigun" | "carbine") => {
+      sim.drops.clear();
+      (sim as unknown as { addDrop(d: object): void }).addDrop({
+        kind: "weapon",
+        weapon,
+        mag: -1,
+        reserve: -1,
+        x: a.sim.x + 10,
+        y: a.sim.y,
+      });
+    };
+    drop("minigun");
+    frame(sim, a, 0);
+    frame(sim, a, BTN.INTERACT);
+    expect(a.sim.slots[2]!.id).toBe(WEAPONS.minigun.index);
+    expect(sim.drops.size).toBe(0);
+    // Holding interact does not pick up again; a new press on another weapon swaps the held one.
+    drop("carbine");
+    frame(sim, a, BTN.INTERACT);
+    expect(a.sim.slots[2]!.id).toBe(WEAPONS.minigun.index);
+    frame(sim, a, 0);
+    frame(sim, a, BTN.INTERACT);
+    expect(a.sim.slots[2]!.id).toBe(WEAPONS.carbine.index);
+    const left = [...sim.drops.values()];
+    expect(left).toHaveLength(1);
+    expect(left[0]!.weapon).toBe("minigun");
+    // Holding the primary: that one is swapped (the sidearm never is).
+    frame(sim, a, 0, 0, 0);
+    for (let i = 0; i < 30; i++) frame(sim, a, 0);
+    sim.drops.clear();
+    drop("minigun");
+    frame(sim, a, BTN.INTERACT);
+    expect(a.sim.slots[0]!.id).toBe(WEAPONS.minigun.index);
+    expect(a.sim.slots[1]!.id).toBe(WEAPONS.pistol.index);
+    expect([...sim.drops.values()][0]!.weapon).toBe("rifle");
+  });
+
+  it("shield cells are carried (up to the cap) and used on demand", () => {
+    const { sim, a } = setup();
+    const add = (sim as unknown as { addDrop(d: object): void }).addDrop.bind(sim);
+    for (let i = 0; i < SHIELD.maxCells + 1; i++)
+      add({ kind: "shield", weapon: null, mag: 0, reserve: 0, x: a.sim.x, y: a.sim.y });
+    frame(sim, a, 0);
+    expect(a.cells).toBe(SHIELD.maxCells);
+    expect(a.shield).toBe(0);
+    expect(sim.drops.size).toBe(1); // full: the extra cell stays on the ground
+    sim.drops.clear();
+    frame(sim, a, BTN.SHIELD);
+    expect(a.shield).toBe(SHIELD.perCell);
+    expect(a.cells).toBe(SHIELD.maxCells - 1);
+    frame(sim, a, BTN.SHIELD); // held: no second use
+    expect(a.cells).toBe(SHIELD.maxCells - 1);
+    frame(sim, a, 0);
+    frame(sim, a, BTN.SHIELD);
+    expect(a.shield).toBe(SHIELD.max);
+    frame(sim, a, 0);
+    frame(sim, a, BTN.SHIELD); // full shield: the cell is kept
+    expect(a.cells).toBe(SHIELD.maxCells - 2);
   });
 
   it("the shield takes damage before health", () => {

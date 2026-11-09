@@ -1,10 +1,20 @@
 import { chromium, expect, test } from "@playwright/test";
 
-/** A host alone (practice) opens a chest: random weapon in slot 3, shield bar on the HUD. */
+/**
+ * A host alone (practice) opens a chest: the loot falls on the ground, the weapon is taken with E,
+ * the shield cell by walking over it and used with X.
+ */
 const CHROME = process.env.CHROME_PATH ?? "/usr/bin/google-chrome";
 const ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"];
 
-test("chest: opened with E, gives a weapon and a shield", async () => {
+interface Hooks {
+  selfId(): string;
+  phase(): string;
+  partyDebug(...a: unknown[]): boolean;
+  drops(): { id: string; kind: string; x: number; y: number }[];
+}
+
+test("chest: loot drops on the ground, weapon taken with E, shield cell kept and used with X", async () => {
   const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ARGS });
   try {
     const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
@@ -17,44 +27,82 @@ test("chest: opened with E, gives a weapon and a shield", async () => {
     await expect(page.getByTestId("start-match")).toBeEnabled({ timeout: 15_000 });
     await page.getByTestId("start-match").click();
     await page.waitForFunction(
-      () => (window as unknown as { __scrapline: { phase(): string } }).__scrapline.phase() === "playing",
+      () => (window as unknown as { __scrapline: Hooks }).__scrapline.phase() === "playing",
       null,
       { timeout: 30_000 },
     );
+    const teleport = (x: number, y: number) =>
+      page.evaluate(
+        ([x, y]) => {
+          const h = (window as unknown as { __scrapline: Hooks }).__scrapline;
+          h.partyDebug("teleport", h.selfId(), "", x, y);
+        },
+        [x, y] as const,
+      );
+    const drops = () =>
+      page.evaluate(() => (window as unknown as { __scrapline: Hooks }).__scrapline.drops());
+    const press = async (key: string) => {
+      await page.keyboard.down(key);
+      await page.waitForTimeout(150);
+      await page.keyboard.up(key);
+    };
+    const prompt = () =>
+      page
+        .getByTestId("interact-prompt")
+        .textContent({ timeout: 500 })
+        .catch(() => "");
     // Teleport next to the first chest of Industrial Arena (authoritative sim, dev/E2E builds only)
-    // and open it. The practice bots may shoot the player meanwhile: try again after a respawn.
-    let opened = false;
-    for (let attempt = 0; attempt < 6 && !opened; attempt++) {
-      await page.evaluate(() => {
-        const h = (
-          window as unknown as { __scrapline: { selfId(): string; partyDebug(...a: unknown[]): boolean } }
-        ).__scrapline;
-        h.partyDebug("teleport", h.selfId(), "", 185, 1408);
-      });
+    // and do the whole sequence. The practice bots may shoot the player meanwhile: retry.
+    let done = false;
+    for (let attempt = 0; attempt < 6 && !done; attempt++) {
+      await teleport(185, 1408);
       await page.waitForTimeout(500);
+      if ((await drops()).length === 0) {
+        if (!(await prompt())?.includes("Open chest")) continue;
+        await press("KeyE");
+        await page.waitForTimeout(400);
+        if (process.env.E2E_SHOTS_DIR)
+          await page.screenshot({ path: `${process.env.E2E_SHOTS_DIR}/chest-open.png` });
+      }
+      const loot = await drops();
+      const weapon = loot.find((d) => d.kind === "weapon");
+      const cell = loot.find((d) => d.kind === "shield");
+      if (!weapon || !cell) continue;
+      // Nothing was given automatically: the weapon waits on the ground.
+      await teleport(weapon.x, weapon.y);
+      await page.waitForTimeout(700);
+      if (!(await prompt())?.includes("Take")) continue;
+      await press("KeyE");
+      const taken = await expect(page.locator(".slot").nth(2))
+        .not.toContainText("—", { timeout: 3000 })
+        .then(
+          () => true,
+          () => false,
+        );
+      if (!taken) continue;
+      await teleport(cell.x, cell.y);
       if (
-        !(
-          await page
-            .getByTestId("interact-prompt")
-            .textContent()
-            .catch(() => "")
-        )?.includes("Open chest")
+        !(await page
+          .getByTestId("hud-cells")
+          .waitFor({ timeout: 2000 })
+          .then(
+            () => true,
+            () => false,
+          ))
       )
         continue;
-      await page.keyboard.down("KeyE");
-      await page.waitForTimeout(250);
-      await page.keyboard.up("KeyE");
-      opened = await page
+      await press("KeyX");
+      done = await page
         .getByTestId("hud-shield")
         .waitFor({ timeout: 2000 })
-        .then(() => true)
-        .catch(() => false);
+        .then(
+          () => true,
+          () => false,
+        );
     }
-    expect(opened).toBe(true);
-    // The chest's weapon is in slot 3.
-    await expect(page.locator(".slot").nth(2)).not.toContainText("—");
+    expect(done).toBe(true);
     if (process.env.E2E_SHOTS_DIR)
-      await page.screenshot({ path: `${process.env.E2E_SHOTS_DIR}/chest-opened.png` });
+      await page.screenshot({ path: `${process.env.E2E_SHOTS_DIR}/chest-loot.png` });
   } finally {
     await browser.close();
   }
