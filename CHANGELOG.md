@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (branch `dread`)
+## 0.6.0 — 2026-11-09 (the full Outbreak campaign: Dead District, The Convoy, Black Site, Final Breach)
 
 ### Added
 - **Dead District** (campaign chapter 2, unlocked by First Contact): a new city map and a
