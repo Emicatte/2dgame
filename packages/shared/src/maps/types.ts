@@ -6,6 +6,7 @@ export type MapId =
   | "district"
   | "outskirts"
   | "blacksite"
+  | "breach"
   | "industrial"
   | "neon"
   | "desert"

@@ -3,11 +3,12 @@ import { collisionWorldFor, isFreeSpot, MAP_IDS, MAPS, PVP_MAP_IDS, validateMap 
 
 describe("maps", () => {
   it("ships the three arena maps unchanged, plus the vehicle maps (competitive list), and the PvE maps", () => {
-    expect(MAP_IDS).toEqual([...PVP_MAP_IDS, "works", "district", "outskirts", "blacksite"]);
+    expect(MAP_IDS).toEqual([...PVP_MAP_IDS, "works", "district", "outskirts", "blacksite", "breach"]);
     expect(MAPS.works.pve).toBe(true);
     expect(MAPS.district.pve).toBe(true);
     expect(MAPS.outskirts.pve).toBe(true);
     expect(MAPS.blacksite.pve).toBe(true);
+    expect(MAPS.breach.pve).toBe(true);
     expect(PVP_MAP_IDS).toEqual([
       "industrial",
       "neon",
@@ -31,6 +32,7 @@ describe("maps", () => {
     expect(validateMap(MAPS.district)).toEqual([]);
     expect(validateMap(MAPS.outskirts)).toEqual([]);
     expect(validateMap(MAPS.blacksite)).toEqual([]);
+    expect(validateMap(MAPS.breach)).toEqual([]);
   });
 
   for (const id of PVP_MAP_IDS) {

@@ -263,7 +263,8 @@ export class ZombieWorld {
   spawn(kind: ZombieKind, x: number, y: number, opts: SpawnOptions = {}): Zombie {
     const def = ZOMBIES[kind];
     const tick = this.host.tick;
-    const players = Math.max(1, this.host.actors().length);
+    // Players only (a defended objective is an actor too).
+    const players = Math.max(1, this.host.actors().filter((a) => !a.id.startsWith("obj:")).length);
     // Bosses scale with the squad more than regular infected (four players must not melt them).
     const squad = def.boss ? 1 + def.boss.perExtraPlayer * (players - 1) : this.hpMult;
     const maxHp = Math.max(1, Math.round(def.maxHp * this.difficulty.enemyHp * squad));
@@ -949,7 +950,7 @@ export class ZombieWorld {
             vy: Math.sin(ang) * speed,
             left: len,
             damage: dmg,
-            puddle: undefined,
+            puddle: def.puddle,
             from: z.id,
             lob: { radius: def.radius ?? 90, edge: def.edgeFactor ?? 0.4 },
           };
@@ -1543,6 +1544,8 @@ export class ZombieWorld {
           if (a.vehicle) this.host.hurtVehicle(a.vehicle, amount, p.x, p.y);
           else this.host.hurtPlayer(a.id, amount, from, a.x, a.y);
         }
+        // Acid lobs leave a puddle where they land.
+        if (p.puddle) this.addPuddle(p.x, p.y, p.puddle);
         continue;
       }
       // Players along this step (vehicle occupants: the hull takes it).
@@ -1582,19 +1585,21 @@ export class ZombieWorld {
         if (victim.vehicle) this.host.hurtVehicle(victim.vehicle, p.damage, lx, ly);
         else this.host.hurtPlayer(victim.id, p.damage, this.zombies.get(p.from) ?? null, victim.x, victim.y);
       }
-      if (p.puddle) {
-        const h: Hazard = {
-          id: `h${this.nextHazard++}`,
-          x: lx,
-          y: ly,
-          r: p.puddle.radius,
-          until: this.host.tick + this.secTicks(p.puddle.sec),
-          dps: p.puddle.dps * this.difficulty.enemyDamage,
-          acc: new Map(),
-        };
-        this.hazards.set(h.id, h);
-      }
+      if (p.puddle) this.addPuddle(lx, ly, p.puddle);
     }
+  }
+
+  private addPuddle(x: number, y: number, pd: { radius: number; sec: number; dps: number }): void {
+    const h: Hazard = {
+      id: `h${this.nextHazard++}`,
+      x,
+      y,
+      r: pd.radius,
+      until: this.host.tick + this.secTicks(pd.sec),
+      dps: pd.dps * this.difficulty.enemyDamage,
+      acc: new Map(),
+    };
+    this.hazards.set(h.id, h);
   }
 
   private stepHazards(dt: number, actors: readonly PveActor[]): void {

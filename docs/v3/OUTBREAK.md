@@ -314,6 +314,36 @@ gaze and one at its back kills it in ~24 s; both in front need ~3×. A full run 
 (terminals, override, three waves, intel, the Warden fought for real, the lift) and a browser
 scenario (dark and sealed start, atrium, first terminal).
 
+## 6e. Final Breach and Subject Zero
+
+The research complex (5700 × 3000, dug out of rock with the same helpers as Black Site,
+`maps/dig.ts`). Seven steps, in the order the brief asks for:
+
+1. **Infiltrate through the maintenance tunnels** (narrow, sleeping infected: gunfire wakes them).
+2. **Hold the atrium while the security grid reboots** (3 waves).
+3. **Keep the decryption rig alive** (`defend`: 50 s, the rig has 1500 hp; the infected go for it
+   as for a player, the mission fails if it falls; HUD bar "Decryption rig N%").
+4. **Descend to the core** (restock: the core hall has little ammo, slow to come back).
+5. **Kill Subject Zero** (final boss).
+6. **Escape up the service shaft** (`limitSec` 60: a countdown on the HUD, the mission fails at 0).
+7. **Hold the evac hangar** (25 s, the last horde).
+
+**Subject Zero** (`subject-zero`, index 8): radius 40, 6000 hp (+50% per extra player), plating
+(front ×0.35, flanks ×0.7, the core at its back ×1.5, everything ×1.6 while it vents). Three
+phases, each with its own kit, all telegraphed: slam ring, acid lobs that leave puddles (new:
+`throw` with `puddle`), charge (stunned against a pillar), vent window; then the sweep cone, the
+tail lash and runners; then slam→sweep combos, faster charges, six-lob volleys and stalkers. The
+hall changes with the phases (`onPhase` triggers of the kill step): phase 2 wakes four corner
+vents (`VentDef.flag`), phase 3 a cross through the middle, a blackout and the alarm. Its death
+arms the self-destruct and opens the shaft.
+
+New mechanics (generic): step kind `defend`, `limitSec` on any step, `onPhase` on kill steps,
+vents online by flag. Tests: reachability (Subject Zero's body in its whole hall), the infected
+going for an unguarded rig until it falls, a guarded rig holding, the countdown failing the run,
+puddles from acid lobs, the hall changing phase by phase, a scripted two-player fight with real
+shooting (veteran: ~63 s), a full run of the mission (recruit), and two browser scenarios (the
+tunnels into the atrium; both bosses rendered with bars, plates and telegraphs).
+
 ## 7. Network protocol additions
 
 All additions use the existing channels (state patches, event batch per tick):
@@ -340,6 +370,10 @@ All additions use the existing channels (state patches, event batch per tick):
   `MissionDef.escort` names the vehicle whose `hp` the HUD shows.
 - `PveState.vents` (uint32): tick the security vents came online (0 = offline). Every vent's phase
   is `ventPhase(def, (tick - vents) / tickRate)`, the same on server and clients.
+- `PveState.deadline` (uint32): tick the current step must be done by (0 = none). A `defend`
+  step reuses `count`/`countMax` (integrity 0..100) and `prog` (time held). A defended objective
+  is targeted server-side as an actor with id `obj:<prop>` (never sent to clients).
+- `VentDef.flag`: the vent is online while that mission flag is set (clients have the flags).
 - Automatic doors move through `PveState.doors` like the others; their event is
   `{ t: "pve", k: "auto", s: id, n: 1|0 }` (sound only, no feed line). `ATTACK_KINDS` gains
   `sweep` (9) and `vent` (10), enemy index 7 is `warden` (appended: older indices unchanged).

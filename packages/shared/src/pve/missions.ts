@@ -32,7 +32,8 @@ export type PropKind =
   | "medical"
   | "radio"
   | "engine"
-  | "intel";
+  | "intel"
+  | "rig";
 
 /**
  * Security system: a decontamination vent that floods its area with scalding gas on a cycle while
@@ -49,6 +50,13 @@ export interface VentDef {
   /** Shifts this vent's cycle (s) so neighbours do not fire together. */
   offsetSec: number;
   dps: number;
+  /** Online while this mission flag is set (instead of while the power is on). */
+  flag?: string;
+}
+
+/** Whether a vent works: its flag is set, or (no flag) the power is on. */
+export function ventOnline(v: VentDef, power: boolean, flags: ReadonlySet<string>): boolean {
+  return v.flag ? flags.has(v.flag) : power;
 }
 
 export const VENT_PHASE = { IDLE: 0, WARN: 1, ACTIVE: 2 } as const;
@@ -134,6 +142,8 @@ interface StepBase {
   hint?: string;
   /** Where the objective marker points (off-screen arrow). */
   marker?: Vec2;
+  /** The mission fails if the step is not done within this many seconds (a countdown). */
+  limitSec?: number;
   onStart?: Trigger[];
   onDone?: Trigger[];
 }
@@ -144,7 +154,13 @@ export type StepDef =
   | (StepBase & { kind: "interact"; prop: string; horde?: WaveDef })
   | (StepBase & { kind: "collect"; props: string[] })
   | (StepBase & { kind: "waves"; waves: WaveDef[]; intermissionSec?: number })
-  | (StepBase & { kind: "kill"; group: string })
+  /** `onPhase[i]`: triggers when the group's boss enters its phase i (the arena changes). */
+  | (StepBase & { kind: "kill"; group: string; onPhase?: Trigger[][] })
+  /**
+   * Keep a prop (`hp`) alive for `sec` seconds: the infected go for it as they go for players.
+   * The mission fails if it is destroyed. `horde` attacks from the start of the step.
+   */
+  | (StepBase & { kind: "defend"; prop: string; sec: number; hp: number; horde?: WaveDef })
   | (StepBase & { kind: "extract"; area: Rect; holdSec: number; horde?: WaveDef })
   /**
    * Bring a vehicle (of `vehicle` kind, if set) into the area with every standing player there,
@@ -1012,7 +1028,269 @@ export const BLACK_SITE: MissionDef = {
   requires: "the-convoy",
 };
 
-export const MISSIONS: readonly MissionDef[] = [FIRST_CONTACT, DEAD_DISTRICT, THE_CONVOY, BLACK_SITE];
+// ------------------------------------------------------------------ Final Breach
+
+const FB_ATRIUM: Rect = { x: 2240, y: 440, w: 1120, h: 1320 };
+const FB_ANTE: Rect = { x: 3930, y: 830, w: 340, h: 500 };
+const FB_HANGAR: Rect = { x: 4760, y: 100, w: 780, h: 260 };
+
+export const FINAL_BREACH: MissionDef = {
+  id: "final-breach",
+  chapter: 5,
+  name: "Final Breach",
+  setting: "Halvorsen research complex",
+  brief:
+    "Varga's research names the place: the complex where Subject Zero is still alive and still spreading it. Slip in through the maintenance tunnels, hold the atrium while the security grid reboots, keep the decryption rig alive until the core opens, and end it. Then run: the complex will not survive what you do down there.",
+  map: "breach",
+  doors: [
+    { id: "cryo-door", label: "Cryo lab", x: 2720, y: 1776, w: 160, h: 24 },
+    { id: "core-door", label: "Core descent", x: 3376, y: 1000, w: 24, h: 160 },
+    { id: "arena-door", label: "Core hall", x: 4080, y: 1520, w: 140, h: 24 },
+    { id: "exit-door", label: "Service shaft", x: 4776, y: 2080, w: 24, h: 160 },
+  ],
+  props: [{ id: "rig", kind: "rig", label: "Decryption rig", x: 2800, y: 2450, holdSec: 0 }],
+  groups: [
+    {
+      id: "tunnels",
+      enemies: [
+        { kind: "walker", x: 1000, y: 1540, state: "idle" },
+        { kind: "walker", x: 1420, y: 1500, state: "idle" },
+        { kind: "walker", x: 1520, y: 1380, state: "idle" },
+        { kind: "walker", x: 1420, y: 1080, state: "idle" },
+        { kind: "runner", x: 1600, y: 760, state: "idle" },
+        { kind: "walker", x: 2000, y: 740, state: "idle" },
+      ],
+    },
+    {
+      id: "atrium",
+      enemies: [
+        { kind: "walker", x: 2600, y: 1100, state: "idle" },
+        { kind: "walker", x: 3000, y: 1150, state: "idle" },
+        { kind: "spitter", x: 3200, y: 600, state: "idle" },
+      ],
+    },
+    { id: "core", enemies: [{ kind: "subject-zero", x: 4250, y: 2400, state: "idle" }] },
+  ],
+  spawnZones: [
+    { id: "dock", x: 160, y: 1760 },
+    { id: "tunnel-j1", x: 1560, y: 1340 },
+    { id: "tunnel-j2", x: 1300, y: 860 },
+    { id: "atrium-nw", x: 2260, y: 460 },
+    { id: "atrium-ne", x: 3340, y: 460 },
+    { id: "atrium-sw", x: 2260, y: 1740 },
+    { id: "atrium-se", x: 3340, y: 1740 },
+    { id: "cryo-nw", x: 2360, y: 2060 },
+    { id: "cryo-ne", x: 3240, y: 2060 },
+    { id: "cryo-sw", x: 2360, y: 2760 },
+    { id: "cryo-se", x: 3240, y: 2760 },
+    { id: "ante", x: 4260, y: 840 },
+    { id: "core-nw", x: 3760, y: 1580 },
+    { id: "core-ne", x: 4740, y: 1580 },
+    { id: "core-sw", x: 3760, y: 2760 },
+    { id: "core-se", x: 4740, y: 2760 },
+    { id: "shaft-s", x: 5340, y: 2340 },
+    { id: "shaft-n", x: 5100, y: 660 },
+    { id: "hangar-w", x: 4840, y: 120 },
+  ],
+  steps: [
+    {
+      kind: "reach",
+      text: "Infiltrate through the maintenance tunnels",
+      hint: "They sleep in the tunnels. Gunfire wakes the whole block: walk, and shoot only if you must.",
+      area: FB_ATRIUM,
+      marker: { x: 2300, y: 740 },
+      onStart: [{ power: true }, { spawn: "tunnels" }],
+    },
+    {
+      kind: "waves",
+      text: "Hold the atrium while the security grid reboots",
+      hint: "Three waves. Use the pillars, and keep an eye on the doors behind you.",
+      marker: { x: 2800, y: 1100 },
+      intermissionSec: 8,
+      onStart: [{ spawn: "atrium" }, { checkpoint: { x: 2400, y: 1100 } }],
+      waves: [
+        {
+          enemies: { walker: 10, runner: 4, spitter: 2 },
+          zones: ["atrium-nw", "atrium-ne", "tunnel-j2"],
+          label: "The grid is down",
+        },
+        {
+          enemies: { runner: 6, exploder: 3, stalker: 2, walker: 6 },
+          zones: ["atrium-ne", "atrium-se", "atrium-sw"],
+          supply: true,
+          label: "From every side",
+        },
+        {
+          enemies: { brute: 2, spitter: 3, runner: 6, walker: 8 },
+          zones: ["atrium-nw", "atrium-ne", "atrium-sw", "atrium-se"],
+          label: "Grid rebooting",
+        },
+      ],
+      onDone: [
+        { open: "cryo-door" },
+        { checkpoint: { x: 2800, y: 1700 } },
+        { hint: "Grid online. The decryption rig is in the cryo lab, south." },
+      ],
+    },
+    {
+      kind: "defend",
+      prop: "rig",
+      sec: 50,
+      hp: 1500,
+      text: "Keep the decryption rig alive",
+      hint: "They go for the rig as much as for you. Stay close to it and keep them off it.",
+      marker: { x: 2800, y: 2450 },
+      horde: {
+        enemies: { walker: 14, runner: 8, exploder: 2, spitter: 2 },
+        zones: ["cryo-nw", "cryo-ne", "cryo-sw", "cryo-se"],
+        label: "They want the rig",
+      },
+      onDone: [
+        { open: "core-door" },
+        { checkpoint: { x: 3300, y: 1080 } },
+        { hint: "Decrypted. The core is down the east descent." },
+      ],
+    },
+    {
+      kind: "reach",
+      text: "Descend to the core",
+      hint: "Restock in the antechamber: there is little ammo down there, and it comes back slowly.",
+      area: FB_ANTE,
+      marker: { x: 4100, y: 1080 },
+      onDone: [{ open: "arena-door" }, { checkpoint: { x: 4100, y: 1080 } }],
+    },
+    {
+      kind: "kill",
+      group: "core",
+      text: "Kill Subject Zero",
+      hint: "Its core shows at its back and when it vents. Spread out, and read every tell: the ring, the cone, the acid.",
+      marker: { x: 4250, y: 2170 },
+      onStart: [{ spawn: "core" }],
+      onPhase: [
+        [],
+        [{ set: "core-vents" }, { hint: "The hall's vents are waking up: watch the amber lights." }],
+        [
+          { set: "core-vents-2" },
+          { set: "blackout" },
+          { alarm: true },
+          { hint: "Blackout! The whole floor vents now. Stay together." },
+        ],
+      ],
+      onDone: [
+        { unset: "core-vents" },
+        { unset: "core-vents-2" },
+        { open: "exit-door" },
+        { set: "self-destruct" },
+        { checkpoint: { x: 4700, y: 2160 } },
+        { hint: "Subject Zero is dead. The self-destruct is armed: up the service shaft, now!" },
+      ],
+    },
+    {
+      kind: "reach",
+      text: "Escape up the service shaft",
+      hint: "Don't stop to fight: the timer does not wait.",
+      area: FB_HANGAR,
+      limitSec: 60,
+      marker: { x: 5220, y: 500 },
+      onStart: [{ alarm: true }],
+    },
+    {
+      kind: "extract",
+      text: "Hold the evac hangar until the dropship lands",
+      hint: "Everyone on the pad. This is the last of it.",
+      area: FB_HANGAR,
+      holdSec: 25,
+      marker: { x: 5150, y: 230 },
+      onStart: [{ checkpoint: { x: 5150, y: 230 } }],
+      horde: {
+        enemies: { runner: 10, stalker: 3, walker: 10, brute: 1 },
+        zones: ["shaft-s", "shaft-n", "hangar-w"],
+        label: "Everything left in the complex",
+      },
+    },
+  ],
+  vents: [
+    // Phase 2: the four corners.
+    {
+      id: "core-nw",
+      flag: "core-vents",
+      area: { x: 3724, y: 1544, w: 260, h: 260 },
+      periodSec: 9,
+      warnSec: 1.8,
+      activeSec: 2.8,
+      offsetSec: 0,
+      dps: 24,
+    },
+    {
+      id: "core-se",
+      flag: "core-vents",
+      area: { x: 4516, y: 2536, w: 260, h: 260 },
+      periodSec: 9,
+      warnSec: 1.8,
+      activeSec: 2.8,
+      offsetSec: 0,
+      dps: 24,
+    },
+    {
+      id: "core-ne",
+      flag: "core-vents",
+      area: { x: 4516, y: 1544, w: 260, h: 260 },
+      periodSec: 9,
+      warnSec: 1.8,
+      activeSec: 2.8,
+      offsetSec: 4.5,
+      dps: 24,
+    },
+    {
+      id: "core-sw",
+      flag: "core-vents",
+      area: { x: 3724, y: 2536, w: 260, h: 260 },
+      periodSec: 9,
+      warnSec: 1.8,
+      activeSec: 2.8,
+      offsetSec: 4.5,
+      dps: 24,
+    },
+    // Phase 3: the cross through the middle.
+    {
+      id: "core-cross-v",
+      flag: "core-vents-2",
+      area: { x: 4180, y: 1544, w: 120, h: 1252 },
+      periodSec: 10,
+      warnSec: 2,
+      activeSec: 2.6,
+      offsetSec: 2,
+      dps: 26,
+    },
+    {
+      id: "core-cross-h",
+      flag: "core-vents-2",
+      area: { x: 3724, y: 2110, w: 1052, h: 120 },
+      periodSec: 10,
+      warnSec: 2,
+      activeSec: 2.6,
+      offsetSec: 7,
+      dps: 26,
+    },
+  ],
+  ambient: {
+    everySec: 10,
+    maxAlive: 8,
+    kinds: ["walker", "walker", "runner"],
+    zones: ["dock", "tunnel-j1", "tunnel-j2", "atrium-nw", "atrium-se"],
+  },
+  xp: 2500,
+  title: "Patient Zero's End",
+  requires: "black-site",
+};
+
+export const MISSIONS: readonly MissionDef[] = [
+  FIRST_CONTACT,
+  DEAD_DISTRICT,
+  THE_CONVOY,
+  BLACK_SITE,
+  FINAL_BREACH,
+];
 
 /**
  * The rest of the planned campaign (shown in the lobby as "in development"; not playable until

@@ -311,6 +311,20 @@ function drawProp(kind: string): HTMLCanvasElement {
       ctx.fillStyle = hex(0x7dffb0);
       ctx.fillRect(6, 8, 3, 2);
       break;
+    case "rig":
+      // The decryption rig: a rack with a dish and blinking drives.
+      plate(40, 30, 0x2a2d30, 0x0b0c0e);
+      ctx.fillStyle = hex(0x7dffb0, 0.95);
+      for (let i = 0; i < 4; i++) ctx.fillRect(-16 + i * 8, -10, 5, 4);
+      ctx.fillStyle = hex(0x6a7078);
+      ctx.fillRect(-16, 0, 32, 3);
+      ctx.fillRect(-16, 6, 32, 3);
+      ctx.strokeStyle = hex(0x9aa0a8);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(12, -18, 8, Math.PI * 0.9, Math.PI * 2.1);
+      ctx.stroke();
+      break;
     case "radio":
       // A field radio with its antenna and a green dial.
       plate(34, 22, 0x3a3f2e, 0x0b0c0e);
@@ -348,6 +362,7 @@ export function generateZombieTextures(scene: Phaser.Scene): void {
     "radio",
     "engine",
     "intel",
+    "rig",
   ]) {
     add(ZTEX.prop(k), drawProp(k));
   }

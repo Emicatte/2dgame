@@ -38,6 +38,7 @@ interface PveInfo {
   blackout: boolean;
   vents: string;
   lights: string[];
+  boss: string;
 }
 
 const pve = (page: Page) =>
@@ -116,7 +117,7 @@ test("Outbreak: two browsers complete co-op objectives of First Contact together
   await expect(a.getByTestId("mission-dead-district")).toBeDisabled();
   await expect(a.getByTestId("mission-the-convoy")).toBeDisabled();
   await expect(a.getByTestId("mission-black-site")).toBeDisabled();
-  await expect(a.getByTestId("mission-planned-5")).toBeDisabled();
+  await expect(a.getByTestId("mission-final-breach")).toBeDisabled();
   await a.getByTestId("difficulty-recruit").click();
   const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
   expect(code).toMatch(/^[A-Z0-9]{5}$/);
@@ -415,4 +416,86 @@ test("Black Site: dark and sealed at the start, the squad reaches the atrium and
   await expect(a.getByText("Security terminal: done")).toBeVisible({ timeout: 90_000 });
   await expect(a.getByTestId("pve-objective-text")).toContainText("(1/3)");
   await shot(a, "blacksite-terminal");
+});
+
+test("Final Breach: through the maintenance tunnels into the atrium, the waves begin", async () => {
+  test.setTimeout(240_000);
+  browsers = [await chromium.launch({ executablePath: CHROME, headless: true, args: ARGS })];
+  const a = await (await browsers[0]!.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+  a.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
+  await onboard(a, "Zero");
+  await a.evaluate(() => {
+    const key = "scrapline.localProfile.v1";
+    const d = JSON.parse(localStorage.getItem(key) ?? "{}");
+    const done = { completions: 1, best: {} };
+    d.pve = {
+      ...(d.pve ?? {}),
+      missions: { "first-contact": done, "dead-district": done, "the-convoy": done, "black-site": done },
+    };
+    localStorage.setItem(key, JSON.stringify(d));
+  });
+  await a.getByTestId("create-coop").click();
+  await expect(a.getByTestId("pve-settings")).toBeVisible({ timeout: 15_000 });
+  await a.getByTestId("mission-final-breach").click();
+  await expect(a.getByTestId("briefing")).toContainText("Final Breach");
+  await a.getByTestId("difficulty-recruit").click();
+  await a.getByTestId("start-match").click();
+  await phaseIs(a, "playing");
+  await expect(a.getByTestId("pve-objective-text")).toContainText("Infiltrate");
+  expect((await pve(a))?.power).toBe(true);
+  await shot(a, "breach-start");
+  // Dock → tunnel → first junction → north → second junction → east into the atrium.
+  await walk(
+    a,
+    [
+      { x: 760, y: 1540 },
+      { x: 1300, y: 1540 },
+      { x: 1420, y: 1400 },
+      { x: 1420, y: 820 },
+      { x: 1700, y: 740 },
+      { x: 2350, y: 740 },
+    ],
+    { fire: true },
+  );
+  await expect.poll(async () => (await pve(a))?.step ?? 0, { timeout: 120_000 }).toBeGreaterThanOrEqual(1);
+  await expect(a.getByTestId("pve-objective-text")).toContainText("Hold the atrium");
+  await shot(a, "breach-atrium");
+});
+
+test("The Warden and Subject Zero render with their bars, plates and telegraphs (host only)", async () => {
+  test.setTimeout(180_000);
+  browsers = [await chromium.launch({ executablePath: CHROME, headless: true, args: ARGS })];
+  const a = await (await browsers[0]!.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+  a.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
+  await onboard(a, "Solo");
+  await a.getByTestId("create-coop").click();
+  await expect(a.getByTestId("pve-settings")).toBeVisible({ timeout: 15_000 });
+  await a.getByTestId("mode-survival").click();
+  await a.getByTestId("map-industrial").click();
+  await a.getByTestId("difficulty-recruit").click();
+  await a.getByTestId("start-match").click();
+  await phaseIs(a, "playing");
+  const spawn = (k: string, dx: number, dy: number) =>
+    a.evaluate(
+      ([kind, x, y]) =>
+        (
+          window as unknown as { __scrapline: { spawnEnemy(k: string, dx: number, dy: number): boolean } }
+        ).__scrapline.spawnEnemy(kind, x, y),
+      [k, dx, dy] as const,
+    );
+  expect(await spawn("warden", 300, 0)).toBe(true);
+  await expect(a.getByTestId("pve-boss")).toContainText("The Warden", { timeout: 10_000 });
+  await expect(a.getByTestId("pve-boss")).toContainText("Phase 1/2");
+  expect((await pve(a))?.boss).toBe("warden");
+  await walk(a, [], { fire: true });
+  for (let i = 0; i < 4; i++) {
+    await a.waitForTimeout(800);
+    await shot(a, `warden-${i}`);
+  }
+  expect(await spawn("subject-zero", -360, 0)).toBe(true);
+  await expect.poll(async () => (await pve(a))?.rendered ?? 0, { timeout: 10_000 }).toBeGreaterThanOrEqual(2);
+  for (let i = 0; i < 4; i++) {
+    await a.waitForTimeout(800);
+    await shot(a, `subject-zero-${i}`);
+  }
 });

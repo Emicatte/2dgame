@@ -18,6 +18,11 @@
   waves of specials, research to recover and **The Warden**, an armoured miniboss: shoot its
   glowing back while a teammate holds its gaze, or everyone when it vents. See
   `docs/v3/OUTBREAK.md` §6d.
+- **Final Breach** (chapter 5, the end of the campaign): infiltration through the maintenance
+  tunnels, three waves in the atrium, a decryption rig to keep alive, and **Subject Zero**: three
+  phases, acid that stays on the floor, a hall whose vents wake up as it weakens, a blackout at
+  the end. Its death starts a timed escape and the last stand at the evac hangar. See
+  `docs/v3/OUTBREAK.md` §6e.
 - Signaling: TURN keys are stripped of pasted spaces, newlines and quotes; the health endpoint
   reports the key id's shape (`turnKey`).
 

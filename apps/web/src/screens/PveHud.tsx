@@ -54,7 +54,7 @@ export function PveHud() {
         </header>
         <p className="pve-objective__text" data-testid="pve-objective-text">
           {h.objective}
-          {h.countMax > 0 && h.mode === "outbreak" && (
+          {h.countMax > 0 && h.mode === "outbreak" && !h.guard && (
             <span className="mono">
               {" "}
               ({h.count}/{h.countMax})
@@ -72,6 +72,21 @@ export function PveHud() {
           </p>
         )}
         {h.mode === "survival" && <p className="pve-objective__wave mono">Infected eliminated: {h.kills}</p>}
+        {h.deadlineSec !== null && (
+          <p className="pve-objective__wave pve-deadline mono" data-testid="pve-deadline">
+            {Math.floor(h.deadlineSec / 60)}:{String(Math.floor(h.deadlineSec % 60)).padStart(2, "0")} left
+          </p>
+        )}
+        {h.guard && (
+          <div className="pve-escort" data-testid="pve-guard">
+            <span className="mono">
+              {h.guard.label} {Math.round(h.guard.frac * 100)}%
+            </span>
+            <div className={`pve-bar ${h.guard.frac < 0.35 ? "pve-bar--danger" : ""}`} aria-hidden="true">
+              <span style={{ transform: `scaleX(${h.guard.frac})` }} />
+            </div>
+          </div>
+        )}
         {h.escort && (
           <div className="pve-escort" data-testid="pve-escort">
             <span className="mono">

@@ -85,6 +85,10 @@ export interface PveHudState {
   fadeLeft: boolean;
   /** Boss health bar (name, health, phase 1-based of `phases`). */
   boss: { name: string; hp: number; mhp: number; phase: number; phases: number } | null;
+  /** Defended objective (a `defend` step): its name and integrity 0..1. */
+  guard: { label: string; frac: number } | null;
+  /** Seconds left on the step's countdown (null: none). */
+  deadlineSec: number | null;
   /** Escorted vehicle's hull (0..1), when the mission has one. */
   escort: { frac: number; locked: boolean } | null;
 }
@@ -93,6 +97,8 @@ const initial: PveHudState = {
   active: false,
   mode: "outbreak",
   missionName: "",
+  guard: null,
+  deadlineSec: null,
   difficulty: "veteran",
   objective: "",
   step: 0,
@@ -276,8 +282,18 @@ export const pveHud = {
             locked: parseIdList(state.pve.flags).has(`locked-${mission!.escort}`),
           }
         : null;
+    const stepDef = mission?.steps[state.pve.step];
+    const guard =
+      stepDef?.kind === "defend"
+        ? {
+            label: mission?.props.find((p) => p.id === stepDef.prop)?.label ?? "Objective",
+            frac: state.pve.countMax > 0 ? state.pve.count / state.pve.countMax : 0,
+          }
+        : null;
     pveHudStore.patch({
       escort,
+      guard,
+      deadlineSec: state.pve.deadline > 0 ? Math.max(0, (state.pve.deadline - serverTick) / tickRate) : null,
       active: true,
       mode,
       missionName: mission?.name ?? "Survival",

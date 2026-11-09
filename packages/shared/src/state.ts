@@ -236,6 +236,8 @@ export const PveState = schema(
     boss: t.string().default(""),
     /** Tick the security vents came online (0 = offline): every vent's cycle runs from it. */
     vents: t.uint32().default(0),
+    /** Tick the current step must be done by (0 = no countdown); missing it fails the mission. */
+    deadline: t.uint32().default(0),
   },
   "PveState",
 );

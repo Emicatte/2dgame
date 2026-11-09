@@ -34,6 +34,7 @@ describe("Black Site data", () => {
       "exploder",
       "abomination",
       "warden",
+      "subject-zero",
     ]);
   });
 

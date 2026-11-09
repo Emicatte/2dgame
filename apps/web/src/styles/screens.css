@@ -1678,3 +1678,8 @@
 .pve-bar--danger > span {
   background: #ff5a4a;
 }
+
+.pve-deadline {
+  color: #ff6a5a;
+  font-weight: 700;
+}

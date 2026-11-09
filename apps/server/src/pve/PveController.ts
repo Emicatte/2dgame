@@ -35,6 +35,7 @@ import {
   VENT_PHASE,
   type Vec2,
   vehicleCircles,
+  ventOnline,
   ventPhase,
   type WeaponDef,
   weaponByIndex,
@@ -154,6 +155,13 @@ export class PveController implements ZombieHost {
   readonly flags = new Set<string>();
   /** Tick the security vents came online (0 = offline). */
   ventStart = 0;
+  /** Tick the current step must be done by (0 = no countdown). */
+  deadline = 0;
+  /** The prop the squad is defending (a `defend` step), the infected go for it. */
+  private defended: { id: string; x: number; y: number; hp: number; max: number; until: number } | null =
+    null;
+  /** Highest boss phase whose `onPhase` triggers have run (kill step). */
+  private phaseDone = 0;
   private readonly autoNear = new Map<string, number>();
   private navKey = "\u0000";
   power = false;
@@ -234,6 +242,22 @@ export class PveController implements ZombieHost {
         airborne: !!v && v.sim.alt >= 0.35,
       });
     }
+    // A defended objective is a target like a player (`obj:` ids: never a player).
+    const d = this.defended;
+    if (d && d.hp > 0) {
+      out.push({
+        id: `obj:${d.id}`,
+        x: d.x,
+        y: d.y,
+        vx: 0,
+        vy: 0,
+        aim: 0,
+        alive: true,
+        downed: false,
+        vehicle: null,
+        airborne: false,
+      });
+    }
     this.actorCache = out;
     return out;
   }
@@ -265,6 +289,11 @@ export class PveController implements ZombieHost {
     knock?: Vec2,
     cause = "Acid",
   ): void {
+    if (id.startsWith("obj:")) {
+      const d = this.defended;
+      if (d && `obj:${d.id}` === id) d.hp = Math.max(0, d.hp - dmg);
+      return;
+    }
     const p = this.sim.players.get(id);
     if (!p?.alive) return;
     if (p.pve.downed) {
@@ -450,7 +479,7 @@ export class PveController implements ZombieHost {
     const since = elapsed / this.tickRate;
     const dt = every / this.tickRate;
     for (const v of vents) {
-      if (ventPhase(v, since) !== VENT_PHASE.ACTIVE) continue;
+      if (!ventOnline(v, this.power, this.flags) || ventPhase(v, since) !== VENT_PHASE.ACTIVE) continue;
       const dmg = v.dps * dt;
       for (const p of this.sim.players.values()) {
         if (!p.alive || p.vehicle || !circleIntersectsRect(p.sim.x, p.sim.y, PLAYER.radius * 0.5, v.area))
@@ -486,6 +515,9 @@ export class PveController implements ZombieHost {
     this.sealed.clear();
     this.autoNear.clear();
     this.ventStart = 0;
+    this.deadline = 0;
+    this.defended = null;
+    this.phaseDone = 0;
     this.status = PVE_STATUS.RUNNING;
     this.failReason = "";
     this.power = false;
@@ -904,8 +936,12 @@ export class PveController implements ZombieHost {
       else if ("checkpoint" in t) this.checkpoint = { ...t.checkpoint };
       else if ("lock" in t) this.setVehicleLock(t.lock, true);
       else if ("unlock" in t) this.setVehicleLock(t.unlock, false);
-      else if ("set" in t) this.flags.add(t.set);
-      else if ("unset" in t) this.flags.delete(t.unset);
+      else if ("set" in t) {
+        this.flags.add(t.set);
+        // Vents that wait for this flag start the shared vent clock if nothing has yet.
+        if (this.ventStart === 0 && this.mission?.vents?.some((v) => v.flag === t.set))
+          this.ventStart = Math.max(1, this.sim.tick);
+      } else if ("unset" in t) this.flags.delete(t.unset);
     }
   }
 
@@ -913,7 +949,10 @@ export class PveController implements ZombieHost {
   private setPower(on: boolean): void {
     if (this.power === on) return;
     this.power = on;
-    this.ventStart = on && this.mission?.vents?.length ? Math.max(1, this.sim.tick) : 0;
+    const vents = this.mission?.vents ?? [];
+    if (on && this.ventStart === 0 && vents.some((v) => !v.flag)) this.ventStart = Math.max(1, this.sim.tick);
+    // Power off: the clock stops unless a flag keeps some vent online.
+    if (!on && !vents.some((v) => ventOnline(v, false, this.flags))) this.ventStart = 0;
     this.rebuildWorlds(false);
   }
 
@@ -973,8 +1012,29 @@ export class PveController implements ZombieHost {
       this.countMax = s.waves.length;
       this.nextWaveTick = this.sim.tick + this.secTicks(2.5);
     }
-    // A horde chasing the squad during the step (extraction, a drive, a repair under fire).
-    if ((s.kind === "extract" || s.kind === "drive" || s.kind === "interact") && s.horde) {
+    this.defended = null;
+    if (s.kind === "defend") {
+      const pr = this.props.get(s.prop);
+      const hp = s.hp;
+      if (pr)
+        this.defended = {
+          id: pr.def.id,
+          x: pr.x,
+          y: pr.y,
+          hp,
+          max: hp,
+          until: this.sim.tick + this.secTicks(s.sec),
+        };
+      this.countMax = 100;
+      this.count = 100;
+    }
+    this.phaseDone = 0;
+    this.deadline = s.limitSec ? this.sim.tick + this.secTicks(s.limitSec) : 0;
+    // A horde chasing the squad during the step (extraction, a drive, a repair under fire, a defence).
+    if (
+      (s.kind === "extract" || s.kind === "drive" || s.kind === "interact" || s.kind === "defend") &&
+      s.horde
+    ) {
       this.waveNumber++;
       const run = this.waves.start(
         s.horde,
@@ -1012,8 +1072,35 @@ export class PveController implements ZombieHost {
   private updateMission(): void {
     const s = this.step_;
     if (!s) return;
+    if (this.deadline > 0 && this.sim.tick >= this.deadline) {
+      this.finish(PVE_STATUS.FAILED, "Out of time");
+      return;
+    }
     const players = [...this.sim.players.values()];
     switch (s.kind) {
+      case "defend": {
+        const d = this.defended;
+        if (!d) {
+          this.completeStep();
+          break;
+        }
+        this.count = Math.ceil((d.hp / d.max) * 100);
+        this.stepProg = Math.min(1, 1 - (d.until - this.sim.tick) / this.secTicks(s.sec));
+        if (d.hp <= 0) {
+          this.finish(
+            PVE_STATUS.FAILED,
+            `The ${this.props.get(d.id)?.def.label.toLowerCase() ?? "objective"} was destroyed`,
+          );
+          break;
+        }
+        if (this.sim.tick >= d.until) {
+          const pr = this.props.get(d.id);
+          if (pr) pr.used = true;
+          this.defended = null;
+          this.completeStep();
+        }
+        break;
+      }
       case "reach":
         if (players.some((p) => this.standing(p) && this.inArea(p, s.area))) this.completeStep();
         break;
@@ -1031,6 +1118,13 @@ export class PveController implements ZombieHost {
         break;
       }
       case "kill": {
+        // The arena changes as the boss weakens: each new phase runs its triggers once.
+        if (s.onPhase) {
+          for (const z of this.zw.zombies.values()) {
+            if (z.dead || z.group !== s.group || !z.def.boss) continue;
+            while (this.phaseDone < z.phase) this.applyTriggers(s.onPhase[++this.phaseDone]);
+          }
+        }
         const left = [...this.zw.zombies.values()].filter((z) => !z.dead && z.group === s.group).length;
         this.count = left;
         if (left === 0) this.completeStep();

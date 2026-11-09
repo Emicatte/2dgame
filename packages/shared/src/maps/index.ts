@@ -5,6 +5,7 @@ import type { Vec2 } from "../sim/math.ts";
 import { bodyFits } from "../sim/vehicle.ts";
 import { MILITARY_AIRBASE } from "./airbase.ts";
 import { BLACK_SITE } from "./blacksite.ts";
+import { FINAL_BREACH } from "./breach.ts";
 import { DESERT_OUTPOST } from "./desert.ts";
 import { DEAD_DISTRICT } from "./district.ts";
 import { DOWNTOWN } from "./downtown.ts";
@@ -34,6 +35,7 @@ export const MAPS: Record<MapId, MapDef> = {
   district: DEAD_DISTRICT,
   outskirts: KESSLER_ROAD,
   blacksite: BLACK_SITE,
+  breach: FINAL_BREACH,
 };
 
 export const MAP_IDS = Object.keys(MAPS) as MapId[];

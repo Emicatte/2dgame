@@ -13,6 +13,7 @@ import {
   parseIdList,
   VENT_PHASE,
   type VentPhase,
+  ventOnline,
   ventPhase,
   type ZombieDef,
   zombieByIndex,
@@ -700,12 +701,20 @@ export class PveLayer {
   }
 
   /** Phase of every security vent at `renderTick` (all offline without power). */
-  ventStates(state: MatchState, renderTick: number, tickRate: number): { id: string; phase: VentPhase }[] {
+  ventStates(
+    state: MatchState,
+    renderTick: number,
+    tickRate: number,
+  ): { id: string; online: boolean; phase: VentPhase }[] {
     const vents = this.mission?.vents ?? [];
     const start = state.pve.vents;
     return vents.map((v) => ({
       id: v.id,
-      phase: start > 0 ? ventPhase(v, (renderTick - start) / tickRate) : VENT_PHASE.IDLE,
+      online: start > 0 && ventOnline(v, state.pve.power, this.flags),
+      phase:
+        start > 0 && ventOnline(v, state.pve.power, this.flags)
+          ? ventPhase(v, (renderTick - start) / tickRate)
+          : VENT_PHASE.IDLE,
     }));
   }
 
@@ -746,7 +755,7 @@ export class PveLayer {
           g.fillStyle(0xeafff2, 0.12 + 0.06 * Math.sin(t * 3 + k)).fillCircle(px, py, r);
         }
         g.lineStyle(2, 0xd8ffe8, 0.6).strokeRect(a.x, a.y, a.w, a.h);
-      } else if (state.pve.vents > 0) {
+      } else if (states[i]!.online) {
         // Online and idle: a faint frame so the grate reads as a hazard.
         g.lineStyle(1, 0xffb33a, 0.25).strokeRect(a.x, a.y, a.w, a.h);
       }

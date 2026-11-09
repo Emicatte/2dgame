@@ -38,7 +38,7 @@ input sequence. Both fixes are in the first commit of the branch.
 | 6 | Boss system and first boss | ✅ boss system (phases, per-phase attacks, combos, transitions, squad scaling) and The Abomination, playable as the boss of every tenth Survival wave; not yet in a mission (The Warden and Subject Zero belong to later missions) |
 | 7 | Dead District, The Convoy | ✅ both scripted and tested: Dead District (map, script, `drive` step; full run in the simulation with the truck driven; browser scenario to the radio); The Convoy (escorted truck, lock/unlock, engine repair attached to the truck under fire; solo full run with the truck driven; failure on destruction; browser scenario to the warehouse district). Full runs by human players not done here |
 | 8 | Black Site and miniboss | ✅ Black Site (lab map, automatic doors, seals, security vents, blackout, 7 steps) and The Warden (directional plating, sweep/lash/bash/vent/call, 2 phases); full run in the simulation with the Warden fought by scripted shooting; browser scenario to the first terminal. Not played by humans here |
-| 9 | Final Breach, Subject Zero | not started |
+| 9 | Final Breach, Subject Zero | ✅ map, 7-step script (infiltration, waves, defence, arena, 3-phase boss with a changing hall, timed escape, evac); full run in the simulation with the boss fought by scripted shooting; browser scenarios (tunnels → atrium; both bosses rendered). Not played by humans here |
 | 10 | Progression polish, balance, optimisation | PvE progression done (records, titles, unlocks, dedupe); balance needs playtests |
 | 11 | Release preparation | 0.5.0 deployed on your go (2026-11-06); checks on real devices and GPUs still to do |
 
