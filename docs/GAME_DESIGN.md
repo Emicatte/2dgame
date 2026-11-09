@@ -74,6 +74,19 @@ Maps are plain data (`packages/shared/src/maps/*.ts`): solids (rectangles with a
 decals, lights, spawns and pickups. A Tiled importer would convert an object layer of rectangles to
 the same `SolidDef` list; the renderer and simulation would not change.
 
+**Salvage Depot** (0.7.0, 2240 × 1440 px, not symmetric): the first party map, for Prop Hunt and
+Hide & Seek (also Deathmatch and Gun Game). Racked warehouse, two offices, a yard and a security
+booth for the seekers; 60 transformable objects, shadow zones and hiding spots
+(`MapDef.party`). Maps declare the modes they support (`MapDef.modes`) or get them derived from
+their features (`mapModes`).
+
+## Modes
+
+Competitive: Deathmatch, Team Deathmatch, Gun Game, Domination, Capture the Flag. Party: Hide &
+Seek (Classic, Infection, Blackout), Prop Hunt. Co-op: Outbreak, Survival. Vehicles: Vehicle
+Mayhem. Rules, numbers and the planned modes: [v4/MODES.md](v4/MODES.md); Domination, CTF and
+Mayhem: [v2/SYSTEMS.md](v2/SYSTEMS.md); Outbreak: [v3/OUTBREAK.md](v3/OUTBREAK.md).
+
 ## Match rules (configurable per private room)
 
 | Setting | Default | Range |

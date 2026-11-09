@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.7.0 — unreleased (branch `modes-expansion`: Gun Game, Hide & Seek, Prop Hunt, the mode system)
+
+### Added
+- **Game mode system**: one registry for every mode (`MODES`: players, structure, rules, respawn,
+  victory, scoring, weapons, vehicles, HUD, rewards, join and disconnect behavior, status, feature
+  flag), one controller per new mode on the authoritative side (`apps/server/src/modes`), a shared
+  lifecycle (LOBBY → PREPARING → COUNTDOWN → ACTIVE → OVERTIME → RESULTS → REMATCH), feature flags
+  (`VITE_MODE_FLAGS`, `MODE_FLAGS`) and map compatibility metadata (`MapDef.modes`, `mapModes`,
+  `MapDef.party`). See `docs/v4/MODES.md`.
+- **Gun Game**: weapon ladder (pistol, SMG, rifle, shotgun, sniper, pistol), next weapon on every
+  elimination, final-weapon win, demotion when killed by someone behind you, overtime on a tie,
+  fast respawn with protection, ladder HUD.
+- **Hide & Seek** (Classic, Infection, Blackout): seekers wait blindfolded in a pen, hiders are
+  published only while a seeker actually sees them (screen box, line of sight, shadows, hiding
+  spots, flashlight cone in Blackout), spot alerts, spectating after elimination, seekers rotate
+  every round, points.
+- **Prop Hunt**: props turn into objects present on the map (picker or copy), lock, taunt, decoy,
+  quick transform; hunters lose health for shooting innocent objects; progressive hints and a
+  ping for props that stand still too long; sides swap every round.
+- **Hidden information on the wire**: masked public poses, real poses in a per-viewer filtered
+  collection, Prop Hunt objects as anonymous entities granted to hunters only when the hunt
+  starts, gameplay events filtered per recipient. Tests decode what each client receives.
+- **Salvage Depot**, the first party map (warehouse, offices, yard, security booth, 60 objects).
+- **Play screen**: every mode by category with players, length, maps and rules; planned modes
+  shown as "Planned" with what they need, no button.
+- Lobby: modes by category, only compatible maps, variants and round count, minimum players
+  enforced. Results: points / ladder level column and a vote for the next map.
+- Career counters per mode (stored in the career JSON) and two daily challenges; mode XP capped
+  per match and only for completed matches.
+- `apps/server/scripts/modebench.ts`: tick cost and bandwidth per mode.
+
+### Changed
+- Events raised between ticks (mode abilities) go out with the next tick instead of being dropped.
+- The room browser shows each room's real mode.
+
 ## 0.6.2 — 2026-11-09 (the crosshair moves with the player)
 
 ### Fixed

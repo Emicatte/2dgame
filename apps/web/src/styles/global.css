@@ -441,7 +441,14 @@ select {
   display: grid;
   place-items: center;
   padding: 24px;
+  /* A dialog taller than the window (small laptop screens) scrolls instead of hiding its buttons. */
+  overflow-y: auto;
   animation: fade-in var(--t-med) var(--ease-out);
+}
+
+.modal-backdrop > .panel {
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
 }
 
 @keyframes fade-in {

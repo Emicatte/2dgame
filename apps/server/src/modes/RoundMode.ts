@@ -321,7 +321,8 @@ export abstract class RoundMode extends BaseMode {
 
   /** Whether `h` is currently hidden from the seeking side. */
   masked(h: ServerPlayer): boolean {
-    if (this.side.get(h.id) !== ROLE.HIDER) return false;
+    // Outside a running match (lobby after the last round) nothing is secret any more.
+    if (this.stage === "" || this.side.get(h.id) !== ROLE.HIDER) return false;
     const until = this.exposedUntil.get(h.id);
     return until === undefined || until < this.sim.tick;
   }

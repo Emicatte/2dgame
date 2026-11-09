@@ -1,6 +1,8 @@
 # SCRAPLINE (provisional name)
 
-Top-down 2D multiplayer shooter for desktop browsers. **Outbreak (3.0, branch `outbreak`):
+Top-down 2D multiplayer shooter for desktop browsers. **Modes expansion (0.7.0): Gun Game, Hide &
+Seek (three variants) and Prop Hunt, a party map, a Play screen with every mode by category, a
+next-map vote and mode career stats** (see [docs/v4/MODES.md](docs/v4/MODES.md)). **Outbreak (3.0):
 co-op PvE for 1–4 players with missions, waves, six infected types and a boss** (see
 [docs/v3/OUTBREAK.md](docs/v3/OUTBREAK.md)). Competitive: 2–8 players on nine original maps, five
 weapon classes, cars, off-roaders, an APC and a helicopter with seats you can shoot from, five
@@ -28,7 +30,12 @@ unlocks and daily challenges, and private rooms you can share with a link.
 | Host mode: the arena creator's browser hosts the match, friends join over WebRTC; deploys on Vercel alone | Done (v0.2.0), unit + two-browser WebRTC E2E; real school networks not tested: see [docs/HOST_MODE.md](docs/HOST_MODE.md) |
 | Deployment config: Dockerfile, Render Blueprint, Vercel config, docs | Done; client deployed on Vercel by the owner; dedicated server image built and run in the audit, **not deployed** |
 | Outbreak co-op PvE: First Contact, Survival, 6 infected + boss, Wave Director, revive | Done (v0.5.0, deployed 2026-11-06 at https://2dgame-8ds5.vercel.app): simulation, host-mode and dedicated-server integration tests, two-browser WebRTC E2E; full mission by human players and balance not playtested: [docs/v3/ROADMAP.md](docs/v3/ROADMAP.md) |
-| Performance | CPU cost per frame measured (small); **60 FPS on a real GPU not yet verified**: run `/bench.html` on target hardware |
+| Game mode system: data registry (`MODES`), one controller per new mode, shared lifecycle, feature flags, map compatibility metadata | Done (0.7.0), see [docs/v4/MODES.md](docs/v4/MODES.md) |
+| Gun Game (weapon ladder, demotion, overtime) | Done (0.7.0): simulation tests, host-mode test, two-browser WebRTC E2E; not playtested |
+| Hide & Seek (Classic, Infection, Blackout), Prop Hunt (transform, lock, taunt, decoy, hints) | Done (0.7.0): secrets kept off the wire (per-viewer views and events), verified by decoding what each client receives (unit, host mode, two-browser E2E); balance not playtested |
+| Salvage Depot party map, Play screen, next-map vote, mode career stats | Done (0.7.0) |
+| Infection, Sabotage, Bounty Hunt, Extraction, Chaos Arena, Vehicle Pursuit / Convoy, Boss Rush | Designed and planned (shown as "Planned" on the Play screen), not built: [docs/v4/MODES.md §6](docs/v4/MODES.md) |
+| Performance | CPU cost per frame measured (small); server tick cost per mode measured (`scripts/modebench.ts`); **60 FPS on a real GPU not yet verified**: run `/bench.html` on target hardware |
 
 Details and the test record: [docs/TESTING.md](docs/TESTING.md). Open items: [docs/ROADMAP.md](docs/ROADMAP.md).
 Technical audit (findings, evidence, residual risks, conditions for publication):
@@ -66,7 +73,8 @@ pnpm dev:server     # migrations run automatically at boot
 | R | Reload |
 | Shift | Dash |
 | 1 / 2 / 3 | Primary / sidearm / picked-up weapon |
-| E | Pick up weapon · enter / leave a vehicle · hold: revive a teammate, use mission objects (Outbreak) |
+| E | Pick up weapon · enter / leave a vehicle · hold: revive a teammate, use mission objects (Outbreak) · Prop Hunt: copy the object in front |
+| Q / C / T / G | Prop Hunt: choose an object / lock position / taunt / decoy |
 | F | Change seat in a vehicle |
 | W / S, A / D (driving) | Throttle / brake-reverse, steer; Shift = handbrake |
 | W A S D, mouse (flying) | Move, nose follows the mouse; Shift = take off / land |
@@ -116,6 +124,7 @@ synchronized state schema lives in `packages/shared` so the client decodes typed
 
 - [Architecture](docs/ARCHITECTURE.md) — stack, netcode, security, scaling
 - [Game design](docs/GAME_DESIGN.md) — weapons, maps, progression, art direction
+- [Modes](docs/v4/MODES.md) — game mode system, Gun Game, Hide & Seek, Prop Hunt, roadmap of the others
 - [Deployment](docs/DEPLOYMENT.md) — Vercel, Render, Scaleway, DNS
 - [Testing](docs/TESTING.md) — what is tested, results, what was not run
 - [Roadmap](docs/ROADMAP.md) — phase checklist and next steps

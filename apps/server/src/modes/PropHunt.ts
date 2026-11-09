@@ -183,14 +183,18 @@ export class PropHuntMode extends RoundMode {
     return def ? { radius: def.radius, speed: def.speed } : null;
   }
 
+  /** Object bodies, rebuilt once per tick (every player's input frames share them). */
+  private bodies: { tick: number; list: (Circle & { id: string })[] } = { tick: -1, list: [] };
+
   override obstacles(p: ServerPlayer): Circle[] {
-    const own = this.disguise.get(p.id);
-    const out: Circle[] = [];
-    for (const o of this.objects.values()) {
-      if (o.id === own) continue;
-      out.push({ x: o.x, y: o.y, r: disguiseDef(o.k)?.radius ?? 16 });
+    if (this.bodies.tick !== this.sim.tick) {
+      const list: (Circle & { id: string })[] = [];
+      for (const o of this.objects.values())
+        list.push({ id: o.id, x: o.x, y: o.y, r: disguiseDef(o.k)?.radius ?? 16 });
+      this.bodies = { tick: this.sim.tick, list };
     }
-    return out;
+    const own = this.disguise.get(p.id);
+    return own ? this.bodies.list.filter((b) => b.id !== own) : this.bodies.list;
   }
 
   private overlaps(x: number, y: number, r: number, except: string | null): boolean {
@@ -255,6 +259,7 @@ export class PropHuntMode extends RoundMode {
     }
     if (!auto) this.locked.delete(p.id);
     this.lastMove.set(p.id, { x: p.sim.x, y: p.sim.y, tick: this.sim.tick });
+    this.bodies.tick = -1;
     return true;
   }
 

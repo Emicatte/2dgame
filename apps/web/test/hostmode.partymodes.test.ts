@@ -12,7 +12,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 import type { PropHuntMode } from "../../server/src/modes/PropHunt.ts";
 import { HostRoom } from "../src/p2p/HostRoom.ts";
-import { memoryLinkPair } from "../src/p2p/link.ts";
+import { breakLink, memoryLinkPair, type PeerLink } from "../src/p2p/link.ts";
 import { PeerRoom } from "../src/p2p/PeerRoom.ts";
 import { BUILD_ID } from "../src/p2p/wire.ts";
 
@@ -35,13 +35,14 @@ afterEach(async () => {
   for (const r of rooms.splice(0)) await r.leave();
 });
 
-async function arena(map: "depot" | "industrial") {
+async function arena(map: "depot" | "industrial", links: PeerLink[] = []) {
   const host = new HostRoom({ code: "PARTY", map, host: HOST, headless: true });
   rooms.push(host);
   const pending = PeerRoom.join(
     async () => {
       const [g, h] = memoryLinkPair();
       host.acceptLink(h);
+      links.push(g);
       return g;
     },
     {
@@ -169,5 +170,24 @@ describe("host mode: party modes", () => {
     host.tick();
     expect(host.state.phase).toBe("lobby");
     expect(notices.some((t) => /at least 2/.test(t))).toBe(true);
+  });
+
+  it("a hiding guest who drops and reconnects gets its own ghost back, still hidden from the host's side rules", async () => {
+    const links: PeerLink[] = [];
+    const { host, guest } = await arena("depot", links);
+    await start(host, guest, { mode: "hideseek" });
+    // Host joined first: the host seeks, the guest hides.
+    expect(guest.state.players.get(guest.sessionId)!.role).toBe(ROLE.HIDER);
+    await ticks(host, 3);
+    expect(guest.state.allies.has(guest.sessionId)).toBe(true);
+    let reconnected = 0;
+    guest.onReconnect(() => reconnected++);
+    breakLink(links[0]!);
+    for (let i = 0; i < 40 && reconnected === 0; i++) await ticks(host, 1);
+    expect(reconnected).toBe(1);
+    await ticks(host, 3);
+    expect(guest.state.allies.has(guest.sessionId)).toBe(true);
+    expect(guest.state.players.get(guest.sessionId)!.role).toBe(ROLE.HIDER);
+    expect(guest.state.round.stage).toBe("prep");
   });
 });

@@ -162,6 +162,28 @@ Domination points and CTF flags (`points`, `flags`, derived positions from `obje
 `syncObjectives` mirrors them into `MatchState.objectives`, and `MatchRules.mapForMode` keeps
 Vehicle Mayhem on vehicle maps. Rules and numbers: `docs/v2/SYSTEMS.md`.
 
+## Game mode system (0.7.0)
+
+Details: [v4/MODES.md](v4/MODES.md). In short:
+
+- **Registry** (`packages/shared/src/config/modes.ts`, data): every mode's identity, players,
+  structure, rules, respawn, victory, scoring, weapons, vehicles, HUD, rewards, join-in-progress,
+  disconnect behavior, status and feature flag; `PLANNED_MODES` for the designed ones.
+- **Controllers** (`apps/server/src/modes/`): `ModeController` hooks called by `GameSimulation`
+  (spawns, loadouts, kills, respawn, frozen, body, obstacles, shot targets, abilities, end,
+  standings, results facts, sync). `GunGameMode`, `HideSeekMode`, `PropHuntMode` (the last two on
+  `RoundMode`). The classic modes keep their original path inside the simulation.
+- **Lifecycle**: LOBBY → PREPARING → COUNTDOWN → ACTIVE → OVERTIME → RESULTS → REMATCH on top of the
+  room phases; `MatchRules.endReason` is the single end rule of both rooms.
+- **Hidden information**: masked public poses (`PlayerState.masked`), real poses in a filtered
+  collection granted per viewer (`MatchState.allies`), Prop Hunt objects in another
+  (`MatchState.disguises`), gameplay events filtered per recipient (`sim.eventsFor`).
+  `modes/sync.ts` applies the grants for both rooms (one StateView per client).
+- **Feature flags**: `VITE_MODE_FLAGS` (client / host mode), `MODE_FLAGS` (dedicated server).
+- **Client**: `apps/web/src/game/modes/ModeLayer.ts` (presentation only: masked players, live
+  objects, pings, alerts, blackout light map, spectating, Prop Hunt keys), `screens/ModeHud.tsx`,
+  `screens/PlayScreen.tsx`.
+
 ## Vehicles (2.0)
 
 Vehicles are a second kind of simulated entity in the same tick and the same input pipeline:
@@ -183,7 +205,8 @@ Vehicles are a second kind of simulated entity in the same tick and the same inp
 
 ## Room lifecycle
 
-`lobby → countdown (5 s, frozen) → playing → results (14 s) → lobby`. Quick rooms auto-start
+`lobby → countdown (5 s, frozen) → playing → results (14 s, next-map vote) → lobby`. Round modes
+add stages inside `playing` (`MatchState.round`). Quick rooms auto-start
 12 s after two players are present (3 s when everyone is ready). Private rooms start when the host
 presses Start and all others are ready. Players can join a match in progress (spawn after 1 s).
 Disconnects keep the seat for 20 s (`allowReconnection`); the client also stores the reconnection
@@ -218,7 +241,8 @@ room, so one vCPU has headroom for many rooms. Watch `tickCostMs.max` and `maxIn
 | `packages/shared/src/state.ts` | Colyseus schema (synchronized state) |
 | `apps/server/src/simulation` | `GameSimulation`: inputs, rewind, combat, spawns, pickups |
 | `apps/server/src/rooms/ArenaRoom.ts` | Phases, message handling, mirroring sim → state, persistence |
-| `apps/server/src/rules/MatchRules.ts` | Modes and teams, shared by ArenaRoom and HostRoom |
+| `apps/server/src/rules/MatchRules.ts` | Modes and teams, end rule, map vote, shared by ArenaRoom and HostRoom |
+| `apps/server/src/modes` | Mode controllers (Gun Game, Hide & Seek, Prop Hunt) and the per-viewer mode sync |
 | `apps/server/src/api` | HTTP routes |
 | `apps/web/src/game` | Phaser scenes, procedural art, effects, audio, netcode client |
 | `apps/web/src/screens` | Menus, lobby, HUD, results |
