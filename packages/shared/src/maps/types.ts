@@ -5,6 +5,7 @@ import type { Rect, Vec2 } from "../sim/math.ts";
 export type MapId =
   | "district"
   | "outskirts"
+  | "blacksite"
   | "industrial"
   | "neon"
   | "desert"
@@ -82,9 +83,10 @@ export interface LightDef extends Vec2 {
   flicker?: number;
   /**
    * PvE: lights that follow mission state (visual only). "power" lights are off until the power
-   * is restored, "alarm" lights pulse red while the alarm sounds.
+   * is restored, "alarm" lights pulse red while the alarm sounds, "emergency" lights are on only
+   * while the main power is out (or in a scripted blackout).
    */
-  group?: "power" | "alarm";
+  group?: "power" | "alarm" | "emergency";
 }
 
 export type PickupKind = "health" | "ammo" | "weapon";

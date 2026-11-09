@@ -184,7 +184,7 @@ export type HazardState = SchemaType<typeof HazardState>;
 
 /**
  * PvE world object: a mission prop (generator, keycard, gate panel), a supply crate or a loot drop.
- * `kind` "generator" | "keycard" | "panel" | "terminal" | "supply" | "ammo" | "health".
+ * `kind`: a mission PropKind ("generator", "terminal", "intel"…), "supply", "ammo" or "health".
  */
 export const PropState = schema(
   {
@@ -234,6 +234,8 @@ export const PveState = schema(
     startTick: t.uint32().default(0),
     /** Boss enemy id ("" = none) for the boss health bar. */
     boss: t.string().default(""),
+    /** Tick the security vents came online (0 = offline): every vent's cycle runs from it. */
+    vents: t.uint32().default(0),
   },
   "PveState",
 );

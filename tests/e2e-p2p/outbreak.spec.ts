@@ -34,6 +34,10 @@ interface PveInfo {
   sightVertices: number;
   glints: number;
   tension: number;
+  flags: string;
+  blackout: boolean;
+  vents: string;
+  lights: string[];
 }
 
 const pve = (page: Page) =>
@@ -111,7 +115,8 @@ test("Outbreak: two browsers complete co-op objectives of First Contact together
   // in development, not playable.
   await expect(a.getByTestId("mission-dead-district")).toBeDisabled();
   await expect(a.getByTestId("mission-the-convoy")).toBeDisabled();
-  await expect(a.getByTestId("mission-planned-4")).toBeDisabled();
+  await expect(a.getByTestId("mission-black-site")).toBeDisabled();
+  await expect(a.getByTestId("mission-planned-5")).toBeDisabled();
   await a.getByTestId("difficulty-recruit").click();
   const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
   expect(code).toMatch(/^[A-Z0-9]{5}$/);
@@ -351,4 +356,63 @@ test("The Convoy: the escorted truck's hull is on the HUD, locked until the keys
   await expect(a.getByTestId("pve-escort")).not.toContainText("locked");
   await expect(a.getByTestId("pve-objective-text")).toContainText("warehouse district");
   await shot(a, "convoy-keys");
+});
+
+test("Black Site: dark and sealed at the start, the squad reaches the atrium and restores the first terminal", async () => {
+  test.setTimeout(240_000);
+  browsers = [await chromium.launch({ executablePath: CHROME, headless: true, args: ARGS })];
+  const a = await (await browsers[0]!.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+  a.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
+  await onboard(a, "Varga");
+  await a.evaluate(() => {
+    const key = "scrapline.localProfile.v1";
+    const d = JSON.parse(localStorage.getItem(key) ?? "{}");
+    const done = { completions: 1, best: {} };
+    d.pve = {
+      ...(d.pve ?? {}),
+      missions: { "first-contact": done, "dead-district": done, "the-convoy": done },
+    };
+    localStorage.setItem(key, JSON.stringify(d));
+  });
+  await a.getByTestId("create-coop").click();
+  await expect(a.getByTestId("pve-settings")).toBeVisible({ timeout: 15_000 });
+  await a.getByTestId("mission-black-site").click();
+  await expect(a.getByTestId("briefing")).toContainText("Black Site");
+  await a.getByTestId("difficulty-recruit").click();
+  await a.getByTestId("start-match").click();
+  await phaseIs(a, "playing");
+  await expect(a.getByTestId("pve-objective-text")).toContainText("Enter the laboratory");
+  const start = await pve(a);
+  expect(start?.mission).toBe("black-site");
+  expect(start?.power).toBe(false);
+  expect(start?.dark).toBe(true);
+  expect(start?.flags).toContain("sealed-srv-door");
+  // Only the emergency lights burn without power.
+  expect(start?.lights).toContain("emergency");
+  expect(start?.lights).not.toContain("power");
+  await shot(a, "blacksite-start");
+  // Through the forced blast door into the atrium, then north to the security terminal.
+  await walk(
+    a,
+    [
+      { x: 700, y: 1410 },
+      { x: 1250, y: 1410 },
+      { x: 1720, y: 1400 },
+    ],
+    { fire: true },
+  );
+  await expect.poll(async () => (await pve(a))?.step ?? 0, { timeout: 90_000 }).toBeGreaterThanOrEqual(1);
+  await expect(a.getByTestId("pve-objective-text")).toContainText("Restore the three terminals");
+  await walk(
+    a,
+    [
+      { x: 1720, y: 890 },
+      { x: 1720, y: 600 },
+      { x: 1810, y: 345 },
+    ],
+    { fire: true, interact: true },
+  );
+  await expect(a.getByText("Security terminal: done")).toBeVisible({ timeout: 90_000 });
+  await expect(a.getByTestId("pve-objective-text")).toContainText("(1/3)");
+  await shot(a, "blacksite-terminal");
 });

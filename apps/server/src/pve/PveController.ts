@@ -2,11 +2,13 @@ import {
   AI,
   buildNavGrid,
   type CollisionWorld,
+  circleIntersectsRect,
   closestOnBody,
   DIFFICULTY,
   type Difficulty,
   type DifficultyDef,
   DOWNED,
+  type DoorDef,
   formatIdList,
   type HitTarget,
   isFreeSpot,
@@ -30,8 +32,10 @@ import {
   survivalWave,
   type Trigger,
   updateNavRegion,
+  VENT_PHASE,
   type Vec2,
   vehicleCircles,
+  ventPhase,
   type WeaponDef,
   weaponByIndex,
   type XpLine,
@@ -97,10 +101,26 @@ export interface LootRuntime {
 }
 
 const PROP_REACH = 74;
+/**
+ * Automatic doors: they open for a player this close to the doorway (early enough that the
+ * opening reaches the player's screen before they get there) or an infected touching it, and
+ * close after `holdSec` with nobody near and the doorway clear.
+ */
+export const AUTO_DOOR = { playerReach: 150, enemyReach: 40, holdSec: 1.6 } as const;
+/** Vents apply their gas in steps of this many seconds; the infected take `enemyMult` × dps. */
+export const VENT_TICK_SEC = 0.25;
+export const VENT_ENEMY_MULT = 2;
 const LOOT_REACH = PLAYER.radius + 16;
 const SUPPLY_HOLD_SEC = 0.6;
 const LOOT_SEC = 25;
 const DROP_CHANCE = { ammo: 0.07, health: 0.035 };
+
+/** Distance from a point to a rectangle (0 inside it). */
+function rectDistance(r: Rect, x: number, y: number): number {
+  const dx = Math.max(r.x - x, 0, x - (r.x + r.w));
+  const dy = Math.max(r.y - y, 0, y - (r.y + r.h));
+  return Math.hypot(dx, dy);
+}
 
 /** Gunfire noise radius (px): louder weapons wake more of the map. */
 export function shotNoise(w: WeaponDef): number {
@@ -129,7 +149,13 @@ export class PveController implements ZombieHost {
   waveInStep = 0;
   nextWaveTick = 0;
   readonly doorsOpen = new Set<string>();
+  /** Automatic doors sealed by the script (lockdown): shut until an `open` trigger. */
+  readonly sealed = new Set<string>();
   readonly flags = new Set<string>();
+  /** Tick the security vents came online (0 = offline). */
+  ventStart = 0;
+  private readonly autoNear = new Map<string, number>();
+  private navKey = "\u0000";
   power = false;
   alarm = false;
   readonly props = new Map<string, PropRuntime>();
@@ -230,7 +256,15 @@ export class PveController implements ZombieHost {
     return this.out.splice(0, this.out.length);
   }
 
-  hurtPlayer(id: string, dmg: number, from: Zombie | null, x: number, y: number, knock?: Vec2): void {
+  hurtPlayer(
+    id: string,
+    dmg: number,
+    from: Zombie | null,
+    x: number,
+    y: number,
+    knock?: Vec2,
+    cause = "Acid",
+  ): void {
     const p = this.sim.players.get(id);
     if (!p?.alive) return;
     if (p.pve.downed) {
@@ -254,7 +288,7 @@ export class PveController implements ZombieHost {
     }
     // Pure shove (a boss roar): no damage, no hit event.
     if (dmg <= 0) return;
-    this.sim.damagePlayerFrom(p, dmg, from ? `z:${from.id}` : "", from ? from.def.name : "Acid", x, y);
+    this.sim.damagePlayerFrom(p, dmg, from ? `z:${from.id}` : "", from ? from.def.name : cause, x, y);
   }
 
   hurtVehicle(id: string, dmg: number, x: number, y: number): void {
@@ -290,7 +324,11 @@ export class PveController implements ZombieHost {
     return squadScale(this.squadSize);
   }
 
-  /** World with the current doors, applied to the simulation; the nav grid follows. */
+  /**
+   * World with the current doors, applied to the simulation; the nav grid follows. The infected
+   * path through working automatic doors (they open for them): navigation sees those doors as
+   * open whatever their state, so an automatic door opening or closing never touches the grid.
+   */
   private rebuildWorlds(full: boolean, changed?: readonly Rect[]): void {
     const doors = this.mission?.doors ?? [];
     // Survival on a mission map: every door open.
@@ -299,19 +337,31 @@ export class PveController implements ZombieHost {
     this.worldsCache = w;
     this.sim.world = w.world;
     this.sim.shotWorld = w.shotWorld;
-    if (full || !this.grid) this.grid = buildNavGrid(w.world);
-    else for (const r of changed ?? []) updateNavRegion(this.grid, w.world, r);
+    const navOpen = new Set(open);
+    for (const d of doors) if (this.autoOnline(d)) navOpen.add(d.id);
+    const key = formatIdList(navOpen);
+    if (!full && this.grid && key === this.navKey) return;
+    this.navKey = key;
+    const navWorld = navOpen.size === open.size ? w.world : pveWorlds(this.sim.map, doors, navOpen).world;
+    if (full || !this.grid) this.grid = buildNavGrid(navWorld);
+    else for (const r of changed ?? doors) updateNavRegion(this.grid, navWorld, r);
     this.zw.invalidateNav();
     this.waves.resetCandidates();
+  }
+
+  /** An automatic door that works: powered and not sealed. */
+  private autoOnline(d: DoorDef): boolean {
+    return !!d.auto && this.power && !this.sealed.has(d.id);
   }
 
   get worlds() {
     return this.worldsCache!;
   }
 
-  private setDoor(id: string, open: boolean): void {
+  /** Opens or closes a mission door; false when it already was. */
+  private setDoor(id: string, open: boolean): boolean {
     const d = this.mission?.doors.find((x) => x.id === id);
-    if (!d || this.doorsOpen.has(id) === open) return;
+    if (!d || this.doorsOpen.has(id) === open) return false;
     if (open) this.doorsOpen.add(id);
     else this.doorsOpen.delete(id);
     // A door closing on somebody must not trap them inside the solid: push them out.
@@ -321,8 +371,97 @@ export class PveController implements ZombieHost {
         if (!p.alive || p.vehicle) continue;
         if (!isFreeSpot(this.sim.world, p.sim, PLAYER.radius)) this.placeFree(p, p.sim);
       }
+      for (const z of this.zw.zombies.values()) {
+        if (z.dead || !circleIntersectsRect(z.x, z.y, z.def.radius, d)) continue;
+        const at = randomWalkableNear(this.grid, z.cls, z.x, z.y, 160, () => this.rng());
+        if (at) this.zw.relocate(z, at.x, at.y);
+      }
     }
-    this.emit({ t: "pve", k: open ? "door" : "doorClose", s: id });
+    // Automatic doors only make a sound: no feed line every time somebody walks through.
+    if (d.auto) this.emit({ t: "pve", k: "auto", s: id, n: open ? 1 : 0 });
+    else this.emit({ t: "pve", k: open ? "door" : "doorClose", s: id });
+    return true;
+  }
+
+  /** Seals (lockdown) or releases an automatic door; a released door opens at once. */
+  private setSeal(d: DoorDef, sealed: boolean): void {
+    if (sealed) {
+      this.sealed.add(d.id);
+      this.flags.add(`sealed-${d.id}`);
+    } else {
+      this.sealed.delete(d.id);
+      this.flags.delete(`sealed-${d.id}`);
+    }
+    if (!this.setDoor(d.id, !sealed)) this.rebuildWorlds(false, [d]);
+    if (!sealed) this.autoNear.set(d.id, this.sim.tick);
+  }
+
+  /** Automatic doors: open for anybody near, close behind them once the doorway is clear. */
+  private updateAutoDoors(): void {
+    const doors = this.mission?.doors;
+    if (!doors || this.mode === "survival") return;
+    const tick = this.sim.tick;
+    for (const d of doors) {
+      if (!d.auto) continue;
+      const online = this.autoOnline(d);
+      const open = this.doorsOpen.has(d.id);
+      if (online && this.sensed(d)) {
+        this.autoNear.set(d.id, tick);
+        if (!open) this.setDoor(d.id, true);
+        continue;
+      }
+      if (!open) continue;
+      if (online && tick - (this.autoNear.get(d.id) ?? 0) < this.secTicks(AUTO_DOOR.holdSec)) continue;
+      // Never closes on somebody: it waits for the doorway to be clear.
+      if (this.doorwayBusy(d)) continue;
+      this.setDoor(d.id, false);
+    }
+  }
+
+  private sensed(d: DoorDef): boolean {
+    for (const p of this.sim.players.values()) {
+      if (!p.alive || p.vehicle) continue;
+      if (rectDistance(d, p.sim.x, p.sim.y) <= AUTO_DOOR.playerReach) return true;
+    }
+    for (const z of this.zw.zombies.values()) {
+      if (z.dead) continue;
+      if (rectDistance(d, z.x, z.y) <= AUTO_DOOR.enemyReach + z.def.radius) return true;
+    }
+    return false;
+  }
+
+  private doorwayBusy(d: DoorDef): boolean {
+    for (const p of this.sim.players.values()) {
+      if (p.alive && !p.vehicle && circleIntersectsRect(p.sim.x, p.sim.y, PLAYER.radius + 2, d)) return true;
+    }
+    for (const z of this.zw.zombies.values()) {
+      if (!z.dead && circleIntersectsRect(z.x, z.y, z.def.radius + 2, d)) return true;
+    }
+    return false;
+  }
+
+  /** Security vents: gas in their area while active (players, and the infected twice as hard). */
+  private updateVents(): void {
+    const vents = this.mission?.vents;
+    if (!vents || this.ventStart === 0) return;
+    const elapsed = this.sim.tick - this.ventStart;
+    const every = this.secTicks(VENT_TICK_SEC);
+    if (elapsed % every !== 0) return;
+    const since = elapsed / this.tickRate;
+    const dt = every / this.tickRate;
+    for (const v of vents) {
+      if (ventPhase(v, since) !== VENT_PHASE.ACTIVE) continue;
+      const dmg = v.dps * dt;
+      for (const p of this.sim.players.values()) {
+        if (!p.alive || p.vehicle || !circleIntersectsRect(p.sim.x, p.sim.y, PLAYER.radius * 0.5, v.area))
+          continue;
+        this.hurtPlayer(p.id, dmg, null, p.sim.x, p.sim.y, undefined, "Decontamination gas");
+      }
+      for (const z of this.zw.zombies.values()) {
+        if (z.dead || !circleIntersectsRect(z.x, z.y, z.def.radius * 0.5, v.area)) continue;
+        this.zw.damage(z, dmg * VENT_ENEMY_MULT, "", false, z.x, z.y, true);
+      }
+    }
   }
 
   get doorList(): string {
@@ -336,12 +475,17 @@ export class PveController implements ZombieHost {
   /** New run: called by the simulation at match reset, before the players spawn. */
   reset(): void {
     this.out.length = 0;
+    // Players may have joined this very tick: the boss's health scales with the squad.
+    this.actorTick = -1;
     this.zw.clear();
     this.waves.stop();
     this.loot.clear();
     this.props.clear();
     this.doorsOpen.clear();
     this.flags.clear();
+    this.sealed.clear();
+    this.autoNear.clear();
+    this.ventStart = 0;
     this.status = PVE_STATUS.RUNNING;
     this.failReason = "";
     this.power = false;
@@ -361,7 +505,13 @@ export class PveController implements ZombieHost {
     this.endTick = 0;
     this.bossId = "";
     this.selfRevives = this.diff.selfRevives;
-    for (const d of this.mission?.doors ?? []) if (d.startOpen) this.doorsOpen.add(d.id);
+    for (const d of this.mission?.doors ?? []) {
+      if (d.startOpen) this.doorsOpen.add(d.id);
+      if (d.auto && d.sealed) {
+        this.sealed.add(d.id);
+        this.flags.add(`sealed-${d.id}`);
+      }
+    }
     this.rebuildWorlds(true);
     this.zw.hpMult = this.squad.enemyHp;
     for (const def of this.mission?.props ?? []) {
@@ -403,11 +553,13 @@ export class PveController implements ZombieHost {
     }
     this.zw.hpMult = this.squad.enemyHp;
     this.followVehicles();
+    this.updateAutoDoors();
     this.updatePlayers();
     if (this.mission) this.updateMission();
     else this.updateSurvival();
     this.waves.step(this.squad, this.diff, this.squadSize);
     this.zw.step();
+    this.updateVents();
     let boss = "";
     for (const z of this.zw.zombies.values()) if (!z.dead && z.def.boss) boss = z.id;
     this.bossId = boss;
@@ -738,9 +890,13 @@ export class PveController implements ZombieHost {
 
   private applyTriggers(list: readonly Trigger[] | undefined): void {
     for (const t of list ?? []) {
-      if ("open" in t) this.setDoor(t.open, true);
-      else if ("close" in t) this.setDoor(t.close, false);
-      else if ("power" in t) this.power = t.power;
+      if ("open" in t || "close" in t) {
+        const id = "open" in t ? t.open : t.close;
+        const d = this.mission?.doors.find((x) => x.id === id);
+        // On an automatic door, `close` seals it and `open` lifts the seal.
+        if (d?.auto) this.setSeal(d, "close" in t);
+        else this.setDoor(id, "open" in t);
+      } else if ("power" in t) this.setPower(t.power);
       else if ("alarm" in t) this.alarm = t.alarm;
       else if ("spawn" in t) this.spawnGroup(t.spawn);
       else if ("hint" in t) this.emit({ t: "pve", k: "hint", s: t.hint });
@@ -748,7 +904,17 @@ export class PveController implements ZombieHost {
       else if ("checkpoint" in t) this.checkpoint = { ...t.checkpoint };
       else if ("lock" in t) this.setVehicleLock(t.lock, true);
       else if ("unlock" in t) this.setVehicleLock(t.unlock, false);
+      else if ("set" in t) this.flags.add(t.set);
+      else if ("unset" in t) this.flags.delete(t.unset);
     }
+  }
+
+  /** Power: automatic doors and the security vents work only with it. */
+  private setPower(on: boolean): void {
+    if (this.power === on) return;
+    this.power = on;
+    this.ventStart = on && this.mission?.vents?.length ? Math.max(1, this.sim.tick) : 0;
+    this.rebuildWorlds(false);
   }
 
   /** A locked vehicle empties and refuses passengers; clients see it through a mission flag. */

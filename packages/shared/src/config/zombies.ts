@@ -6,7 +6,15 @@
  * `index` travels on the wire: keep indices stable once a release ships.
  */
 
-export type ZombieKind = "walker" | "runner" | "brute" | "spitter" | "stalker" | "exploder" | "abomination";
+export type ZombieKind =
+  | "walker"
+  | "runner"
+  | "brute"
+  | "spitter"
+  | "stalker"
+  | "exploder"
+  | "abomination"
+  | "warden";
 
 export type AttackKind =
   | "melee"
@@ -21,7 +29,14 @@ export type AttackKind =
   /** Boss: calls lesser infected. */
   | "summon"
   /** Boss: phase transition (shockwave, no damage). */
-  | "roar";
+  | "roar"
+  /** Boss: a cone in front of it, or behind it (`rear`), with an arc of `arc` either side. */
+  | "sweep"
+  /**
+   * Boss: it stops and vents its plating, the vulnerability window: every hit lands as if on the
+   * open plates (`plating.open`); the plates slam shut at the end with a short burst around it.
+   */
+  | "vent";
 /** Wire index of an attack kind (ZombieState.ak). Keep the order stable. */
 export const ATTACK_KINDS: readonly AttackKind[] = [
   "melee",
@@ -33,6 +48,8 @@ export const ATTACK_KINDS: readonly AttackKind[] = [
   "throw",
   "summon",
   "roar",
+  "sweep",
+  "vent",
 ];
 
 export interface AttackDef {
@@ -60,6 +77,9 @@ export interface AttackDef {
   summon?: { kind: ZombieKind; count: number };
   /** Throw: debris pieces per throw (spread around the target). */
   volley?: number;
+  /** Sweep: half-angle of the cone (rad) and whether it strikes behind the attacker. */
+  arc?: number;
+  rear?: boolean;
 }
 
 /** One boss attack within a phase: usable in a distance band, with its own cooldown. */
@@ -70,6 +90,8 @@ export interface BossAttackDef extends AttackDef {
   cooldownSec: number;
   /** Combo: this attack follows immediately when this one ends. */
   combo?: string;
+  /** Not used before this many seconds into its phase (a vent window does not open at once). */
+  firstSec?: number;
 }
 
 export interface BossPhaseDef {
@@ -88,6 +110,38 @@ export interface BossDef {
   transitionSec: number;
   /** Health grows with the squad: × (1 + perExtraPlayer × (players − 1)). */
   perExtraPlayer: number;
+}
+
+/**
+ * Directional armour (The Warden): bullet damage multiplier by where the hit lands relative to
+ * the enemy's facing. Front plates within `frontArc` either side, the weak point within `backArc`
+ * either side of its back, the flanks in between. While it vents (the vulnerability window) the
+ * front and flanks take `open` and the weak point `back × open`.
+ */
+export interface PlatingDef {
+  frontArc: number;
+  backArc: number;
+  front: number;
+  side: number;
+  back: number;
+  open: number;
+}
+
+export type HitSide = "front" | "side" | "back";
+
+/** Which side of a plated enemy a hit lands on (`rel`: hit angle minus facing, any range). */
+export function hitSide(p: PlatingDef, rel: number): HitSide {
+  const a = Math.abs(Math.atan2(Math.sin(rel), Math.cos(rel)));
+  if (a <= p.frontArc) return "front";
+  if (a >= Math.PI - p.backArc) return "back";
+  return "side";
+}
+
+/** Bullet damage multiplier of a plated enemy for a hit on `side`, venting or not. */
+export function platingMult(p: PlatingDef, side: HitSide, venting: boolean): number {
+  if (side === "back") return venting ? p.back * p.open : p.back;
+  if (venting) return p.open;
+  return side === "front" ? p.front : p.side;
 }
 
 export interface ZombieDef {
@@ -114,6 +168,8 @@ export interface ZombieDef {
   special?: AttackDef & { minRange: number; maxRange: number; cooldownSec: number };
   /** Bullet damage taken multiplier (1 = normal). */
   armor: number;
+  /** Directional armour instead of a flat multiplier (replaces `armor` for bullets). */
+  plating?: PlatingDef;
   /** Damage multiplier while stunned (the brute's vulnerability window). */
   stunnedDamageMult: number;
   /** Seconds stunned after a charge ends in a wall. */
@@ -513,6 +569,201 @@ export const ZOMBIES: Record<ZombieKind, ZombieDef> = {
               recoverSec: 0.8,
               damage: 0,
               summon: { kind: "runner", count: 4 },
+            },
+          ],
+        },
+      ],
+    },
+  },
+  warden: {
+    kind: "warden",
+    index: 7,
+    name: "The Warden",
+    blurb:
+      "A containment specimen the lab bolted into plate. Hold its gaze while someone hits the glowing back; shoot it when it vents.",
+    radius: 34,
+    maxHp: 3600,
+    speed: 72,
+    wanderSpeed: 30,
+    // Turns slowly: a teammate who keeps moving can stay at its back.
+    turnRate: 1.5,
+    sight: 1200,
+    hearing: 2,
+    memorySec: 60,
+    attack: { kind: "melee", range: 26, windupSec: 0.75, recoverSec: 0.9, damage: 26, knockback: 380 },
+    armor: 1,
+    plating: { frontArc: 1.05, backArc: 0.85, front: 0.15, side: 0.55, back: 1.6, open: 1.4 },
+    stunnedDamageMult: 1.6,
+    wallStunSec: 2.6,
+    behaviour: "swarm",
+    mass: 14,
+    color: 0x4f565e,
+    accent: 0x6affd2,
+    xp: 220,
+    large: true,
+    weight: 0,
+    boss: {
+      title: "Miniboss",
+      transitionSec: 1.4,
+      perExtraPlayer: 0.45,
+      phases: [
+        {
+          below: 1,
+          speedMult: 1,
+          windupMult: 1,
+          attacks: [
+            {
+              id: "vent",
+              kind: "vent",
+              range: 0,
+              minRange: 0,
+              maxRange: 99999,
+              cooldownSec: 13,
+              firstSec: 9,
+              windupSec: 3.2,
+              recoverSec: 0.5,
+              damage: 14,
+              radius: 140,
+              edgeFactor: 0.6,
+              knockback: 340,
+            },
+            {
+              id: "lash",
+              kind: "sweep",
+              rear: true,
+              range: 0,
+              minRange: 0,
+              maxRange: 99999,
+              cooldownSec: 5,
+              firstSec: 3,
+              windupSec: 0.8,
+              recoverSec: 0.6,
+              damage: 24,
+              radius: 180,
+              arc: 0.9,
+              knockback: 380,
+            },
+            {
+              id: "sweep",
+              kind: "sweep",
+              range: 0,
+              minRange: 0,
+              maxRange: 170,
+              cooldownSec: 3.5,
+              windupSec: 0.95,
+              recoverSec: 0.9,
+              damage: 32,
+              radius: 200,
+              arc: 1.1,
+              knockback: 440,
+            },
+            {
+              id: "bash",
+              kind: "charge",
+              range: 0,
+              minRange: 230,
+              maxRange: 640,
+              cooldownSec: 7,
+              firstSec: 4,
+              windupSec: 1,
+              recoverSec: 0.8,
+              damage: 38,
+              knockback: 600,
+              lungeSpeed: 540,
+              lungeSec: 0.9,
+            },
+            {
+              id: "call",
+              kind: "summon",
+              range: 0,
+              minRange: 0,
+              maxRange: 3000,
+              cooldownSec: 22,
+              firstSec: 14,
+              windupSec: 1.2,
+              recoverSec: 0.8,
+              damage: 0,
+              summon: { kind: "walker", count: 4 },
+            },
+          ],
+        },
+        {
+          below: 0.5,
+          speedMult: 1.2,
+          windupMult: 0.85,
+          attacks: [
+            {
+              id: "vent",
+              kind: "vent",
+              range: 0,
+              minRange: 0,
+              maxRange: 99999,
+              cooldownSec: 12,
+              firstSec: 8,
+              windupSec: 2.8,
+              recoverSec: 0.4,
+              damage: 18,
+              radius: 150,
+              edgeFactor: 0.6,
+              knockback: 360,
+            },
+            {
+              id: "lash",
+              kind: "sweep",
+              rear: true,
+              range: 0,
+              minRange: 0,
+              maxRange: 99999,
+              cooldownSec: 4.5,
+              windupSec: 0.75,
+              recoverSec: 0.5,
+              damage: 26,
+              radius: 185,
+              arc: 0.95,
+              knockback: 400,
+            },
+            {
+              id: "sweep",
+              kind: "sweep",
+              range: 0,
+              minRange: 0,
+              maxRange: 170,
+              cooldownSec: 3,
+              windupSec: 0.95,
+              recoverSec: 0.6,
+              damage: 32,
+              radius: 205,
+              arc: 1.15,
+              knockback: 460,
+              // A sweep in front, then the tail behind: whoever hides at its back gets lashed.
+              combo: "lash",
+            },
+            {
+              id: "bash",
+              kind: "charge",
+              range: 0,
+              minRange: 230,
+              maxRange: 680,
+              cooldownSec: 6,
+              windupSec: 1,
+              recoverSec: 0.7,
+              damage: 40,
+              knockback: 620,
+              lungeSpeed: 580,
+              lungeSec: 0.9,
+            },
+            {
+              id: "call",
+              kind: "summon",
+              range: 0,
+              minRange: 0,
+              maxRange: 3000,
+              cooldownSec: 18,
+              firstSec: 3,
+              windupSec: 1.2,
+              recoverSec: 0.8,
+              damage: 0,
+              summon: { kind: "stalker", count: 2 },
             },
           ],
         },

@@ -278,6 +278,42 @@ a **solo** full run with the truck driven by the autopilot through the real phys
 checks the repair pause and the lock), failure when the truck is destroyed, and a browser
 scenario (escort HUD, lock, keys, drive into the warehouse district).
 
+## 6d. Black Site (Site K-9) and The Warden
+
+An underground lab (4400 × 2800) dug out of solid rock: everything between rooms and corridors is
+generated bedrock, so nothing walks or spawns outside the lab. Freight lift lobby → forced blast
+door → atrium (hub) with security (north), servers (past security), reactor (south) → containment
+wing (sealed) → archive (automatic doors) → primary containment (The Warden) → service lift.
+
+1. **Enter the laboratory** (no power: only the red emergency lights).
+2. **Restore the three terminals** (security, reactor, servers) → power: main lights, automatic
+   doors and the security vents come online.
+3. **Override the containment lockdown** (hold 6 s, loud) → containment blast door open, the
+   sealed automatic doors released, alarm, scripted **blackout** (flag `blackout`: main lights out).
+4. **Survive the specimens** (3 waves of specials) → alarm off, lights back.
+5. **Recover the contagion research** (3 intel props) → the vault door opens.
+6. **Defeat The Warden** (miniboss).
+7. **Ride the service lift out** (hold 15 s under a horde).
+
+New mechanics: **automatic doors** (`DoorDef.auto`: open for anybody near while powered, close
+behind once the doorway is clear, never on somebody; the infected path through working ones as if
+open, so a door opening or closing never touches the nav grid), **seals** (`sealed`, `close`/`open`
+triggers on an automatic door, flag `sealed-<id>`), **security vents** (`MissionDef.vents`: timed
+gas with a warning, players dps, infected 2× dps, online with the power), triggers `set`/`unset`
+for flags, light group `emergency`.
+
+**The Warden** (`warden`, index 7): directional plating (`ZombieDef.plating`): the front takes
+×0.15, the flanks ×0.55, the glowing back ×1.6; it keeps its front to its quarry while it can see
+it, so a teammate has to work its back. Attacks, all telegraphed: frontal **sweep** cone, tail
+**lash** behind it (whoever camps its back), shield **bash** (charge: into a pillar it is stunned,
+×1.6), **vent** (every ~13 s: 3.2 s with the plates open, everything ×1.4, the back ×2.24, ended by
+a short burst), **call** (walkers, then stalkers in phase 2). Two phases (50%). Tests: plating by
+hit side, telegraph timing, committed cones, the lash without turning, vent timing and stillness,
+pillar stun, phase-2 summons, and a scripted two-player fight with real shooting: one holding its
+gaze and one at its back kills it in ~24 s; both in front need ~3×. A full run of the mission
+(terminals, override, three waves, intel, the Warden fought for real, the lift) and a browser
+scenario (dark and sealed start, atrium, first terminal).
+
 ## 7. Network protocol additions
 
 All additions use the existing channels (state patches, event batch per tick):
@@ -302,6 +338,11 @@ All additions use the existing channels (state patches, event batch per tick):
   `PveState.flags` (no new field); clients hide the enter prompt for that vehicle. A prop with
   `attach` has its `PropState.x`/`y` rewritten every tick from the vehicle (no new field).
   `MissionDef.escort` names the vehicle whose `hp` the HUD shows.
+- `PveState.vents` (uint32): tick the security vents came online (0 = offline). Every vent's phase
+  is `ventPhase(def, (tick - vents) / tickRate)`, the same on server and clients.
+- Automatic doors move through `PveState.doors` like the others; their event is
+  `{ t: "pve", k: "auto", s: id, n: 1|0 }` (sound only, no feed line). `ATTACK_KINDS` gains
+  `sweep` (9) and `vent` (10), enemy index 7 is `warden` (appended: older indices unchanged).
 - Results: `ResultsMessage.pve` (squad summary) and `PersonalResult.record.pve` with a `runId`.
   The receiving browser records a run once per id; PvP stats (kills, deaths, wins, career) are
   not touched by PvE, including when a player leaves a run in the middle (the dedicated server

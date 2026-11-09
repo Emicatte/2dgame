@@ -13,9 +13,56 @@ export interface DoorDef extends Rect {
   label: string;
   /** Open when the mission starts. */
   startOpen?: boolean;
+  /**
+   * Automatic sliding door: while the power is on it opens for anybody (players and infected)
+   * near it and closes behind them once the doorway is clear. Without power, or while sealed
+   * (a `close` trigger, or `sealed` at the start; an `open` trigger lifts the seal), it stays shut.
+   * The infected path through working automatic doors as if they were open.
+   */
+  auto?: boolean;
+  /** Automatic door sealed when the mission starts (lockdown). */
+  sealed?: boolean;
 }
 
-export type PropKind = "generator" | "keycard" | "panel" | "terminal" | "medical" | "radio" | "engine";
+export type PropKind =
+  | "generator"
+  | "keycard"
+  | "panel"
+  | "terminal"
+  | "medical"
+  | "radio"
+  | "engine"
+  | "intel";
+
+/**
+ * Security system: a decontamination vent that floods its area with scalding gas on a cycle while
+ * the power is on. Each cycle: idle, then `warnSec` of warning lights and hiss, then `activeSec`
+ * of gas that hurts players (`dps`) and the infected (`dps` × 2). Everybody sees the same cycle:
+ * it runs from the tick the vents came online (PveState.vents).
+ */
+export interface VentDef {
+  id: string;
+  area: Rect;
+  periodSec: number;
+  warnSec: number;
+  activeSec: number;
+  /** Shifts this vent's cycle (s) so neighbours do not fire together. */
+  offsetSec: number;
+  dps: number;
+}
+
+export const VENT_PHASE = { IDLE: 0, WARN: 1, ACTIVE: 2 } as const;
+export type VentPhase = (typeof VENT_PHASE)[keyof typeof VENT_PHASE];
+
+/** Phase of a vent `sinceSec` seconds after the vents came online (negative = offline). */
+export function ventPhase(v: VentDef, sinceSec: number): VentPhase {
+  if (sinceSec < 0) return VENT_PHASE.IDLE;
+  const t = (((sinceSec + v.offsetSec) % v.periodSec) + v.periodSec) % v.periodSec;
+  const activeFrom = v.periodSec - v.activeSec;
+  if (t >= activeFrom) return VENT_PHASE.ACTIVE;
+  if (t >= activeFrom - v.warnSec) return VENT_PHASE.WARN;
+  return VENT_PHASE.IDLE;
+}
 
 export interface PropDef extends Vec2 {
   id: string;
@@ -75,7 +122,10 @@ export type Trigger =
   | { checkpoint: Vec2 }
   /** Vehicle (id) out of use: everyone aboard gets out, nobody can get in until unlocked. */
   | { lock: string }
-  | { unlock: string };
+  | { unlock: string }
+  /** Mission flags set or cleared by the script ("blackout": the main lights go out). */
+  | { set: string }
+  | { unset: string };
 
 interface StepBase {
   /** Objective line shown in the HUD. */
@@ -126,6 +176,8 @@ export interface MissionDef {
   requires?: string;
   /** Vehicle (id) the squad escorts: the mission fails if it is destroyed. */
   escort?: string;
+  /** Security vents (online while the power is on). */
+  vents?: VentDef[];
 }
 
 // ------------------------------------------------------------------ First Contact
@@ -682,7 +734,285 @@ export const THE_CONVOY: MissionDef = {
   requires: "dead-district",
 };
 
-export const MISSIONS: readonly MissionDef[] = [FIRST_CONTACT, DEAD_DISTRICT, THE_CONVOY];
+// ------------------------------------------------------------------ Black Site
+
+const BS_ATRIUM: Rect = { x: 1260, y: 1000, w: 920, h: 800 };
+const BS_LIFT: Rect = { x: 3780, y: 2200, w: 460, h: 380 };
+const BS_CELLS = ["cells-n1", "cells-n2", "cells-s1", "cells-s2"];
+
+export const BLACK_SITE: MissionDef = {
+  id: "black-site",
+  chapter: 4,
+  name: "Black Site",
+  setting: "Site K-9 · underground laboratory",
+  brief:
+    "The convoy's manifest pointed here: a lab under the quarry where the outbreak began. Bring the power back, break the containment lockdown, recover Dr. Varga's research on the contagion and get out through the service lift. Something they kept in primary containment is still awake.",
+  map: "blacksite",
+  doors: [
+    { id: "cont-door", label: "Containment blast door", x: 2196, y: 1260, w: 24, h: 160 },
+    { id: "srv-door", label: "Server access", x: 2900, y: 960, w: 160, h: 24, auto: true, sealed: true },
+    { id: "lab-door", label: "Lab access", x: 2760, y: 1816, w: 160, h: 24, auto: true, sealed: true },
+    { id: "archive-door", label: "Archive door", x: 2460, y: 2220, w: 24, h: 160, auto: true },
+    { id: "vault-door", label: "Primary containment", x: 3700, y: 1340, w: 24, h: 160 },
+    { id: "lift-door", label: "Service lift", x: 3920, y: 2080, w: 180, h: 24 },
+  ],
+  props: [
+    { id: "term-sec", kind: "terminal", label: "Security terminal", x: 1810, y: 300, holdSec: 3, noise: 650 },
+    {
+      id: "term-reactor",
+      kind: "terminal",
+      label: "Reactor terminal",
+      x: 1700,
+      y: 2540,
+      holdSec: 3,
+      noise: 650,
+    },
+    {
+      id: "term-server",
+      kind: "terminal",
+      label: "Server terminal",
+      x: 3140,
+      y: 300,
+      holdSec: 3,
+      noise: 650,
+    },
+    { id: "override", kind: "panel", label: "Lockdown override", x: 2130, y: 1200, holdSec: 6, noise: 900 },
+    { id: "intel-varga", kind: "intel", label: "Varga's notes", x: 3410, y: 1740, holdSec: 2 },
+    { id: "intel-backup", kind: "intel", label: "Server backup", x: 2540, y: 720, holdSec: 2.5, noise: 500 },
+    { id: "intel-archive", kind: "intel", label: "Contagion file", x: 3412, y: 2500, holdSec: 2 },
+  ],
+  groups: [
+    {
+      id: "entry",
+      enemies: [
+        { kind: "walker", x: 850, y: 1380, state: "idle" },
+        { kind: "walker", x: 1120, y: 1440, state: "wander" },
+        { kind: "walker", x: 1520, y: 1300, state: "idle" },
+        { kind: "walker", x: 1900, y: 1480, state: "wander" },
+        { kind: "walker", x: 1360, y: 1080, state: "idle" },
+      ],
+    },
+    {
+      id: "security",
+      enemies: [
+        { kind: "walker", x: 1400, y: 580, state: "idle" },
+        { kind: "walker", x: 2000, y: 680, state: "idle" },
+        { kind: "runner", x: 1600, y: 380, state: "idle" },
+        { kind: "walker", x: 1900, y: 320, state: "wander" },
+      ],
+    },
+    {
+      id: "servers",
+      enemies: [
+        { kind: "walker", x: 2670, y: 340, state: "idle" },
+        { kind: "walker", x: 2950, y: 520, state: "idle" },
+        { kind: "spitter", x: 3120, y: 720, state: "idle" },
+        { kind: "walker", x: 2800, y: 720, state: "wander" },
+      ],
+    },
+    {
+      id: "reactor",
+      enemies: [
+        { kind: "walker", x: 1600, y: 2340, state: "idle" },
+        { kind: "walker", x: 2000, y: 2200, state: "wander" },
+        { kind: "stalker", x: 2100, y: 2540, state: "idle" },
+        { kind: "walker", x: 1480, y: 2560, state: "idle" },
+      ],
+    },
+    {
+      id: "archive",
+      enemies: [
+        { kind: "walker", x: 2620, y: 2300, state: "idle" },
+        { kind: "spitter", x: 3284, y: 2320, state: "idle" },
+        { kind: "walker", x: 2720, y: 2560, state: "wander" },
+        { kind: "runner", x: 3412, y: 2300, state: "idle" },
+        { kind: "stalker", x: 3284, y: 2100, state: "idle" },
+      ],
+    },
+    { id: "warden", enemies: [{ kind: "warden", x: 4010, y: 1100, state: "idle" }] },
+  ],
+  spawnZones: [
+    { id: "lobby", x: 150, y: 1220 },
+    { id: "sec-nw", x: 1270, y: 230 },
+    { id: "sec-ne", x: 2150, y: 250 },
+    { id: "srv-ne", x: 3150, y: 230 },
+    { id: "srv-se", x: 3150, y: 770 },
+    { id: "reactor-sw", x: 1270, y: 2380 },
+    { id: "reactor-se", x: 2160, y: 2580 },
+    { id: "cells-n1", x: 2560, y: 1060 },
+    { id: "cells-n2", x: 3260, y: 1060 },
+    { id: "cells-s1", x: 2560, y: 1740 },
+    { id: "cells-s2", x: 3260, y: 1740 },
+    { id: "archive-w", x: 2530, y: 2560 },
+    { id: "archive-e", x: 3412, y: 2060 },
+    { id: "hall-n", x: 4250, y: 790 },
+    { id: "hall-sw", x: 3770, y: 1890 },
+  ],
+  steps: [
+    {
+      kind: "reach",
+      text: "Enter the laboratory",
+      hint: "No power down here: stay in each other's flashlights and keep together.",
+      area: BS_ATRIUM,
+      marker: { x: 1720, y: 1400 },
+      onStart: [{ spawn: "entry" }],
+    },
+    {
+      kind: "collect",
+      props: ["term-sec", "term-reactor", "term-server"],
+      text: "Restore the three terminals",
+      hint: "Security is north, the reactor south, the servers past security. Hold E at each terminal.",
+      marker: { x: 1720, y: 890 },
+      onStart: [
+        { spawn: "security" },
+        { spawn: "reactor" },
+        { spawn: "servers" },
+        { checkpoint: { x: 1500, y: 1500 } },
+      ],
+      onDone: [
+        { power: true },
+        {
+          hint: "Power restored. Automatic doors and security systems are online: mind the decontamination vents.",
+        },
+      ],
+    },
+    {
+      kind: "interact",
+      prop: "override",
+      text: "Override the containment lockdown",
+      hint: "The override takes time and it is loud. Cover whoever holds it.",
+      marker: { x: 2130, y: 1200 },
+      onDone: [
+        { open: "cont-door" },
+        { open: "srv-door" },
+        { open: "lab-door" },
+        { alarm: true },
+        { set: "blackout" },
+        { checkpoint: { x: 1980, y: 1340 } },
+        { hint: "Containment breach! The lights are gone. Something got out of the cells." },
+      ],
+    },
+    {
+      kind: "waves",
+      text: "Survive the specimens",
+      hint: "Specials hunt in the dark: stalkers flank, spitters keep their distance. Watch each other's backs.",
+      marker: { x: 2900, y: 1400 },
+      intermissionSec: 7,
+      waves: [
+        {
+          enemies: { walker: 6, stalker: 2, spitter: 2 },
+          zones: ["cells-n1", "cells-n2", "srv-se"],
+          label: "Specimens loose",
+        },
+        {
+          enemies: { runner: 5, exploder: 3, stalker: 2 },
+          zones: ["cells-s1", "cells-s2", "archive-e", "archive-w"],
+          supply: true,
+          label: "They're coming through the vents",
+        },
+        {
+          enemies: { brute: 1, spitter: 3, stalker: 3, walker: 6 },
+          zones: [...BS_CELLS, "srv-ne", "archive-e"],
+          label: "Containment failure",
+        },
+      ],
+      onDone: [
+        { alarm: false },
+        { unset: "blackout" },
+        { checkpoint: { x: 2900, y: 1400 } },
+        { hint: "Lockdown lifted, lights back. Recover Varga's research before you go any further." },
+      ],
+    },
+    {
+      kind: "collect",
+      props: ["intel-varga", "intel-backup", "intel-archive"],
+      text: "Recover the contagion research",
+      hint: "Three records: Varga's notes in containment, the server backup, the archive's contagion file.",
+      marker: { x: 3410, y: 1740 },
+      onStart: [{ spawn: "archive" }],
+      onDone: [
+        { open: "vault-door" },
+        { hint: "Varga's last entry: subject W-1 was never moved out of primary containment." },
+      ],
+    },
+    {
+      kind: "kill",
+      group: "warden",
+      text: "Defeat The Warden",
+      hint: "Its front is plated: one of you holds its gaze while the others shoot the glowing back. When it vents, everyone fires.",
+      marker: { x: 4010, y: 1340 },
+      onStart: [{ spawn: "warden" }, { checkpoint: { x: 3590, y: 1420 } }],
+      onDone: [
+        { open: "lift-door" },
+        { checkpoint: { x: 4010, y: 1800 } },
+        { hint: "The Warden is down. Get to the service lift!" },
+      ],
+    },
+    {
+      kind: "extract",
+      text: "Ride the service lift out",
+      hint: "Everybody on the lift and hold it: it takes its time.",
+      area: BS_LIFT,
+      holdSec: 15,
+      marker: { x: 4010, y: 2380 },
+      horde: {
+        enemies: { runner: 6, stalker: 2, walker: 8 },
+        zones: ["hall-n", "hall-sw", "cells-n2", "cells-s2"],
+        label: "The whole lab is awake",
+      },
+      onStart: [{ alarm: true }],
+    },
+  ],
+  vents: [
+    {
+      id: "vent-cont",
+      area: { x: 3000, y: 1208, w: 160, h: 384 },
+      periodSec: 9,
+      warnSec: 1.6,
+      activeSec: 2.6,
+      offsetSec: 0,
+      dps: 26,
+    },
+    {
+      id: "vent-archive",
+      area: { x: 2960, y: 2004, w: 160, h: 592 },
+      periodSec: 8,
+      warnSec: 1.6,
+      activeSec: 2.4,
+      offsetSec: 3,
+      dps: 26,
+    },
+    {
+      id: "vent-hall-nw",
+      area: { x: 3724, y: 744, w: 200, h: 200 },
+      periodSec: 10,
+      warnSec: 1.8,
+      activeSec: 3,
+      offsetSec: 2,
+      dps: 24,
+    },
+    {
+      id: "vent-hall-se",
+      area: { x: 4096, y: 1736, w: 200, h: 200 },
+      periodSec: 10,
+      warnSec: 1.8,
+      activeSec: 3,
+      offsetSec: 7,
+      dps: 24,
+    },
+  ],
+  ambient: {
+    everySec: 9,
+    maxAlive: 9,
+    kinds: ["walker", "walker", "runner", "stalker"],
+    zones: ["lobby", "sec-nw", "sec-ne", "srv-ne", "srv-se", "reactor-sw", "reactor-se"],
+  },
+  xp: 1500,
+  title: "Containment Breaker",
+  requires: "the-convoy",
+};
+
+export const MISSIONS: readonly MissionDef[] = [FIRST_CONTACT, DEAD_DISTRICT, THE_CONVOY, BLACK_SITE];
 
 /**
  * The rest of the planned campaign (shown in the lobby as "in development"; not playable until

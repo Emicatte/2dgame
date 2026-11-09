@@ -13,6 +13,11 @@
   `unlock` for vehicles, props `attach`ed to a vehicle, a horde on `interact` steps,
   `MissionDef.escort` (mission fails when the escort is destroyed) and its HUD hull bar. See
   `docs/v3/OUTBREAK.md` §6c.
+- **Black Site** (chapter 4, unlocked by The Convoy): an underground lab with automatic doors,
+  a containment lockdown, decontamination vents on a timer, a blackout during the breach, three
+  waves of specials, research to recover and **The Warden**, an armoured miniboss: shoot its
+  glowing back while a teammate holds its gaze, or everyone when it vents. See
+  `docs/v3/OUTBREAK.md` §6d.
 - Signaling: TURN keys are stripped of pasted spaces, newlines and quotes; the health endpoint
   reports the key id's shape (`turnKey`).
 

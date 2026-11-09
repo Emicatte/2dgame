@@ -4,6 +4,7 @@ import { buildCollisionWorld, type CollisionWorld, circleIntersectsRect } from "
 import type { Vec2 } from "../sim/math.ts";
 import { bodyFits } from "../sim/vehicle.ts";
 import { MILITARY_AIRBASE } from "./airbase.ts";
+import { BLACK_SITE } from "./blacksite.ts";
 import { DESERT_OUTPOST } from "./desert.ts";
 import { DEAD_DISTRICT } from "./district.ts";
 import { DOWNTOWN } from "./downtown.ts";
@@ -32,6 +33,7 @@ export const MAPS: Record<MapId, MapDef> = {
   works: HALVORSEN_WORKS,
   district: DEAD_DISTRICT,
   outskirts: KESSLER_ROAD,
+  blacksite: BLACK_SITE,
 };
 
 export const MAP_IDS = Object.keys(MAPS) as MapId[];

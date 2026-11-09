@@ -27,6 +27,7 @@ import {
   isMapId,
   isTeamMode,
   isVehicleKind,
+  type LightDef,
   lerpAngle,
   MAPS,
   type MapDef,
@@ -53,6 +54,7 @@ import {
   tracePellet,
   VEHICLE_STATUS,
   VEHICLES,
+  VENT_PHASE,
   type VehicleDef,
   type VehicleState,
   vehicleCircles,
@@ -149,7 +151,7 @@ export class ArenaScene extends Phaser.Scene {
     seed: number;
     color: number;
     radius: number;
-    group?: "power" | "alarm";
+    group?: LightDef["group"];
   }[] = [];
   /** Co-op darkness: light map with line of sight (PvE only). */
   private lightmap!: Lightmap;
@@ -376,6 +378,13 @@ export class ArenaScene extends Phaser.Scene {
           sightVertices: this.lightmap.poly?.count ?? 0,
           glints: this.pve.glintCount,
           tension: Math.round(this.tension * 100) / 100,
+          blackout: this.pve.blackout,
+          vents: this.pve
+            .ventStates(st, this.clock.renderTick(), st.tickRate || NET.serverTickRate)
+            .map((v) => `${v.id}:${v.phase}`)
+            .join(","),
+          lights: this.lightImages.filter((l) => l.group && l.img.visible).map((l) => l.group),
+          boss: st.pve.boss ? (zombieByIndex(st.zombies.get(st.pve.boss)?.k ?? -1)?.kind ?? "") : "",
         };
       },
       /**
@@ -1063,10 +1072,27 @@ export class ArenaScene extends Phaser.Scene {
     state.hazards.forEach((h) => {
       lamps.push({ x: h.x, y: h.y, r: h.r * 1.25, color: 0x9cff5a, a: 0.45 });
     });
+    // Vents: the warning lights flash amber, the gas glows pale.
+    const vents = this.pve.ventStates(state, this.clock.renderTick(), state.tickRate || NET.serverTickRate);
+    const ventDefs = missionById(state.pve.mission)?.vents ?? [];
+    for (const [i, v] of vents.entries()) {
+      if (v.phase === VENT_PHASE.IDLE) continue;
+      const a = ventDefs[i]!.area;
+      const r = Math.max(a.w, a.h) * 0.6;
+      const flash = v.phase === VENT_PHASE.WARN ? (Math.sin(nowSec * 18) > 0 ? 0.7 : 0.15) : 0.5;
+      lamps.push({
+        x: a.x + a.w / 2,
+        y: a.y + a.h / 2,
+        r,
+        color: v.phase === VENT_PHASE.WARN ? 0xffb33a : 0xd8ffe8,
+        a: flash,
+      });
+    }
     const diff = isDifficulty(state.pve.difficulty) ? state.pve.difficulty : "veteran";
     const base = diff === "recruit" ? 0.7 : diff === "nightmare" ? 0.28 : 0.48;
     const setting = settingsStore.get().pveBrightness;
-    const brightness = clamp(base + (setting - 0.5) * 0.8 + (state.pve.power ? 0.08 : 0), 0, 1);
+    const mains = state.pve.power && !this.pve.blackout;
+    const brightness = clamp(base + (setting - 0.5) * 0.8 + (mains ? 0.08 : 0), 0, 1);
     const danger = ps?.downed ? 1 : ps?.alive && hpFrac <= 0.35 ? 0.3 + (0.35 - hpFrac) * 2 : 0;
     this.lightmap.update({
       cam,
@@ -1209,6 +1235,19 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
+  /** Sounds the PvE layer asks for: vent warnings and gas, the Warden opening its plates. */
+  private playPveCues(listener: { x: number; y: number } | null) {
+    const lx = listener?.x ?? this.cameras.main.midPoint.x;
+    const ly = listener?.y ?? this.cameras.main.midPoint.y;
+    for (const c of this.pve.ventCues.splice(0)) {
+      const d = Math.hypot(c.x - lx, c.y - ly);
+      if (d < 1600) sfx.ventCue(c.phase === VENT_PHASE.ACTIVE, d, clamp((c.x - lx) / 900, -1, 1));
+    }
+    for (const c of this.pve.ventStarts.splice(0)) {
+      sfx.wardenVent(Math.hypot(c.x - lx, c.y - ly), clamp((c.x - lx) / 900, -1, 1));
+    }
+  }
+
   private playPveEvent(ev: NetEvent, spatial: (x: number, y: number) => { distance: number; pan: number }) {
     this.pve.playEvent(ev);
     switch (ev.t) {
@@ -1225,12 +1264,21 @@ export class ArenaScene extends Phaser.Scene {
         });
         break;
       }
+      case "pve": {
+        // Mission doors are heard where they are.
+        if (ev.k !== "auto" && ev.k !== "door" && ev.k !== "doorClose") break;
+        const d = missionById(this.room?.state.pve.mission ?? "")?.doors.find((x) => x.id === ev.s);
+        if (!d) break;
+        const s = spatial(d.x + d.w / 2, d.y + d.h / 2);
+        sfx.slidingDoor(ev.k === "auto" ? ev.n === 1 : ev.k === "door", !d.auto, s.distance, s.pan);
+        break;
+      }
       case "zatk": {
         const s = spatial(ev.x, ev.y);
         sfx.zombieAttack(ev.k, s.distance, s.pan);
         const me = this.views.get(this.room?.sessionId ?? "");
         if (
-          (ev.k === "slam" || ev.k === "impact" || ev.k === "roar") &&
+          (ev.k === "slam" || ev.k === "impact" || ev.k === "roar" || ev.k === "sweep" || ev.k === "vent") &&
           me &&
           Math.hypot(me.root.x - ev.x, me.root.y - ev.y) < 600
         ) {
@@ -1326,6 +1374,7 @@ export class ArenaScene extends Phaser.Scene {
     if (this.pve.active) {
       const me = this.views.get(this.room.sessionId);
       this.updateDread(dt / 1000, state);
+      this.playPveCues(me?.root ?? null);
       this.pve.update(renderTick, dt / 1000, state, state.tickRate || NET.serverTickRate, {
         x: me?.root.x ?? this.cameras.main.midPoint.x,
         y: me?.root.y ?? this.cameras.main.midPoint.y,
@@ -1845,9 +1894,15 @@ export class ArenaScene extends Phaser.Scene {
     const t = performance.now() / 1000;
     for (const l of this.lightImages) {
       if (l.group) {
-        // PvE: power lights follow the generator, alarm beacons pulse while the alarm sounds.
+        // PvE: power lights follow the generator (and go out in a scripted blackout), emergency
+        // lights burn only while they are out, alarm beacons pulse while the alarm sounds.
+        const mains = this.pve.power && !this.pve.blackout;
         const on =
-          l.group === "power" ? this.pve.power || !this.pve.active : this.pve.alarm && this.pve.active;
+          l.group === "power"
+            ? mains || !this.pve.active
+            : l.group === "emergency"
+              ? !mains && this.pve.active
+              : this.pve.alarm && this.pve.active;
         l.img.setVisible(on);
         if (!on) continue;
         if (l.group === "alarm") {
@@ -2050,7 +2105,7 @@ export class ArenaScene extends Phaser.Scene {
       downed,
       lowHp: alive && hpFrac <= 0.3,
       waveActive: state.pve.left > 0,
-      dark: state.mode === "outbreak" && !state.pve.power,
+      dark: state.mode === "outbreak" && (!state.pve.power || this.pve.blackout),
     });
     const now = performance.now();
     // A sudden jump out of calm: something found you.

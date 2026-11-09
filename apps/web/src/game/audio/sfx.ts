@@ -297,10 +297,63 @@ class Sfx {
     } else if (kind === "charge" || kind === "slam" || kind === "impact") {
       this.tone(out, t, "sawtooth", 90, 40, 0.5, 0.6);
       this.noiseBurst(out, t, 0.4, "lowpass", 600, 0.8, 0.7);
+    } else if (kind === "sweep") {
+      // A heavy arm cutting the air, then the thud of the plate.
+      this.sweep(out, t, 0.04, 0.32, "bandpass", 380, 1700, 1.2, 0.8);
+      this.tone(out, t + 0.22, "sawtooth", 110, 50, 0.25, 0.5);
+    } else if (kind === "vent") {
+      // The plates slam shut: a metal clank and a last gasp of steam.
+      this.tone(out, t, "square", 160, 70, 0.18, 0.55);
+      this.noiseBurst(out, t, 0.5, "highpass", 2400, 0.7, 0.55);
+      this.tone(out, t, "sawtooth", 70, 38, 0.4, 0.5);
     } else {
       this.noiseBurst(out, t, 0.12, "highpass", 1200, 0.9, 0.5);
       this.tone(out, t, "sawtooth", 220, 90, 0.18, 0.35);
     }
+  }
+
+  /**
+   * The Warden opens its plates: a long rising steam release over a low strained groan (the
+   * vulnerability window has started: everybody fire).
+   */
+  wardenVent(distance = 0, pan = 0): void {
+    if (!this.ctx || !this.throttle("wardenVent", 800)) return;
+    const out = this.out(this.sfxBus, pan, Math.max(0.2, 0.75 - distance / 2600));
+    if (!out) return;
+    const t = this.ctx.currentTime;
+    this.sweep(out, t, 0.08, 1.4, "highpass", 1800, 4200, 0.8, 0.6);
+    this.tone(out, t, "sawtooth", 82, 64, 1.2, 0.35);
+  }
+
+  /** A mission door moving: a pneumatic sliding door, or a heavy blast door grinding. */
+  slidingDoor(open: boolean, heavy: boolean, distance = 0, pan = 0): void {
+    if (!this.ctx || !this.throttle(`door-${heavy}-${Math.round(pan * 4)}`, 120)) return;
+    const out = this.out(this.sfxBus, pan, Math.max(0.03, (heavy ? 0.6 : 0.4) - distance / 2200));
+    if (!out) return;
+    const t = this.ctx.currentTime;
+    if (heavy) {
+      this.noiseBurst(out, t, 1.1, "lowpass", 380, 1.4, 0.7);
+      this.tone(out, t, "sawtooth", 55, 42, 1, 0.35);
+      this.tone(out, t + 1, "square", 120, 60, 0.12, 0.5);
+      return;
+    }
+    this.sweep(out, t, 0.02, 0.3, "bandpass", open ? 2600 : 1400, open ? 1200 : 2600, 1.6, 0.45);
+    this.tone(out, t + 0.28, "square", open ? 180 : 140, 90, 0.06, 0.3);
+  }
+
+  /** Security vent: warning beeps, then the gas hissing out. */
+  ventCue(active: boolean, distance = 0, pan = 0): void {
+    if (!this.ctx) return;
+    const out = this.out(this.sfxBus, pan, Math.max(0.05, 0.55 - distance / 2000));
+    if (!out) return;
+    const t = this.ctx.currentTime;
+    if (!active) {
+      for (let i = 0; i < 3; i++)
+        this.tone(out, t + i * 0.42, "square", i % 2 ? 660 : 880, i % 2 ? 660 : 880, 0.16, 0.22);
+      return;
+    }
+    this.sweep(out, t, 0.06, 2.2, "bandpass", 3400, 2200, 0.9, 0.55);
+    this.noiseBurst(out, t, 0.4, "highpass", 3000, 0.7, 0.4);
   }
 
   zombieDeath(distance = 0, pan = 0): void {

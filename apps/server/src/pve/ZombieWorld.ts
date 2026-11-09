@@ -20,6 +20,7 @@ import {
   findPath,
   flowSteer,
   hasLineOfSight,
+  hitSide,
   MAX_ZOMBIES,
   NAV_CLASS_RADIUS,
   NAV_INF,
@@ -31,6 +32,7 @@ import {
   PLAYER,
   PRECISION_DAMAGE_MULT,
   PRECISION_RADIUS_FRACTION,
+  platingMult,
   pushOutOfCircles,
   randomWalkableNear,
   raycastSolids,
@@ -322,9 +324,17 @@ export class ZombieWorld {
     };
     // A stalker spawned by a wave still has to find its prey (no free knowledge).
     if (opts.state === "hunt" && def.behaviour === "flank") z.state = AI.WANDER;
+    this.armPhase(z);
     this.zombies.set(z.id, z);
     this.stats.maxAlive = Math.max(this.stats.maxAlive, this.alive);
     return z;
+  }
+
+  /** Attacks with `firstSec` wait that long into the boss's current phase. */
+  private armPhase(z: Zombie): void {
+    for (const a of z.def.boss?.phases[z.phase]?.attacks ?? []) {
+      if (a.firstSec) z.cooldowns.set(a.id, this.host.tick + this.secTicks(a.firstSec));
+    }
   }
 
   // ------------------------------------------------------------------ tick
@@ -716,7 +726,7 @@ export class ZombieWorld {
     const tick = this.host.tick;
     const phase = z.def.boss!.phases[z.phase]!;
     const d = Math.hypot(t.x - z.x, t.y - z.y);
-    const order = ["slam", "throw", "charge", "summon"];
+    const order = ["vent", "sweep", "slam", "throw", "charge", "summon"];
     const attacks = [...phase.attacks].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
     // Cannot reach the squad (cramped map, cut off): it keeps throwing debris from where it is,
     // so it stays a threat and the fight still ends.
@@ -729,6 +739,7 @@ export class ZombieWorld {
       if (tick < (z.cooldowns.get(a.id) ?? 0)) continue;
       if (d < a.minRange || d > a.maxRange) continue;
       if (a.kind === "charge" && !clearPath(this.host.world(), z.x, z.y, t.x, t.y, z.def.radius)) continue;
+      if (a.kind === "sweep" && !this.sweepTarget(z, a, t)) continue;
       if (a.kind === "throw" && !this.sees(z, t, a.maxRange)) continue;
       if (a.kind === "summon") {
         let adds = 0;
@@ -741,11 +752,46 @@ export class ZombieWorld {
     return false;
   }
 
+  /**
+   * Where a sweep would strike, or null when nobody is there: in front, the target well inside the
+   * cone it faces; behind (`rear`), any player inside the cone at its back.
+   */
+  private sweepTarget(z: Zombie, a: AttackDef, t: PveActor): Vec2 | null {
+    const r = (a.radius ?? 180) * 0.9;
+    const arc = (a.arc ?? 1) * 0.85;
+    if (!a.rear) {
+      const d = Math.hypot(t.x - z.x, t.y - z.y);
+      if (d > r) return null;
+      return { x: t.x, y: t.y };
+    }
+    const back = z.angle + Math.PI;
+    for (const o of this.host.actors()) {
+      if (!o.alive || o.vehicle || o.airborne) continue;
+      const d = Math.hypot(o.x - z.x, o.y - z.y);
+      if (d > r) continue;
+      if (Math.abs(wrapAngle(Math.atan2(o.y - z.y, o.x - z.x) - back)) > arc) continue;
+      return { x: z.x + Math.cos(back) * r, y: z.y + Math.sin(back) * r };
+    }
+    return null;
+  }
+
   private startBossAttack(z: Zombie, a: BossAttackDef, t: PveActor | undefined): void {
     const phase = z.def.boss!.phases[z.phase]!;
     const def: BossAttackDef = { ...a, windupSec: a.windupSec * phase.windupMult };
     let tx = z.x;
     let ty = z.y;
+    if (a.kind === "sweep") {
+      // The cone is committed where it starts: dodge sideways out of it, or get out of range.
+      const at = t ? this.sweepTarget(z, a, t) : null;
+      const facing = z.angle;
+      const dir = a.rear ? facing + Math.PI : at ? Math.atan2(at.y - z.y, at.x - z.x) : facing;
+      const reach = a.radius ?? 180;
+      z.curId = a.id;
+      this.startAct(z, "boss", z.x + Math.cos(dir) * reach, z.y + Math.sin(dir) * reach, def);
+      // A tail lash strikes behind without turning around.
+      if (a.rear) z.angle = facing;
+      return;
+    }
     if (t && (a.kind === "charge" || a.kind === "throw")) {
       const ang = Math.atan2(t.y - z.y, t.x - z.x);
       const len =
@@ -771,7 +817,8 @@ export class ZombieWorld {
     z.actTick = this.host.tick;
     z.actX = tx;
     z.actY = ty;
-    z.angle = Math.atan2(ty - z.y, tx - z.x);
+    // Attacks centred on itself (slam, roar, vent) keep the facing it had.
+    if (tx !== z.x || ty !== z.y) z.angle = Math.atan2(ty - z.y, tx - z.x);
   }
 
   private runAttack(z: Zombie, target: PveActor | undefined, actors: readonly PveActor[]): void {
@@ -784,7 +831,9 @@ export class ZombieWorld {
         def.kind !== "charge" &&
         def.kind !== "slam" &&
         def.kind !== "roar" &&
-        def.kind !== "summon"
+        def.kind !== "summon" &&
+        def.kind !== "sweep" &&
+        def.kind !== "vent"
       ) {
         // Melee and spit keep tracking during the windup; charges and blasts are committed.
         if (def.kind === "melee" || def.kind === "pounce") {
@@ -829,6 +878,40 @@ export class ZombieWorld {
   private strike(z: Zombie, def: AttackDef, target: PveActor | undefined, actors: readonly PveActor[]): void {
     const dmg = def.damage * z.damageMult;
     switch (def.kind) {
+      case "sweep": {
+        const radius = def.radius ?? 180;
+        const arc = def.arc ?? 1;
+        const dir = Math.atan2(z.actY - z.y, z.actX - z.x);
+        this.host.emit({ t: "zatk", z: z.id, k: "sweep", x: Math.round(z.actX), y: Math.round(z.actY) });
+        for (const a of actors) {
+          if (!a.alive || a.vehicle) continue;
+          const d = Math.hypot(a.x - z.x, a.y - z.y);
+          if (d > radius + PLAYER.radius) continue;
+          const ang = Math.atan2(a.y - z.y, a.x - z.x);
+          // The cone's edge counts the player's body, not only their centre.
+          const slack = d > 1 ? Math.asin(Math.min(1, PLAYER.radius / d)) : Math.PI;
+          if (Math.abs(wrapAngle(ang - dir)) > arc + slack) continue;
+          const k = def.knockback ?? 0;
+          this.host.hurtPlayer(a.id, dmg, z, a.x, a.y, { x: Math.cos(ang) * k, y: Math.sin(ang) * k });
+        }
+        return;
+      }
+      case "vent": {
+        // The plates slam shut: a short burst around it ends the window.
+        const radius = def.radius ?? 140;
+        const edge = def.edgeFactor ?? 0.6;
+        this.host.emit({ t: "zatk", z: z.id, k: "vent", x: Math.round(z.x), y: Math.round(z.y) });
+        for (const a of actors) {
+          if (!a.alive || a.vehicle) continue;
+          const d = Math.hypot(a.x - z.x, a.y - z.y);
+          if (d > radius + PLAYER.radius) continue;
+          const ang = Math.atan2(a.y - z.y, a.x - z.x);
+          const k = def.knockback ?? 0;
+          const amount = dmg * (1 - (1 - edge) * clamp(d / radius, 0, 1));
+          this.host.hurtPlayer(a.id, amount, z, a.x, a.y, { x: Math.cos(ang) * k, y: Math.sin(ang) * k });
+        }
+        return;
+      }
       case "slam":
       case "roar": {
         const radius = def.radius ?? (def.kind === "roar" ? ROAR_RADIUS : 160);
@@ -1000,6 +1083,11 @@ export class ZombieWorld {
 
   // ------------------------------------------------------------------ damage
 
+  /** A plated enemy in its vulnerability window (the vent's windup). */
+  static venting(z: Zombie): boolean {
+    return z.cur?.kind === "vent" && z.act === ACT.WINDUP && z.state === AI.ATTACK;
+  }
+
   /** Whether a hit at distance `offset` from the centre is a precision hit. */
   static precision(z: Zombie, offset: number): boolean {
     return offset <= z.def.radius * PRECISION_RADIUS_FRACTION;
@@ -1012,8 +1100,22 @@ export class ZombieWorld {
   damage(z: Zombie, raw: number, by: string, precise: boolean, x: number, y: number, scaled = false): number {
     if (z.dead || raw <= 0) return 0;
     let dmg = raw * z.def.armor;
+    let armored = z.def.armor < 1;
+    const plating = z.def.plating;
+    if (plating) {
+      // Directional armour replaces the centre-mass bonus: where the hit lands is what counts.
+      if (precise && scaled) dmg /= PRECISION_DAMAGE_MULT;
+      precise = false;
+      const off = Math.hypot(x - z.x, y - z.y);
+      // Blasts and rams (no hit point on the body) count as the flank.
+      const side = off < 2 ? "side" : hitSide(plating, Math.atan2(y - z.y, x - z.x) - z.angle);
+      const mult = platingMult(plating, side, ZombieWorld.venting(z));
+      dmg *= mult;
+      armored = mult < 1;
+      precise = side === "back";
+    }
     // `scaled`: the caller already applied the precision bonus per pellet.
-    if (precise && !scaled) dmg *= PRECISION_DAMAGE_MULT;
+    if (precise && !scaled && !plating) dmg *= PRECISION_DAMAGE_MULT;
     if (z.state === AI.STUNNED) dmg *= z.def.stunnedDamageMult;
     // A boss roaring through a phase transition shrugs off almost everything.
     if (z.cur?.kind === "roar" && z.act === ACT.WINDUP) dmg *= 0.1;
@@ -1041,6 +1143,7 @@ export class ZombieWorld {
           knockback: ROAR_KNOCKBACK,
         });
         z.curId = "";
+        this.armPhase(z);
       }
     }
     const ev: NetEvent = {
@@ -1053,7 +1156,7 @@ export class ZombieWorld {
       k: lethal,
     };
     if (precise) ev.c = 1;
-    if (z.def.armor < 1) ev.a = 1;
+    if (armored) ev.a = 1;
     this.host.emit(ev);
     if (lethal) {
       this.kill(z, by);
@@ -1182,6 +1285,10 @@ export class ZombieWorld {
         if (z.def.behaviour === "flank")
           return this.flankVelocity(z, t, d, speed, toward, followPath, pathTo);
         const v = pathTo(speed);
+        // Plated enemies keep their front to their quarry in sight, whichever way they walk:
+        // the weak back is for a teammate to find.
+        if (z.def.plating && d < 520 && hasLineOfSight(this.host.shotWorld(), z.x, z.y, t.x, t.y))
+          return { ...v, face: Math.atan2(t.y - z.y, t.x - z.x) };
         if (z.def.kind === "runner" && d > 90) {
           // Erratic: weave across the approach line.
           const w = Math.sin(tick / 6 + z.jink) * 0.55;

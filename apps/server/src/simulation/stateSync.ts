@@ -237,6 +237,7 @@ export function syncPve(state: MatchState, sim: GameSimulation): void {
   st.status = pve.status;
   st.power = pve.power;
   st.alarm = pve.alarm;
+  st.vents = pve.ventStart;
   const doors = pve.doorList;
   if (st.doors !== doors) st.doors = doors;
   const flags = formatIdList(pve.flags);

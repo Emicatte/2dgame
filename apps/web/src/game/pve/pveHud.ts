@@ -150,6 +150,9 @@ export function objectiveText(mission: MissionDef | undefined, state: MatchState
   return mission.steps[state.pve.step]?.text ?? "";
 }
 
+/** Mission of the last update (labels for the feed). */
+let currentMission = "";
+
 export const pveHud = {
   reset(): void {
     seenHints.clear();
@@ -179,9 +182,14 @@ export const pveHud = {
           case "door":
             pushFeed("A door opened", "info");
             break;
-          case "prop":
-            pushFeed(ev.s === "keycard" ? "Keycard secured" : "Objective done", "good");
+          case "prop": {
+            const label = missionById(currentMission)?.props.find((p) => p.id === ev.s)?.label;
+            pushFeed(
+              ev.s === "keycard" ? "Keycard secured" : label ? `${label}: done` : "Objective done",
+              "good",
+            );
             break;
+          }
           case "complete":
             banner("Mission complete", "good");
             break;
@@ -230,6 +238,7 @@ export const pveHud = {
   ): void {
     const mode = state.mode === "survival" ? "survival" : "outbreak";
     const mission = mode === "outbreak" ? missionById(state.pve.mission) : undefined;
+    currentMission = state.pve.mission;
     const tickRate = state.tickRate || 20;
     const squad: PveSquadMember[] = [];
     state.players.forEach((p, id) => {

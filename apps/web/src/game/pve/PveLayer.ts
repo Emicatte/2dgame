@@ -11,6 +11,9 @@ import {
   missionById,
   type NetEvent,
   parseIdList,
+  VENT_PHASE,
+  type VentPhase,
+  ventPhase,
   type ZombieDef,
   zombieByIndex,
 } from "@scrapline/shared";
@@ -61,6 +64,23 @@ export function enemyDeathFx(
   opts: { color?: number; size?: number; boss?: boolean },
 ): void {
   effects.enemyDeath(x, y, opts);
+}
+
+/** Half-angle of a boss sweep drawn with radius `ar` (the matching attack of its definition). */
+function sweepArc(def: ZombieDef, ar: number): number {
+  let best = 1;
+  let bestD = Number.POSITIVE_INFINITY;
+  for (const ph of def.boss?.phases ?? []) {
+    for (const a of ph.attacks) {
+      if (a.kind !== "sweep") continue;
+      const d = Math.abs((a.radius ?? 180) - ar);
+      if (d < bestD) {
+        bestD = d;
+        best = a.arc ?? 1;
+      }
+    }
+  }
+  return best;
 }
 
 interface ZSample {
@@ -115,6 +135,8 @@ class ZombieView {
   /** Glinting eyes in the dark (above the light map): seen, not lit. */
   readonly eyes: Phaser.GameObjects.Image;
   private blink = Math.random() * 4;
+  /** Plated enemies: the glowing weak point on the back (brighter while it vents). */
+  readonly weak: Phaser.GameObjects.Image | null;
   private lastX = 0;
   private lastY = 0;
   x = 0;
@@ -142,6 +164,28 @@ class ZombieView {
       .setDisplaySize(10 * big, 5 * big)
       .setDepth(34)
       .setVisible(false);
+    // Above the darkness, like the eyes: the place to shoot is always findable.
+    this.weak = def.plating
+      ? scene.add
+          .image(0, 0, TEX.glow)
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setTint(def.accent)
+          .setDisplaySize(def.radius * 1.4, def.radius * 1.4)
+          .setDepth(34)
+      : null;
+  }
+
+  /** Weak point on the back: a steady glow, flaring while the plates are open. */
+  weakPoint(angle: number, venting: boolean, t: number): void {
+    if (!this.weak) return;
+    const back = this.def.radius * 0.62;
+    const pulse = 0.5 + 0.5 * Math.sin(t * (venting ? 14 : 3));
+    const size = this.def.radius * (venting ? 2.6 + pulse * 0.6 : 1.3 + pulse * 0.2);
+    this.weak
+      .setVisible(true)
+      .setPosition(this.x - Math.cos(angle) * back, this.y - Math.sin(angle) * back)
+      .setDisplaySize(size, size)
+      .setAlpha(venting ? 0.85 : 0.35 + pulse * 0.15);
   }
 
   /** Eyes in the dark: shown when the enemy is in sight but unlit; they blink now and then. */
@@ -200,6 +244,7 @@ class ZombieView {
   destroy(): void {
     this.root.destroy(true);
     this.eyes.destroy();
+    this.weak?.destroy();
   }
 }
 
@@ -247,7 +292,19 @@ export class PveLayer {
   /** Mission flags the scene uses for lights. */
   power = false;
   alarm = false;
+  /** Scripted blackout: the main lights are out even with the power on. */
+  blackout = false;
   active = false;
+  /** Mission flags (sealed doors, blackout, locked vehicles). */
+  private flags = new Set<string>();
+  private flagKey = "\u0000";
+  /** Vent phases last frame (the scene plays a cue when one changes). */
+  private ventPhases = new Map<string, VentPhase>();
+  /** Vents whose phase changed this frame: the scene turns these into sound. */
+  readonly ventCues: { x: number; y: number; phase: VentPhase }[] = [];
+  /** Plated enemies that started venting this frame (a sound cue). */
+  readonly ventStarts: { x: number; y: number }[] = [];
+  private venting = new Set<string>();
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -274,7 +331,17 @@ export class PveLayer {
   /** Doors open in the state (the scene rebuilds the collision world when this changes). */
   doorsChanged(state: MatchState): boolean {
     const key = state.pve.doors;
-    if (key === this.doorKey) return false;
+    const flagKey = state.pve.flags;
+    const flagsMoved = flagKey !== this.flagKey;
+    if (flagsMoved) {
+      this.flagKey = flagKey;
+      this.flags = parseIdList(flagKey);
+    }
+    if (key === this.doorKey) {
+      // Sealing or releasing a door changes how it looks, not the world.
+      if (flagsMoved) this.drawDoors(parseIdList(key));
+      return false;
+    }
     this.doorKey = key;
     this.drawDoors(parseIdList(key));
     return true;
@@ -290,6 +357,10 @@ export class PveLayer {
       }
       g.clear();
       const closed = !open.has(d.id) && this.activeMissionDoors;
+      if (d.auto) {
+        this.drawAutoDoor(g, d, closed, this.flags.has(`sealed-${d.id}`));
+        continue;
+      }
       if (closed) {
         g.fillStyle(0x3a3e43, 1).fillRect(d.x, d.y, d.w, d.h);
         g.lineStyle(2, 0x0b0c0e, 1).strokeRect(d.x, d.y, d.w, d.h);
@@ -315,6 +386,45 @@ export class PveLayer {
     }
   }
 
+  /**
+   * Automatic sliding door: two leaves that part into the walls, a status lamp at each end
+   * (green: working, amber: no power, red: sealed by the lockdown).
+   */
+  private drawAutoDoor(
+    g: Phaser.GameObjects.Graphics,
+    d: { x: number; y: number; w: number; h: number },
+    closed: boolean,
+    sealed: boolean,
+  ): void {
+    const horizontal = d.w > d.h;
+    const len = horizontal ? d.w : d.h;
+    const leaf = closed ? len / 2 : 10;
+    const lamp = sealed ? 0xff3d3d : this.power ? 0x7dffb0 : 0xe0a33a;
+    g.fillStyle(sealed ? 0x4a3436 : 0x3a4448, 1);
+    if (horizontal) {
+      g.fillRect(d.x, d.y + 3, leaf, d.h - 6);
+      g.fillRect(d.x + d.w - leaf, d.y + 3, leaf, d.h - 6);
+    } else {
+      g.fillRect(d.x + 3, d.y, d.w - 6, leaf);
+      g.fillRect(d.x + 3, d.y + d.h - leaf, d.w - 6, leaf);
+    }
+    g.lineStyle(1.5, 0x0b0c0e, 1);
+    if (closed) {
+      if (horizontal) g.lineBetween(d.x + d.w / 2, d.y + 3, d.x + d.w / 2, d.y + d.h - 3);
+      else g.lineBetween(d.x + 3, d.y + d.h / 2, d.x + d.w - 3, d.y + d.h / 2);
+      g.strokeRect(d.x, d.y + (horizontal ? 3 : 0), d.w, d.h - (horizontal ? 6 : 0));
+    }
+    // Status lamps on the frame.
+    g.fillStyle(lamp, 0.95);
+    if (horizontal) {
+      g.fillCircle(d.x - 6, d.y + d.h / 2, 3.5);
+      g.fillCircle(d.x + d.w + 6, d.y + d.h / 2, 3.5);
+    } else {
+      g.fillCircle(d.x + d.w / 2, d.y - 6, 3.5);
+      g.fillCircle(d.x + d.w / 2, d.y + d.h + 6, 3.5);
+    }
+  }
+
   /** Survival plays on mission maps with every door open. */
   private get activeMissionDoors(): boolean {
     return !!this.mission;
@@ -322,8 +432,13 @@ export class PveLayer {
 
   onPatch(state: MatchState, inMatch: boolean): void {
     if (!this.active) return;
-    this.power = state.pve.power;
+    if (this.power !== state.pve.power) {
+      this.power = state.pve.power;
+      // Door lamps follow the power.
+      this.drawDoors(parseIdList(state.pve.doors));
+    }
     this.alarm = state.pve.alarm;
+    this.blackout = this.flags.has("blackout");
     const samples = new Map<string, ZSample>();
     state.zombies.forEach((z, id) => {
       samples.set(id, { x: z.x, y: z.y, a: (z.a / 256) * Math.PI * 2 });
@@ -512,6 +627,13 @@ export class PveLayer {
       }
       v.root.setVisible(true);
       v.update(s.x, s.y, s.a, zs.hp, zs.mhp, zs.st, dtSec);
+      if (v.weak) {
+        const venting = zs.act === ACT.WINDUP && ATTACK_KINDS[zs.ak] === "vent";
+        v.weakPoint(s.a, venting, now / 1000);
+        if (venting && !this.venting.has(id)) this.ventStarts.push({ x: s.x, y: s.y });
+        if (venting) this.venting.add(id);
+        else this.venting.delete(id);
+      }
       if (lm && poly) {
         const dist = Math.hypot(s.x - focus.x, s.y - focus.y);
         const seen = dist < 1100 && isVisible(poly, s.x, s.y, v.def.radius);
@@ -542,6 +664,7 @@ export class PveLayer {
           .strokePath();
       }
     });
+    this.drawVents(g, state, renderTick, tickRate, t);
     // Hazards fade out at the end.
     state.hazards.forEach((h, id) => {
       const img = this.hazards.get(id);
@@ -573,6 +696,60 @@ export class PveLayer {
         continue;
       }
       p.img.setPosition(p.x + p.vx * age, p.y + p.vy * age).setRotation(age * 8);
+    }
+  }
+
+  /** Phase of every security vent at `renderTick` (all offline without power). */
+  ventStates(state: MatchState, renderTick: number, tickRate: number): { id: string; phase: VentPhase }[] {
+    const vents = this.mission?.vents ?? [];
+    const start = state.pve.vents;
+    return vents.map((v) => ({
+      id: v.id,
+      phase: start > 0 ? ventPhase(v, (renderTick - start) / tickRate) : VENT_PHASE.IDLE,
+    }));
+  }
+
+  /**
+   * Security vents: amber stripes flashing during the warning, then the gas. Drawn above the
+   * darkness: a hazard is always readable.
+   */
+  private drawVents(
+    g: Phaser.GameObjects.Graphics,
+    state: MatchState,
+    renderTick: number,
+    tickRate: number,
+    t: number,
+  ): void {
+    const vents = this.mission?.vents ?? [];
+    if (vents.length === 0) return;
+    const states = this.ventStates(state, renderTick, tickRate);
+    for (const [i, v] of vents.entries()) {
+      const phase = states[i]!.phase;
+      const a = v.area;
+      const before = this.ventPhases.get(v.id) ?? VENT_PHASE.IDLE;
+      if (before !== phase) {
+        this.ventPhases.set(v.id, phase);
+        if (phase !== VENT_PHASE.IDLE) this.ventCues.push({ x: a.x + a.w / 2, y: a.y + a.h / 2, phase });
+      }
+      if (phase === VENT_PHASE.WARN) {
+        const on = Math.sin(t * 18) > 0;
+        g.lineStyle(3, 0xffb33a, on ? 0.95 : 0.35).strokeRect(a.x, a.y, a.w, a.h);
+        g.fillStyle(0xffb33a, on ? 0.12 : 0.04).fillRect(a.x, a.y, a.w, a.h);
+      } else if (phase === VENT_PHASE.ACTIVE) {
+        g.fillStyle(0xd8ffe8, 0.22).fillRect(a.x, a.y, a.w, a.h);
+        // Billowing puffs inside the area.
+        const n = Math.max(4, Math.round((a.w * a.h) / 9000));
+        for (let k = 0; k < n; k++) {
+          const px = a.x + ((((k * 97.3 + t * 40 * ((k % 3) - 1)) % a.w) + a.w) % a.w);
+          const py = a.y + ((((k * 61.7 + t * 25 * ((k % 2) * 2 - 1)) % a.h) + a.h) % a.h);
+          const r = 26 + 14 * Math.sin(t * 2 + k);
+          g.fillStyle(0xeafff2, 0.12 + 0.06 * Math.sin(t * 3 + k)).fillCircle(px, py, r);
+        }
+        g.lineStyle(2, 0xd8ffe8, 0.6).strokeRect(a.x, a.y, a.w, a.h);
+      } else if (state.pve.vents > 0) {
+        // Online and idle: a faint frame so the grate reads as a hazard.
+        g.lineStyle(1, 0xffb33a, 0.25).strokeRect(a.x, a.y, a.w, a.h);
+      }
     }
   }
 
@@ -643,6 +820,33 @@ export class PveLayer {
       case "throw": {
         g.lineStyle(2, red, 0.5 + 0.5 * k).strokeCircle(tx, ty, (ar || 90) * (1.4 - 0.4 * k));
         g.fillStyle(red, 0.08 + 0.15 * k).fillCircle(tx, ty, ar || 90);
+        return;
+      }
+      case "sweep": {
+        // The committed cone (front or tail): filling up until it strikes.
+        const r = ar || 180;
+        const face = Math.atan2(ty - v.y, tx - v.x);
+        const arc = sweepArc(def, ar);
+        g.fillStyle(red, 0.1 + 0.25 * k);
+        g.slice(v.x, v.y, r, face - arc, face + arc, false).fillPath();
+        g.lineStyle(2, red, 0.85)
+          .beginPath()
+          .arc(v.x, v.y, r, face - arc, face + arc)
+          .strokePath();
+        g.lineStyle(4, 0xffd34a, 0.9)
+          .beginPath()
+          .arc(v.x, v.y, Math.max(def.radius, r * k), face - arc, face + arc)
+          .strokePath();
+        return;
+      }
+      case "vent": {
+        // The window: plates open (the weak point flares on its own), a calm ring that turns red
+        // in the last quarter, when the burst that closes it is coming.
+        const r = ar || 140;
+        const late = k > 0.75;
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now() / (late ? 50 : 160));
+        g.lineStyle(2, late ? red : def.accent, 0.35 + 0.45 * pulse).strokeCircle(v.x, v.y, r);
+        if (late) g.fillStyle(red, 0.08 + 0.16 * ((k - 0.75) / 0.25)).fillCircle(v.x, v.y, r);
         return;
       }
     }
@@ -745,6 +949,10 @@ export class PveLayer {
     for (const p of this.projectiles.values()) p.img.destroy();
     this.projectiles.clear();
     this.fx.clear();
+    this.ventPhases.clear();
+    this.venting.clear();
+    this.flagKey = "\u0000";
+    this.flags.clear();
   }
 
   /** Back to the lobby: enemies and effects go, doors and props stay drawn. */

@@ -143,6 +143,24 @@ function drawZombie(def: ZombieDef): HTMLCanvasElement {
   ctx.arc(r * 0.38, 0, hr, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+  // Plated enemies: steel plates bolted over the front half, the weak point glows at the back.
+  if (def.plating) {
+    ctx.fillStyle = hex(0x6b737b);
+    ctx.strokeStyle = hex(0x1a1d20);
+    ctx.lineWidth = 2;
+    for (const a of [-0.75, 0, 0.75]) {
+      ctx.save();
+      ctx.rotate(a);
+      roundRect(ctx, r * 0.35, -r * 0.32, r * 0.6, r * 0.64, 3);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.fillStyle = hex(accent, 0.9);
+    ctx.beginPath();
+    ctx.arc(-r * 0.62, 0, r * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+  }
   // Eyes (forward-facing glints: makes the facing readable at a glance).
   ctx.fillStyle = hex(accent);
   for (const side of [-1, 1]) {
@@ -280,6 +298,19 @@ function drawProp(kind: string): HTMLCanvasElement {
       ctx.arc(11, -11, 4, 0, Math.PI * 2);
       ctx.fill();
       break;
+    case "intel":
+      // A research folder with a data drive clipped to it.
+      ctx.rotate(0.2);
+      plate(26, 32, 0xc9b48a, 0x15171a);
+      ctx.fillStyle = hex(0xd83a3a);
+      ctx.fillRect(-13, -12, 26, 4);
+      ctx.fillStyle = hex(0x3a3e43);
+      for (let i = 0; i < 4; i++) ctx.fillRect(-8, -4 + i * 4, 14, 1.5);
+      ctx.fillStyle = hex(0x2a2d30);
+      ctx.fillRect(4, 6, 10, 12);
+      ctx.fillStyle = hex(0x7dffb0);
+      ctx.fillRect(6, 8, 3, 2);
+      break;
     case "radio":
       // A field radio with its antenna and a green dial.
       plate(34, 22, 0x3a3f2e, 0x0b0c0e);
@@ -315,6 +346,8 @@ export function generateZombieTextures(scene: Phaser.Scene): void {
     "health",
     "medical",
     "radio",
+    "engine",
+    "intel",
   ]) {
     add(ZTEX.prop(k), drawProp(k));
   }
