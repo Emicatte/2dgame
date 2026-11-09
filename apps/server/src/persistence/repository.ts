@@ -30,6 +30,8 @@ export interface MatchPlayerResult {
   flagCaptures: number;
   flagReturns: number;
   vehicleKills: number;
+  /** Mode-specific career counters (MODE_STAT_KEYS), stored in the career JSON. */
+  extra?: Record<string, number>;
 }
 
 /** The facts the career and the daily challenges are computed from. */
@@ -44,6 +46,7 @@ export function matchFacts(r: MatchPlayerResult, mode: string): MatchFacts {
     flagCaptures: r.flagCaptures,
     flagReturns: r.flagReturns,
     vehicleKills: r.vehicleKills,
+    ...(r.extra ? { extra: r.extra } : {}),
   };
 }
 

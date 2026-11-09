@@ -180,6 +180,7 @@ export const localProfile = {
         flagCaptures: rec.flagCaptures ?? 0,
         flagReturns: rec.flagReturns ?? 0,
         vehicleKills: rec.vehicleKills ?? 0,
+        ...(rec.extra ? { extra: rec.extra } : {}),
       },
       new Date(),
     );

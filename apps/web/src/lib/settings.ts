@@ -12,7 +12,11 @@ export type Action =
   | "slot3"
   | "interact"
   | "seat"
-  | "scoreboard";
+  | "scoreboard"
+  | "propMenu"
+  | "lock"
+  | "taunt"
+  | "decoy";
 
 export const ACTION_LABELS: Record<Action, string> = {
   up: "Move up",
@@ -27,6 +31,10 @@ export const ACTION_LABELS: Record<Action, string> = {
   interact: "Interact / pick up / enter-exit vehicle",
   seat: "Change vehicle seat",
   scoreboard: "Scoreboard",
+  propMenu: "Prop Hunt: choose an object to turn into",
+  lock: "Prop Hunt: lock position",
+  taunt: "Prop Hunt: taunt",
+  decoy: "Prop Hunt: drop a decoy",
 };
 
 /** KeyboardEvent.code values, so bindings follow physical keys on AZERTY/QWERTZ too. */
@@ -43,6 +51,10 @@ export const DEFAULT_BINDINGS: Record<Action, string> = {
   interact: "KeyE",
   seat: "KeyF",
   scoreboard: "Tab",
+  propMenu: "KeyQ",
+  lock: "KeyC",
+  taunt: "KeyT",
+  decoy: "KeyG",
 };
 
 export const GRAPHICS_QUALITIES = ["low", "medium", "high"] as const;

@@ -51,6 +51,15 @@ Adding a weapon: add an entry to `WEAPONS` with a new stable `index`; the simula
 sound synthesizer (parameters in `sound`) and sprite generator pick it up. Skins per weapon are a
 planned extension of the cosmetic system.
 
+### Loot chests and shields (0.7.0)
+
+Chests on every PvP map (`packages/shared/src/maps/chests.ts`) open with E and give a random
+weapon (`CHEST_WEAPONS`, weighted), +50 shield (max 100, absorbed before health) and full ammo,
+then stay closed for 40 s. Chest-only weapons (`slotKind: "loot"`, never in loadouts): Talon
+Carbine (fast assault rifle), Vanguard BR (semi-automatic battle rifle), Grinder minigun (1300 rpm,
+150-round drum, slow to carry), Hammer RPG (one rocket per reload, explodes on impact: up to 110
+damage within 130 px, no self or team damage). Numbers are data in `config/weapons.ts`.
+
 ### Slots and pickups
 
 Slot 1 = chosen primary, slot 2 = Warden P9, slot 3 = weapon picked up on the map (E). Weapon
@@ -73,6 +82,19 @@ bounds and that symmetry holds.
 Maps are plain data (`packages/shared/src/maps/*.ts`): solids (rectangles with a visual kind),
 decals, lights, spawns and pickups. A Tiled importer would convert an object layer of rectangles to
 the same `SolidDef` list; the renderer and simulation would not change.
+
+**Salvage Depot** (0.7.0, 2240 × 1440 px, not symmetric): the first party map, for Prop Hunt and
+Hide & Seek (also Deathmatch and Gun Game). Racked warehouse, two offices, a yard and a security
+booth for the seekers; 60 transformable objects, shadow zones and hiding spots
+(`MapDef.party`). Maps declare the modes they support (`MapDef.modes`) or get them derived from
+their features (`mapModes`).
+
+## Modes
+
+Competitive: Deathmatch, Team Deathmatch, Gun Game, Domination, Capture the Flag. Party: Hide &
+Seek (Classic, Infection, Blackout), Prop Hunt. Co-op: Outbreak, Survival. Vehicles: Vehicle
+Mayhem. Rules, numbers and the planned modes: [v4/MODES.md](v4/MODES.md); Domination, CTF and
+Mayhem: [v2/SYSTEMS.md](v2/SYSTEMS.md); Outbreak: [v3/OUTBREAK.md](v3/OUTBREAK.md).
 
 ## Match rules (configurable per private room)
 

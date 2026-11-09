@@ -118,7 +118,34 @@ E2E_SHOTS_DIR=/tmp/shots pnpm test:e2e:p2p outbreak.spec   # same, keeping scree
 Acceptance criteria and results by phase: `docs/v3/ROADMAP.md`; systems and budgets:
 `docs/v3/OUTBREAK.md`.
 
-## Results (last run: 2026-11-06, v0.5.0 Outbreak and Combat Visual Overhaul, branch `outbreak`)
+### Modes expansion (0.7.0)
+
+```bash
+pnpm --filter @scrapline/shared exec vitest run test/maps.test.ts test/career.test.ts
+pnpm --filter @scrapline/server exec vitest run test/partymodes.test.ts      # rules + what each client decodes
+pnpm --filter @scrapline/web exec vitest run test/hostmode.partymodes.test.ts # real HostRoom + guest
+pnpm test:e2e:p2p partymodes.spec                 # two Chrome processes over WebRTC
+E2E_SHOTS_DIR=/tmp/shots pnpm test:e2e:p2p partymodes.spec   # same, keeping screenshots
+pnpm --filter @scrapline/server exec tsx scripts/modebench.ts  # tick cost and bandwidth per mode
+```
+
+## Results (last run: 2026-11-09, v0.7.0 modes expansion, branch `modes-expansion`)
+
+| Suite | Count | Result |
+|---|---|---|
+| Lint (Biome), typecheck (tsc strict, E2E sources included), production build | — | clean (one warning that predates this branch) |
+| `packages/shared` unit (+ map compatibility, Salvage Depot party data, mode career counters) | 112 + 1 skipped | pass |
+| `apps/web` unit (+ host mode: Gun Game start, a seeking guest never decodes the hidden host's pose / events / ghost, Prop Hunt abilities as messages and objects only at hunt start, round modes refuse to start alone, a hiding guest reconnects and gets its ghost back) | 143 | pass |
+| `apps/server` unit + integration (+ 31 mode tests: ladder, demotion, overtime, results; roles, pen, exposure, shadows, hiding spots, event filtering, rounds and rotation, Infection, Blackout, leaving players, latecomers; transform, fit, ids renewed at hunt start, hits, penalty, finds, lock, taunt, decoy, cooldown, hints; per-viewer encoding decoded for each client) | 211 + 8 skipped | pass |
+| E2E host mode, two Chrome processes over WebRTC: Play screen + Gun Game; Hide & Seek secrecy (the seeking guest's received state); Prop Hunt (picker, objects only at hunt start, lock) | 3 | pass |
+| E2E host mode regressions: TDM + invite + reload + host close; practice bots; crosshair; vehicles | 4 | pass, after fixing a regression found here: the Create arena dialog (10 maps) put its button below a 720 px window; dialogs now scroll |
+| E2E dedicated server (`pnpm test:e2e`, 7 specs) | 7 | 3 pass (reconnect/stall, TDM, helicopter on a second run); 4 fail (CTF, Domination, deathmatch exchange, car). **The untouched 0.6.2 baseline fails 6 of 7 in the same environment** (same four plus TDM and reconnect): the specs time out walking to targets at ~5 FPS software rendering. Not a regression of this branch; not fixed here |
+
+Mode benchmark (8 simulated players, 60 s per mode, full room path): `docs/v4/MODES.md` §5. Not run:
+Outbreak E2E (unchanged code paths; covered by unit and host-mode tests), netcode matrix,
+PostgreSQL contract (the career stays JSON: no migration), GPU frame rate on real hardware.
+
+## Results (2026-11-06, v0.5.0 Outbreak and Combat Visual Overhaul, branch `outbreak`)
 
 | Suite | Count | Result |
 |---|---|---|

@@ -113,7 +113,11 @@ export function RoomBrowser({ onBack }: { onBack: () => void }) {
                   {rooms.map((r) => (
                     <tr key={r.roomId}>
                       <td>{isMapId(r.map) ? MAPS[r.map].name : r.map}</td>
-                      <td>{r.mode === "tdm" ? MODE_NAMES.tdm : MODE_NAMES.deathmatch}</td>
+                      <td>
+                        {r.mode && r.mode in MODE_NAMES
+                          ? MODE_NAMES[r.mode as keyof typeof MODE_NAMES]
+                          : MODE_NAMES.deathmatch}
+                      </td>
                       <td>
                         <span className={`badge ${r.phase === "playing" ? "badge--accent" : "badge--good"}`}>
                           {r.phase === "playing" ? "In match" : r.phase}

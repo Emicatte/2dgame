@@ -127,3 +127,27 @@ describe("career and daily challenges", () => {
     expect(n.challenges.done).toEqual(["win2"]);
   });
 });
+
+describe("mode career counters", () => {
+  const day = new Date("2026-11-09T12:00:00Z");
+
+  it("adds mode counters from completed matches only, drops unknown keys and bad values", () => {
+    const one = applyMatchToCareer(
+      emptyCareer(),
+      facts({ mode: "prophunt", extra: { propsFound: 3, propRounds: 2, bogus: 9, hidersFound: -4 } }),
+      day,
+    );
+    expect(one.career.extra).toEqual({ propsFound: 3, propRounds: 2 });
+    const two = applyMatchToCareer(
+      one.career,
+      facts({ mode: "prophunt", completed: false, extra: { propsFound: 5 } }),
+      day,
+    );
+    expect(two.career.extra.propsFound).toBe(3);
+    const stored = normalizeCareer(JSON.parse(JSON.stringify(two.career)));
+    expect(stored.extra).toEqual({ propsFound: 3, propRounds: 2 });
+    expect(normalizeCareer({ extra: { gungameLevels: "x", hideSeconds: 12.7 } }).extra).toEqual({
+      hideSeconds: 12,
+    });
+  });
+});

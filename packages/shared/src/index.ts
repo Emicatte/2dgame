@@ -1,6 +1,7 @@
 export * from "./config/career.ts";
 export * from "./config/game.ts";
 export * from "./config/modes.ts";
+export * from "./config/party.ts";
 export * from "./config/progression.ts";
 export * from "./config/vehicles.ts";
 export * from "./config/weapons.ts";

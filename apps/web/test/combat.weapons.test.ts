@@ -44,6 +44,10 @@ describe("weapon visual families", () => {
       sniper: "sniper",
       mg: "mounted",
       doorgun: "mounted",
+      carbine: "rifle",
+      battlerifle: "rifle",
+      minigun: "mounted",
+      rpg: "mounted",
     };
     for (const w of WEAPON_LIST) {
       expect(weaponCategory(w)).toBe(expected[w.id]);

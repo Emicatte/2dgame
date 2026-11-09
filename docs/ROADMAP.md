@@ -14,6 +14,19 @@
 | 8 Deployment | Dockerfile, Render Blueprint, Vercel config, env, HTTPS/WSS, CORS, drain on deploy, DNS docs | Prepared, not deployed |
 | Audit 0.1.1 | Networking, performance, security, build/deploy audit with fixes and tests (docs/audit/AUDIT_REPORT.md) | Done, except the items marked "not verified" below |
 
+## Modes expansion (0.7.0, branch `modes-expansion`)
+
+| Phase | Result | Status |
+|---|---|---|
+| 0 Audit | Inventory of the real systems before building (docs/v4/MODES.md §0) | Done |
+| 1 Game mode system | Registry, controllers, lifecycle, feature flags, map compatibility, lobby integration | Done |
+| 2 Gun Game | Ladder, demotion, overtime, HUD | Done, tested (unit, host mode, two-browser E2E) |
+| 3 Hide & Seek | Roles, pen and blindfold, exposure rules, three variants, spectating, rotation | Done, tested incl. what a seeker's client receives |
+| 4 Prop Hunt | Transform, lock, taunt, decoy, quick transform, penalty, hints, party map | Done, tested incl. what a hunter's client receives |
+| 5–8 | Infection, Sabotage, Bounty Hunt, Extraction, Chaos Arena, Vehicle Pursuit / Convoy, Boss Rush | Designed, planned (docs/v4/MODES.md §6) |
+| 9 | More party maps, effects, balance from real playtests | Open |
+| 10 | GPU benchmarks on real hardware, security review, deploy | Open (needs your hardware and approval) |
+
 ## Definition of done
 
 - [x] The site opens in the browser
@@ -45,6 +58,9 @@
 - [ ] Deployed and verified on the public domain (needs your accounts and approval)
 
 ## Next steps (proposed)
+
+- **Modes**: playtest Gun Game, Hide & Seek and Prop Hunt with 4–8 people (hider health, hint
+  timings, innocent penalty, points), then Zone Shift (reuses Domination) and Infection (phase 5).
 
 0. **Before publishing** (from the audit): run `bench.html` on the target hardware (at least one
    mid-range laptop with integrated graphics and one desktop), build the image from the official

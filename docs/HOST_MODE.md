@@ -82,6 +82,10 @@ The lobby does not show which path a guest uses; `PeerRoom.path` holds it ("dire
 - Trust: the host's browser is the referee. A host can cheat in their own arena, and each player's
   XP is recorded by their own browser. That is acceptable among friends; competitive play and the
   global leaderboard need the dedicated server (still in the code, see DEPLOYMENT.md).
+- Hidden information (Hide & Seek, Prop Hunt): guests receive only what their side may see (per
+  guest StateView and per-guest events, same rules as the dedicated server). The host's own tab
+  holds the full state and draws only its side's view, but a host with the developer tools open
+  can read every position. Among friends that is the accepted trade-off; see docs/v4/MODES.md §3.
 - Guests are validated like on the dedicated server: every message is schema-checked, unknown or
   malformed messages and floods (>150 msg/s) remove the sender, one seat per profile, host-only
   actions are checked by the host.

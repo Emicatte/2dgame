@@ -1,3 +1,5 @@
+import type { GameMode } from "../config/modes.ts";
+import type { DisguiseKind } from "../config/party.ts";
 import type { VehicleKind } from "../config/vehicles.ts";
 import type { WeaponId } from "../config/weapons.ts";
 import type { Rect, Vec2 } from "../sim/math.ts";
@@ -16,6 +18,8 @@ export type MapId =
   | "downtown"
   | "mountain"
   | "facility"
+  /** Party maps (Prop Hunt, Hide & Seek). */
+  | "depot"
   /** PvE (Outbreak) maps: never offered to competitive modes. */
   | "works";
 
@@ -36,7 +40,11 @@ export type SolidKind =
   /** Harbor water: stops anything on the ground, but bullets and helicopters pass over it. */
   | "water"
   /** Chain-link fence: stops movement, bullets pass through. */
-  | "fence";
+  | "fence"
+  /** Warehouse rack loaded with boxes. */
+  | "shelf"
+  /** Office desk. */
+  | "desk";
 
 /** Solids that stop movement but not bullets (shots and sight lines pass over or through them). */
 export const SHOOT_THROUGH: ReadonlySet<SolidKind> = new Set<SolidKind>(["water", "fence"]);
@@ -90,7 +98,8 @@ export interface LightDef extends Vec2 {
   group?: "power" | "alarm" | "emergency";
 }
 
-export type PickupKind = "health" | "ammo" | "weapon";
+/** "chest": opened with interact, gives a random weapon, shield and ammo (CHEST_WEAPONS, SHIELD). */
+export type PickupKind = "health" | "ammo" | "weapon" | "chest";
 
 export interface PickupDef extends Vec2 {
   id: string;
@@ -124,6 +133,32 @@ export interface ThemeDef {
   fog: number;
 }
 
+/** A transformable object of a party map (Prop Hunt) or decorative clutter in other modes. */
+export interface PropSpotDef extends Vec2 {
+  kind: DisguiseKind;
+  /** Rotation in degrees (visual only). */
+  rot?: number;
+}
+
+/** Somewhere a hider can crawl into (tarp, curtain, bush): only seen from very close. */
+export interface HideSpotDef extends Vec2 {
+  r: number;
+  kind: "tarp" | "curtain" | "bush";
+}
+
+/** Hide & Seek and Prop Hunt data of a map. */
+export interface PartyMapDef {
+  /** Where seekers / hunters wait (frozen, blindfolded) during the hiding time. */
+  seekerPen: readonly Vec2[];
+  /** Where hiders / props start. */
+  hiderSpawns: readonly Vec2[];
+  /** Dark corners: a hider standing inside is only seen from close by. */
+  shadows: readonly Rect[];
+  hideSpots: readonly HideSpotDef[];
+  /** Transformable objects. Prop Hunt fills most of them each round. */
+  props: readonly PropSpotDef[];
+}
+
 export interface MapDef {
   id: MapId;
   name: string;
@@ -147,6 +182,15 @@ export interface MapDef {
   large?: boolean;
   /** PvE map (Outbreak missions and Survival): hidden from competitive map pickers. */
   pve?: boolean;
+  /**
+   * Modes this map supports. Without it the list is derived from the map's features (see
+   * mapModes): vehicles for Vehicle Mayhem, size for Gun Game, party data for Prop Hunt.
+   */
+  modes?: readonly GameMode[];
+  /** Recommended number of players (map picker hint). */
+  players?: { min: number; max: number };
+  /** Hide & Seek / Prop Hunt data: seeker pen, shadows, hiding spots, transformable objects. */
+  party?: PartyMapDef;
   /** Authored objective positions (otherwise derived from the team spawns, see objectivesFor). */
   objectives?: {
     points: { id: string; label: string; x: number; y: number }[];

@@ -1,16 +1,20 @@
 import { Client, type Room } from "@colyseus/sdk";
 import {
+  type AbilityMessage,
   C2S,
   DEFAULT_PRIMARY,
   DEFAULT_SKIN,
   type GameMode,
+  isRoleMode,
   isWeaponId,
   type JoinOptions,
   levelFromXp,
+  MAPS,
   type MapId,
   type MatchPhase,
   type MatchSettings,
   MatchState,
+  mapsForMode,
   type NetEvent,
   type NoticeMessage,
   type ResultsMessage,
@@ -25,6 +29,24 @@ import { JoinError } from "../p2p/PeerRoom.ts";
 import { CLOSE, closeReason } from "../p2p/wire.ts";
 import { localProfile } from "../state/localProfile.ts";
 import { api, HOST_MODE, identity, SERVER_URL } from "./api.ts";
+
+/** Keeps the previous object when nothing changed (store subscribers compare by reference). */
+function roundOf(state: MatchState, prev: SessionState["round"]): SessionState["round"] {
+  const r = state.round;
+  if (!r) return prev;
+  const next = {
+    stage: r.stage,
+    end: r.end,
+    num: r.num,
+    of: r.of,
+    variant: r.variant,
+    dark: r.dark,
+    seekers: r.seekers,
+    hiders: r.hiders,
+    winner: r.winner,
+  };
+  return (Object.keys(next) as (keyof typeof next)[]).every((k) => next[k] === prev[k]) ? prev : next;
+}
 
 export type ConnectionStatus = "idle" | "connecting" | "connected" | "reconnecting" | "error";
 
@@ -42,6 +64,12 @@ export interface LobbyPlayer {
   alive: boolean;
   /** 0 = no team, 1 = Alpha, 2 = Bravo. */
   team: number;
+  /** Round modes: side (ROLE.*) and points; Gun Game: ladder level (0-based). */
+  role: number;
+  pts: number;
+  gg: number;
+  /** Results: map voted for. */
+  vote: string;
 }
 
 export interface SessionState {
@@ -73,6 +101,20 @@ export interface SessionState {
   /** PvE lobby settings. */
   mission: string;
   difficulty: string;
+  /** Round modes: stage, its end tick, round number / count, variant, lights out, side sizes. */
+  round: {
+    stage: string;
+    end: number;
+    num: number;
+    of: number;
+    variant: string;
+    dark: boolean;
+    seekers: number;
+    hiders: number;
+    winner: number;
+  };
+  /** Results: maps offered for the next match. */
+  voteMaps: string[];
 }
 
 const initialState: SessionState = {
@@ -103,6 +145,8 @@ const initialState: SessionState = {
   winnerTeam: 0,
   mission: "",
   difficulty: "veteran",
+  round: { stage: "", end: 0, num: 0, of: 0, variant: "", dark: false, seekers: 0, hiders: 0, winner: 0 },
+  voteMaps: [],
 };
 
 export const sessionStore = createStore<SessionState>({ ...initialState });
@@ -157,6 +201,19 @@ class GameSession {
   }
 
   /** Co-op: a private room (arena in host mode) set to Outbreak on its mission map. */
+  /**
+   * Opens a private room / arena already set to `mode` (Play screen). The map is the first one
+   * compatible with the mode unless one is given.
+   */
+  async createWithMode(loadout: Loadout, mode: GameMode, map?: MapId): Promise<void> {
+    const maps = mapsForMode(mode);
+    // Round modes play best on a party map (hiding spots, shadows, objects to turn into).
+    const target =
+      map ?? (isRoleMode(mode) ? maps.find((m) => MAPS[m].party) : undefined) ?? maps[0] ?? "industrial";
+    await this.createPrivate(loadout, target, HOST_MODE ? {} : { mode });
+    if (HOST_MODE) this.updateSettings({ mode });
+  }
+
   async createCoop(loadout: Loadout): Promise<void> {
     await this.createPrivate(loadout, "works", HOST_MODE ? {} : { mode: "outbreak" });
     if (HOST_MODE) this.updateSettings({ mode: "outbreak" });
@@ -316,6 +373,10 @@ class GameSession {
           ping: p.ping,
           alive: p.alive,
           team: p.team,
+          role: p.role,
+          pts: p.pts,
+          gg: p.gg,
+          vote: p.vote,
         });
       });
     }
@@ -343,7 +404,19 @@ class GameSession {
       winnerTeam: state.winnerTeam,
       mission: state.pve?.mission ?? "",
       difficulty: state.pve?.difficulty || "veteran",
+      round: roundOf(state, s.round),
+      voteMaps: state.voteMaps ? state.voteMaps.split(",") : [],
     });
+  }
+
+  /** Prop Hunt ability (the server decides). */
+  ability(msg: AbilityMessage) {
+    this.send(C2S.ABILITY, msg);
+  }
+
+  /** Results: vote for the next map. */
+  voteMap(map: MapId) {
+    this.send(C2S.VOTE, { map });
   }
 
   send(type: string, payload?: unknown) {

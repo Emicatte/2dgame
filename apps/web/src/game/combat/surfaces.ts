@@ -19,6 +19,8 @@ export const SURFACE_OF: Readonly<Record<SolidKind, Surface | null>> = {
   sandbag: "masonry",
   crate: "masonry",
   pillar: "masonry",
+  shelf: "metal",
+  desk: "masonry",
   // Shoot-through solids never stop a bullet, so they are never an impact surface.
   water: null,
   fence: null,
@@ -38,6 +40,8 @@ export const SURFACE_TINT: Readonly<Record<SolidKind, number>> = {
   sandbag: 0xb8a274,
   crate: 0xa07a52,
   pillar: 0xbab4a8,
+  shelf: 0x5a5f68,
+  desk: 0x8a6a48,
   water: 0x9fb8c8,
   fence: 0x8a8a8a,
 };

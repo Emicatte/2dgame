@@ -1,5 +1,6 @@
 import { Encoder, StateView } from "@colyseus/schema";
 import {
+  abilitySchema,
   C2S,
   decodeInput,
   hashString,
@@ -15,7 +16,10 @@ import {
   type MapId,
   type MatchPhase,
   MatchState,
+  MODE_NAMES,
+  modeEnabled,
   NET,
+  type NetEvent,
   type NoticeMessage,
   type PersonalResult,
   PickupState,
@@ -28,13 +32,16 @@ import {
   settingsSchema,
   teamSchema,
   type VehicleKind,
+  voteSchema,
   type WeaponId,
 } from "@scrapline/shared";
 import { z } from "zod";
 // The dedicated server's simulation, state mirroring and scoring run unchanged in the host's tab.
 import { BOT_NAMES, BotDriver } from "../../../server/src/bots/BotBrain.ts";
+import type { ModeFacts } from "../../../server/src/modes/ModeController.ts";
+import { syncModeState } from "../../../server/src/modes/sync.ts";
 import { type ComputedResult, computeResults, resultRows } from "../../../server/src/players/results.ts";
-import { applyPveSettings, buildPveResults, pveOver } from "../../../server/src/pve/pveRoom.ts";
+import { applyPveSettings, buildPveResults } from "../../../server/src/pve/pveRoom.ts";
 import { MatchRules } from "../../../server/src/rules/MatchRules.ts";
 import { GameSimulation, type ServerPlayer } from "../../../server/src/simulation/GameSimulation.ts";
 import {
@@ -43,6 +50,7 @@ import {
   syncPve,
   syncVehicles,
 } from "../../../server/src/simulation/stateSync.ts";
+import { MODE_FLAGS } from "../lib/modeFlags.ts";
 import { signal } from "../net/signal.ts";
 import type { PeerLink, WireData } from "./link.ts";
 import {
@@ -233,7 +241,7 @@ export class HostRoom {
     if (phase === "countdown" || phase === "playing") {
       this.driveBots();
       const events = this.sim.step(elapsedMs, phase === "playing" ? "live" : "frozen");
-      if (events.length > 0) this.broadcast(S2C.EVENTS, events);
+      if (events.length > 0) this.sendEvents(events);
     } else {
       this.sim.tick += 1;
     }
@@ -245,15 +253,13 @@ export class HostRoom {
       case "countdown":
         if (tick >= this.state.phaseEndTick) this.startPlaying();
         break;
-      case "playing":
-        if (this.rules.pveMode) {
-          // PvE ends with the mission (complete / failed) or the safety cap.
-          if (pveOver(this.sim) || tick >= this.state.phaseEndTick) this.endMatch();
-          else this.kickIdle(tick);
-        } else if (this.sim.leaderScore() >= this.state.killLimit) this.endMatch();
-        else if (tick >= this.state.phaseEndTick) this.endMatch();
+      case "playing": {
+        // Same end rules as the dedicated server (MatchRules.endReason).
+        const reason = this.rules.endReason(tick);
+        if (reason) this.endMatch(reason);
         else this.kickIdle(tick);
         break;
+      }
       case "results":
         if (tick >= this.state.phaseEndTick) this.backToLobby();
         break;
@@ -580,6 +586,17 @@ export class HostRoom {
           this.notice("That team is full", "warn", undefined, id);
         return;
       }
+      case C2S.ABILITY: {
+        const msg = parse(abilitySchema);
+        const p = this.sim.players.get(id);
+        if (msg && p && this.state.phase === "playing") this.sim.ctl?.ability(p, msg);
+        return;
+      }
+      case C2S.VOTE: {
+        const msg = parse(voteSchema);
+        if (msg && this.state.phase === "results") this.rules.vote(id, msg.map);
+        return;
+      }
       case C2S.BALANCE:
         if (id === this.sessionId && this.state.phase === "lobby" && this.rules.teamMode) {
           this.rules.balance();
@@ -628,6 +645,10 @@ export class HostRoom {
       this.notice(`Co-op is for up to ${PVE_SQUAD.max} players`, "warn", undefined, id);
       return;
     }
+    if (s.mode && s.mode !== this.state.mode && !modeEnabled(s.mode, MODE_FLAGS)) {
+      this.notice(`${MODE_NAMES[s.mode]} is not available yet`, "warn", undefined, id);
+      return;
+    }
     // Mode first: it resets length, score limit and size to the mode's defaults.
     if (s.mode && s.mode !== this.state.mode) {
       this.rules.setMode(s.mode);
@@ -663,6 +684,9 @@ export class HostRoom {
         );
       }
     }
+    if (s.variant !== undefined && !this.rules.setVariant(s.variant))
+      this.notice("Unknown variant for this mode", "warn", undefined, id);
+    if (s.rounds !== undefined) this.rules.setRounds(s.rounds);
     if (this.rules.pveMode) return;
     if (s.durationSec) this.state.durationSec = s.durationSec;
     if (s.killLimit) this.state.killLimit = s.killLimit;
@@ -683,6 +707,11 @@ export class HostRoom {
     );
     if (notReady.length > 0) {
       this.notice(`Waiting for: ${notReady.map(([, p]) => p.name).join(", ")}`, "warn", undefined, id);
+      return;
+    }
+    const blocker = this.rules.startBlocker();
+    if (blocker) {
+      this.notice(blocker, "warn", undefined, id);
       return;
     }
     this.startCountdown();
@@ -723,7 +752,7 @@ export class HostRoom {
     this.state.phaseEndTick = this.sim.tick + this.sim.secToTicks(this.state.durationSec);
   }
 
-  private endMatch() {
+  private endMatch(reason = "time") {
     if (this.state.phase !== "playing") return;
     this.state.phase = "results";
     this.state.phaseEndTick = this.sim.tick + this.sim.secToTicks(MATCH_DEFAULTS.resultsSec);
@@ -731,13 +760,14 @@ export class HostRoom {
     this.state.winnerId = standings[0]?.id ?? "";
     this.state.winnerTeam = this.sim.winningTeam();
     this.rules.sync();
+    this.rules.openVote(this.sim.rng);
     if (this.sim.pve) {
       this.sim.pve.abort("Time limit reached");
       syncPve(this.state, this.sim);
       this.sendPveResults();
       return;
     }
-    this.sendResults(standings);
+    this.sendResults(standings, reason);
   }
 
   /** PvE run summary to every player; each browser records its own run once (by run id). */
@@ -759,6 +789,11 @@ export class HostRoom {
     this.state.phase = "lobby";
     this.state.phaseEndTick = 0;
     this.sim.setPve(null);
+    const voted = this.rules.closeVote();
+    if (voted) {
+      this.switchMap(voted);
+      this.notice(`Next map: ${MAPS[voted].name}`, "info");
+    }
     for (const p of this.sim.players.values()) {
       p.alive = false;
       p.respawnTick = 0;
@@ -782,15 +817,18 @@ export class HostRoom {
    * XP and stats are computed here with the server's scoring, then each player's own browser
    * records them in its local profile (there is no shared database in host mode).
    */
-  private sendResults(standings: ServerPlayer[]) {
+  private sendResults(standings: ServerPlayer[], reason: string) {
     const practice = this.practiceMatch;
+    const ctl = this.sim.ctl;
     const results = computeResults(standings, {
       tickRate: NET.serverTickRate,
       minParticipationTicks: practice
         ? Number.MAX_SAFE_INTEGER
         : this.sim.secToTicks(MATCH_DEFAULTS.minParticipationSec),
-      completed: !practice,
+      // A round mode cut short because the others left completes nothing (no farming).
+      completed: !practice && !(ctl && reason === "opponents-left"),
       ...(this.rules.teamMode ? { winnerTeam: this.state.winnerTeam } : {}),
+      ...(ctl ? { facts: (p: ServerPlayer): ModeFacts => ctl.facts(p) } : {}),
     });
     const rows = resultRows(results);
     const team: Pick<ResultsMessage, "winnerTeam" | "teamScores"> = this.rules.teamMode
@@ -812,8 +850,8 @@ export class HostRoom {
 
   /** Same as the dedicated server: a host alone in the lobby gets three strafing targets. */
   private syncPracticeTargets() {
-    // Co-op PvE has its own enemies: no training targets.
-    const alone = this.seats.size === 0 && !this.rules.pveMode;
+    // Co-op PvE has its own enemies, the round modes need people: no training targets.
+    const alone = this.seats.size === 0 && this.rules.practiceAllowed;
     const wanted = alone && this.state.phase === "lobby" ? 3 : 0;
     const keep = alone && this.state.phase !== "lobby";
     if (wanted > 0 && this.bots.size === 0) {
@@ -883,13 +921,35 @@ export class HostRoom {
   private syncState() {
     for (const [id, p] of this.sim.players) {
       const ps = this.views.get(id);
-      if (ps) syncPlayerState(ps, p, this.sim.tick);
+      if (ps) syncPlayerState(ps, p, this.sim.tick, this.sim);
     }
     this.rules.sync();
     this.syncPickups(false);
     syncVehicles(this.state, this.sim);
     syncObjectives(this.state, this.sim);
     syncPve(this.state, this.sim);
+    // Guests get only what their StateView holds; the host's own tab reads the full local state
+    // and draws only what its side may see (the host runs the simulation: see HOST_MODE.md).
+    syncModeState(
+      this.state,
+      this.sim,
+      [...this.seats.values()].map((seat) => [seat.id, seat.view] as const),
+    );
+  }
+
+  /** Gameplay events: one broadcast, or per recipient when the mode hides information. */
+  private sendEvents(events: NetEvent[]) {
+    if (!this.sim.ctl?.hiddenInfo) {
+      this.broadcast(S2C.EVENTS, events);
+      return;
+    }
+    const mine = this.sim.eventsFor(this.sessionId, events);
+    if (mine.length > 0) this.deliverLocal(S2C.EVENTS, mine);
+    for (const seat of this.seats.values()) {
+      if (!seat.link || seat.needsFull) continue;
+      const theirs = this.sim.eventsFor(seat.id, events);
+      if (theirs.length > 0) seat.link.send(encodeFrame(["m", S2C.EVENTS, theirs] as HostFrame));
+    }
   }
 
   private syncPickups(rebuild: boolean) {
@@ -992,6 +1052,7 @@ function personal(r: ComputedResult, practice: boolean, mode: string): PersonalR
             flagCaptures: r.persist.flagCaptures,
             flagReturns: r.persist.flagReturns,
             vehicleKills: r.persist.vehicleKills,
+            ...(r.persist.extra ? { extra: r.persist.extra } : {}),
           },
         }),
   };

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MATCH_LIMITS, NICKNAME } from "../config/game.ts";
-import { GAME_MODES, type GameMode, TEAM_SIZE } from "../config/modes.ts";
+import { GAME_MODES, type GameMode, ROUND_LIMITS, TEAM_SIZE } from "../config/modes.ts";
+import { DISGUISES } from "../config/party.ts";
 import { PRIMARY_WEAPONS, type WeaponId } from "../config/weapons.ts";
 import { DIFFICULTIES, type Difficulty } from "../config/zombies.ts";
 import { MAP_IDS, type MapId } from "../maps/index.ts";
@@ -20,6 +21,10 @@ export const C2S = {
   TEAM: "team",
   /** Team modes, host only: rebalance teams by level. */
   BALANCE: "balance",
+  /** Prop Hunt abilities (transform, lock, taunt, decoy). */
+  ABILITY: "ab",
+  /** Results: vote for the next map. */
+  VOTE: "vote",
 } as const;
 
 /** Server → client message types. */
@@ -78,8 +83,31 @@ export const settingsSchema = z.object({
     .regex(/^[a-z0-9-]{1,32}$/)
     .optional(),
   difficulty: z.enum(DIFFICULTIES as [Difficulty, ...Difficulty[]]).optional(),
+  /** Round modes: variant id (validated against MODE_VARIANTS by the room) and round count. */
+  variant: z
+    .string()
+    .regex(/^[a-z]{1,16}$/)
+    .optional(),
+  rounds: z.number().int().min(ROUND_LIMITS.min).max(ROUND_LIMITS.max).optional(),
 });
 export type MatchSettings = z.infer<typeof settingsSchema>;
+
+/**
+ * Prop Hunt ability. "transform": turn into kind `k` (an object kind present on the map), or with
+ * no `k` copy the object in front of you. "lock" toggles the position lock.
+ */
+export const abilitySchema = z.object({
+  a: z.enum(["transform", "lock", "taunt", "decoy"]),
+  k: z
+    .number()
+    .int()
+    .min(0)
+    .max(DISGUISES.length - 1)
+    .optional(),
+});
+export type AbilityMessage = z.infer<typeof abilitySchema>;
+
+export const voteSchema = z.object({ map: mapIdSchema });
 
 export const teamSchema = z.object({ team: teamIdSchema });
 
@@ -156,7 +184,26 @@ export type NetEvent =
    * "hint" (s = text), "door" (s = door id opened), "supply" (crate dropped), "checkpoint",
    * "complete", "failed" (s = reason).
    */
-  | { t: "pve"; k: string; n?: number; s?: string };
+  | { t: "pve"; k: string; n?: number; s?: string }
+  // ----- Gun Game and round modes
+  /** Gun Game: player `p` is now on ladder level `l` (`d` = demoted). */
+  | { t: "gg"; p: string; l: number; d?: 1 }
+  /** Round flow: stage `s` of round `n` began (`w` = side that won the round that just ended). */
+  | { t: "round"; s: string; n: number; w?: number }
+  /** A hider was spotted by the seeking side (sent to the seekers and the hider only). */
+  | { t: "spot"; p: string }
+  /** A hider / prop was found (eliminated or converted) by `by`. */
+  | { t: "found"; p: string; by: string; c?: 1 }
+  /** Prop Hunt: a shot hit object `d` at x, y (identical for real objects and disguised players). */
+  | { t: "dhit"; d: string; x: number; y: number }
+  /** Prop Hunt: hunter `p` hit an innocent object and lost `dmg` health. */
+  | { t: "penalty"; p: string; dmg: number }
+  /** Prop Hunt: a taunt sound at x, y. */
+  | { t: "taunt"; x: number; y: number; v: number }
+  /** Prop Hunt: hint pings were published. */
+  | { t: "hint"; n: number }
+  /** A short private message to player `p` (an ability refused, why). */
+  | { t: "msg"; p: string; s: string };
 
 export interface NoticeMessage {
   text: string;
@@ -172,6 +219,8 @@ export interface ResultRow {
   deaths: number;
   placement: number;
   accuracy: number | null;
+  /** Round modes: points; Gun Game: ladder level reached (1-based). */
+  points?: number;
 }
 
 export interface PersonalResult {
@@ -208,6 +257,8 @@ export interface PersonalResult {
     flagCaptures?: number;
     flagReturns?: number;
     vehicleKills?: number;
+    /** Mode-specific career counters (MODE_STAT_KEYS). */
+    extra?: Record<string, number>;
     /** PvE run, recorded once per `runId` by the receiving player's browser. */
     pve?: PveRecord;
   };

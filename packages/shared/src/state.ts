@@ -18,6 +18,8 @@ export const PlayerState = schema(
     y: t.float32().default(0),
     aim: t.float32().default(0),
     hp: t.uint8().default(0),
+    /** Shield points (absorb damage before health), 0..SHIELD.max. */
+    shield: t.uint8().default(0),
     kills: t.uint16().default(0),
     deaths: t.uint16().default(0),
     streak: t.uint8().default(0),
@@ -42,6 +44,22 @@ export const PlayerState = schema(
     revive: t.float32().default(0),
     /** PvE: teammates revived this mission. */
     revives: t.uint8().default(0),
+    /** Round modes: ROLE.SEEKER / ROLE.HIDER (0 outside them). Public: everybody knows the sides. */
+    role: t.uint8().default(0),
+    /**
+     * The position is not public: x / y / aim stay at the last pose the other side was allowed to
+     * see, and the real pose reaches only the player's own side (MatchState.allies). The client
+     * does not draw a masked player it has no ghost for.
+     */
+    masked: t.boolean().default(false),
+    /** Cannot move or act (seekers waiting out the hiding time). Applied by the prediction too. */
+    frozen: t.boolean().default(false),
+    /** Gun Game: ladder level (0-based). */
+    gg: t.uint8().default(0),
+    /** Round modes: points this match. */
+    pts: t.uint16().default(0),
+    /** Results: the map this player votes for next ("" = none). */
+    vote: t.string().default(""),
 
     // ----- owner-only reconciliation fields -----
     ack: t.uint32().default(0).view(),
@@ -202,6 +220,85 @@ export const PropState = schema(
 );
 export type PropState = SchemaType<typeof PropState>;
 
+/**
+ * Real pose of a masked player, delivered only to the players allowed to see it (the player
+ * themselves and their side): `MatchState.allies` is a filtered collection, every entry is added to
+ * the StateView of exactly those clients. Prop Hunt: the disguise the player controls.
+ */
+export const AllyState = schema(
+  {
+    x: t.float32().default(0),
+    y: t.float32().default(0),
+    a: t.float32().default(0),
+    /** Side of the player (ROLE.*), so a host's local state can draw only its own side. */
+    t: t.uint8().default(0),
+    /** Prop Hunt: id of the disguise entity in MatchState.disguises ("" = not disguised). */
+    d: t.string().default(""),
+    /** Prop Hunt: disguise kind index, -1 = none. Drives the prediction (radius, speed). */
+    k: t.int8().default(-1),
+    /** Prop Hunt: position and rotation locked. */
+    lk: t.boolean().default(false),
+    /** Prop Hunt: ticks at which quick transform, taunt and decoy are ready again. */
+    cdT: t.uint32().default(0),
+    cdS: t.uint32().default(0),
+    cdD: t.uint32().default(0),
+  },
+  "AllyState",
+);
+export type AllyState = SchemaType<typeof AllyState>;
+
+/**
+ * Prop Hunt object. Real objects of the map and disguised players are the same kind of entity
+ * with random ids regenerated every round: nothing on the wire says which is which. The collection
+ * is filtered: hunters receive it only once the hunt starts.
+ */
+export const DisguiseState = schema(
+  {
+    /** DISGUISES index. */
+    k: t.uint8().default(0),
+    x: t.int16().default(0),
+    y: t.int16().default(0),
+    /** Rotation, angle * 256 / 2π. */
+    r: t.uint8().default(0),
+  },
+  "DisguiseState",
+);
+export type DisguiseState = SchemaType<typeof DisguiseState>;
+
+/** Approximate area shown to the seeking side (Prop Hunt hints). Never centered on the target. */
+export const PingState = schema(
+  {
+    x: t.int16().default(0),
+    y: t.int16().default(0),
+    r: t.uint16().default(0),
+    until: t.uint32().default(0),
+  },
+  "PingState",
+);
+export type PingState = SchemaType<typeof PingState>;
+
+/** Round modes: current stage, its end, the round number and the variant. */
+export const RoundState = schema(
+  {
+    /** "" | "prep" | "hunt" | "break" | "overtime" (RoundStage). */
+    stage: t.string().default(""),
+    /** Tick the stage ends at (0 = none). */
+    end: t.uint32().default(0),
+    num: t.uint8().default(0),
+    of: t.uint8().default(0),
+    variant: t.string().default(""),
+    /** Blackout: the lights are out. */
+    dark: t.boolean().default(false),
+    /** Players on each side still in the round. */
+    seekers: t.uint8().default(0),
+    hiders: t.uint8().default(0),
+    /** Side that won the last finished round (ROLE.*), 0 = none yet. */
+    winner: t.uint8().default(0),
+  },
+  "RoundState",
+);
+export type RoundState = SchemaType<typeof RoundState>;
+
 export const PVE_STATUS = { RUNNING: 0, COMPLETE: 1, FAILED: 2 } as const;
 
 /** PvE match: mission progress, waves and world flags. */
@@ -281,6 +378,16 @@ export const MatchState = schema(
     hazards: t.map(HazardState),
     props: t.map(PropState),
     pve: t.ref(PveState),
+    /** Round modes (Hide & Seek, Prop Hunt): stage, timer, round number, variant. */
+    round: t.ref(RoundState),
+    /** Real poses of masked players, each visible only to that player's side (filtered). */
+    allies: t.map(AllyState).view(),
+    /** Prop Hunt objects (filtered: hunters receive them once the hunt starts). */
+    disguises: t.map(DisguiseState).view(),
+    /** Prop Hunt hints: approximate areas. */
+    pings: t.map(PingState),
+    /** Results: map ids offered for the next match, comma separated ("" = no vote). */
+    voteMaps: t.string().default(""),
   },
   "MatchState",
 );

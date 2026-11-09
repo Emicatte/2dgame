@@ -1,0 +1,582 @@
+import {
+  type AllyState,
+  type Circle,
+  DISGUISES,
+  disguiseDef,
+  GUN_GAME,
+  gunGameWeapon,
+  MAPS,
+  type MapDef,
+  type MatchState,
+  type NetEvent,
+  PROP_HUNT,
+  ROLE,
+  WEAPONS,
+} from "@scrapline/shared";
+import Phaser from "phaser";
+import { session } from "../../net/session.ts";
+import { propCanvas, propTextureKey } from "../art/propArt.ts";
+import { sfx } from "../audio/sfx.ts";
+import type { Effects } from "../effects/Effects.ts";
+import type { InputManager } from "../input/InputManager.ts";
+import type { Lightmap } from "../pve/lightmap.ts";
+import { sightWorld } from "../pve/visibility.ts";
+import { modeHudStore, showBanner, showToast } from "./modeHud.ts";
+
+interface ObjSnap {
+  tick: number;
+  objs: Map<string, { x: number; y: number; r: number; k: number }>;
+}
+
+/** A pose a remote player may be drawn at, or hidden. */
+export interface DrawPose {
+  x: number;
+  y: number;
+  aim: number;
+  hidden: boolean;
+}
+
+const LABEL_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
+  fontFamily: "Chakra Petch, sans-serif",
+  fontSize: "12px",
+  color: "#9fe7ff",
+  stroke: "#0b0c0e",
+  strokeThickness: 4,
+};
+
+const roleName = (mode: string, role: number) =>
+  role === ROLE.SEEKER
+    ? mode === "prophunt"
+      ? "Hunter"
+      : "Seeker"
+    : role === ROLE.HIDER
+      ? mode === "prophunt"
+        ? "Prop"
+        : "Hider"
+      : "Spectator";
+
+/**
+ * Client side of Gun Game, Hide & Seek and Prop Hunt: presentation only. It draws what the
+ * synchronized state holds (the server already left out what this player may not see), keeps a
+ * host's own tab to the same rules (the host's local state is complete), and turns the mode keys
+ * into ability messages. ArenaScene calls it at a few points; nothing here decides gameplay.
+ */
+export class ModeLayer {
+  private readonly sprites = new Map<string, Phaser.GameObjects.Image>();
+  private readonly labels = new Map<string, Phaser.GameObjects.Text>();
+  private readonly snaps: ObjSnap[] = [];
+  private readonly pingGfx: Phaser.GameObjects.Graphics;
+  private readonly markGfx: Phaser.GameObjects.Graphics;
+  private readonly spots = new Map<string, number>();
+  private readonly bubbles: { text: Phaser.GameObjects.Text; until: number }[] = [];
+  private darkOn = false;
+  private hudAt = 0;
+
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly effects: Effects,
+    private readonly lightmap: Lightmap,
+  ) {
+    this.pingGfx = scene.add.graphics().setDepth(31);
+    this.markGfx = scene.add.graphics().setDepth(48);
+    for (const def of DISGUISES) {
+      const key = propTextureKey(def.index);
+      if (!scene.textures.exists(key))
+        scene.textures.addImage(key, propCanvas(def) as unknown as HTMLImageElement);
+    }
+  }
+
+  /** The baked map keeps its objects except in Prop Hunt (they are drawn live there). */
+  static mapProps(mode: string): boolean {
+    return mode !== "prophunt";
+  }
+
+  private me(state: MatchState, selfId: string) {
+    return state.players.get(selfId);
+  }
+
+  private myRole(state: MatchState, selfId: string): number {
+    return this.me(state, selfId)?.role ?? 0;
+  }
+
+  /** The ghost of a masked player, if this client may draw it (its own, or its side's). */
+  private ghostFor(state: MatchState, id: string, selfId: string): AllyState | undefined {
+    const g = state.allies.get(id);
+    if (!g) return undefined;
+    if (id === selfId) return g;
+    // A host's own tab holds every ghost: draw only the ones of its own side.
+    return this.myRole(state, selfId) === ROLE.HIDER && g.t === ROLE.HIDER ? g : undefined;
+  }
+
+  /**
+   * Where a remote player is drawn this snapshot. Masked players without a visible ghost are
+   * hidden (not frozen at their public pose); Prop Hunt props are drawn as their object instead.
+   */
+  pose(state: MatchState, id: string, selfId: string): DrawPose {
+    const ps = state.players.get(id)!;
+    if (state.mode === "prophunt" && ps.role === ROLE.HIDER && ps.alive) {
+      const g = this.ghostFor(state, id, selfId);
+      // Undisguised (hiding time): their side sees the person, nobody else anything.
+      if (g && g.k < 0) return { x: g.x, y: g.y, aim: g.a, hidden: false };
+      return { x: ps.x, y: ps.y, aim: ps.aim, hidden: true };
+    }
+    if (!ps.masked) return { x: ps.x, y: ps.y, aim: ps.aim, hidden: false };
+    const g = this.ghostFor(state, id, selfId);
+    if (g) return { x: g.x, y: g.y, aim: g.a, hidden: false };
+    return { x: ps.x, y: ps.y, aim: ps.aim, hidden: true };
+  }
+
+  /** The local player's real pose for the prediction when their public pose is masked. */
+  ownPose(state: MatchState, selfId: string): { x: number; y: number; aim: number } | null {
+    const ps = this.me(state, selfId);
+    if (!ps?.masked) return null;
+    const g = state.allies.get(selfId);
+    return g ? { x: g.x, y: g.y, aim: g.a } : null;
+  }
+
+  /** Prop Hunt: the body the local player moves as (radius / speed), as the server applies it. */
+  ownBody(state: MatchState, selfId: string): { radius: number; speed: number } | null {
+    const g = state.allies.get(selfId);
+    const def = g && g.k >= 0 ? disguiseDef(g.k) : undefined;
+    return def ? { radius: def.radius, speed: def.speed } : null;
+  }
+
+  /** Movement locked (seekers in the pen, a locked prop, round break): the prediction holds still. */
+  ownFrozen(state: MatchState, selfId: string): boolean {
+    const ps = this.me(state, selfId);
+    return !!ps?.frozen || !!state.allies.get(selfId)?.lk;
+  }
+
+  /** Prop Hunt objects the local player cannot walk through (as interpolated). */
+  obstacles(state: MatchState, selfId: string, renderTick: number): Circle[] {
+    if (state.mode !== "prophunt" || state.disguises.size === 0) return [];
+    const own = state.allies.get(selfId)?.d ?? "";
+    const out: Circle[] = [];
+    for (const [id, o] of this.sampleObjects(renderTick)) {
+      if (id === own) continue;
+      out.push({ x: o.x, y: o.y, r: disguiseDef(o.k)?.radius ?? 16 });
+    }
+    return out;
+  }
+
+  onPatch(state: MatchState, tick: number, inMatch: boolean): void {
+    if (!inMatch) {
+      this.snaps.length = 0;
+      return;
+    }
+    const objs = new Map<string, { x: number; y: number; r: number; k: number }>();
+    state.disguises.forEach((o, id) => {
+      objs.set(id, { x: o.x, y: o.y, r: (o.r / 256) * Math.PI * 2, k: o.k });
+    });
+    this.snaps.push({ tick, objs });
+    if (this.snaps.length > 12) this.snaps.shift();
+  }
+
+  private sampleObjects(renderTick: number): Map<string, { x: number; y: number; r: number; k: number }> {
+    const n = this.snaps.length;
+    if (n === 0) return new Map();
+    let i = n - 1;
+    while (i > 0 && this.snaps[i]!.tick > renderTick) i--;
+    const a = this.snaps[i]!;
+    const b = this.snaps[i + 1];
+    if (!b || a.tick > renderTick) return b && a.tick > renderTick ? a.objs : (b?.objs ?? a.objs);
+    const t = Math.max(0, Math.min(1, (renderTick - a.tick) / Math.max(1, b.tick - a.tick)));
+    const out = new Map<string, { x: number; y: number; r: number; k: number }>();
+    for (const [id, ob] of b.objs) {
+      const oa = a.objs.get(id);
+      if (!oa || Math.hypot(ob.x - oa.x, ob.y - oa.y) > 160) out.set(id, ob);
+      else
+        out.set(id, {
+          x: oa.x + (ob.x - oa.x) * t,
+          y: oa.y + (ob.y - oa.y) * t,
+          r: Phaser.Math.Angle.RotateTo(oa.r, ob.r, Math.abs(Phaser.Math.Angle.Wrap(ob.r - oa.r)) * t),
+          k: ob.k,
+        });
+    }
+    return out;
+  }
+
+  /** Prop Hunt keys: Q picker, E copy what you look at, C lock, T taunt, G decoy. */
+  handleInput(controls: InputManager, state: MatchState, selfId: string): void {
+    if (state.mode !== "prophunt") return;
+    const ps = this.me(state, selfId);
+    const isProp = ps?.role === ROLE.HIDER && ps.alive;
+    const picker = controls.consume("propMenu");
+    const lock = controls.consume("lock");
+    const taunt = controls.consume("taunt");
+    const decoy = controls.consume("decoy");
+    const copy = controls.consume("interact");
+    if (!isProp) {
+      if (modeHudStore.get().pickerOpen) modeHudStore.patch({ pickerOpen: false });
+      return;
+    }
+    if (picker) modeHudStore.patch({ pickerOpen: !modeHudStore.get().pickerOpen });
+    if (lock) session.ability({ a: "lock" });
+    if (taunt) session.ability({ a: "taunt" });
+    if (decoy) session.ability({ a: "decoy" });
+    if (copy) session.ability({ a: "transform" });
+  }
+
+  /** Who the camera follows while the local player is out of the round (null: themselves). */
+  spectateTarget(state: MatchState, selfId: string): string | null {
+    const ps = this.me(state, selfId);
+    if (!ps || ps.alive || state.round.stage === "" || ps.respawnTick > 0) return null;
+    let pick: string | null = null;
+    state.players.forEach((p, id) => {
+      if (pick || id === selfId || !p.alive) return;
+      const pose = this.pose(state, id, selfId);
+      if (pose.hidden) return;
+      if (p.role === ps.role || ps.role === 0) pick = id;
+    });
+    if (!pick)
+      state.players.forEach((p, id) => {
+        if (!pick && id !== selfId && p.alive && !this.pose(state, id, selfId).hidden) pick = id;
+      });
+    return pick;
+  }
+
+  update(
+    state: MatchState,
+    selfId: string,
+    renderTick: number,
+    serverTick: number,
+    dtSec: number,
+    local: { x: number; y: number; aim: number } | null,
+    cam: Phaser.Cameras.Scene2D.Camera,
+    map: MapDef,
+  ): void {
+    const role = this.myRole(state, selfId);
+    const now = performance.now();
+    this.drawObjects(state, selfId, renderTick, local, role);
+    this.drawPings(state, serverTick);
+    this.drawMarks(state, selfId, renderTick, now);
+    this.updateDark(state, selfId, local, cam, map, dtSec);
+    for (let i = this.bubbles.length - 1; i >= 0; i--) {
+      const b = this.bubbles[i]!;
+      if (now >= b.until) {
+        b.text.destroy();
+        this.bubbles.splice(i, 1);
+      } else b.text.setAlpha(Math.min(1, (b.until - now) / 400));
+    }
+    if (now - this.hudAt > 100) {
+      this.hudAt = now;
+      this.updateHud(state, selfId, serverTick);
+    }
+  }
+
+  private drawObjects(
+    state: MatchState,
+    selfId: string,
+    renderTick: number,
+    local: { x: number; y: number; aim: number } | null,
+    role: number,
+  ): void {
+    // Hunters are blindfolded during the hiding time (a host's own tab holds the objects).
+    const show = state.mode === "prophunt" && !(role === ROLE.SEEKER && state.round.stage === "prep");
+    const objs = show ? this.sampleObjects(renderTick) : new Map();
+    const own = state.allies.get(selfId);
+    const owners = new Map<string, string>();
+    if (role === ROLE.HIDER)
+      state.allies.forEach((g, pid) => {
+        if (g.d && pid !== selfId && g.t === ROLE.HIDER) owners.set(g.d, state.players.get(pid)?.name ?? "");
+      });
+    for (const [id, o] of objs) {
+      let img = this.sprites.get(id);
+      if (!img) {
+        img = this.scene.add.image(o.x, o.y, propTextureKey(o.k)).setScale(0.5).setDepth(20);
+        this.sprites.set(id, img);
+      }
+      const key = propTextureKey(o.k);
+      if (img.texture.key !== key) img.setTexture(key);
+      let x = o.x;
+      let y = o.y;
+      let r = o.r;
+      if (own && own.d === id && local) {
+        x = local.x;
+        y = local.y;
+        if (!own.lk) r = local.aim;
+        img.setDepth(21);
+      }
+      img.setPosition(x, y).setRotation(r).setVisible(true);
+      const owner = owners.get(id);
+      if (owner) {
+        let label = this.labels.get(id);
+        if (!label) {
+          label = this.scene.add.text(x, y, owner, LABEL_STYLE).setOrigin(0.5, 1).setDepth(47);
+          this.labels.set(id, label);
+        }
+        label.setPosition(x, y - (disguiseDef(o.k)?.radius ?? 16) - 6).setVisible(true);
+      }
+    }
+    for (const [id, img] of this.sprites) {
+      if (!objs.has(id)) {
+        img.destroy();
+        this.sprites.delete(id);
+      }
+    }
+    for (const [id, label] of this.labels) {
+      if (!objs.has(id) || !owners.has(id)) {
+        label.destroy();
+        this.labels.delete(id);
+      }
+    }
+  }
+
+  private drawPings(state: MatchState, serverTick: number): void {
+    const g = this.pingGfx;
+    g.clear();
+    if (state.pings.size === 0) return;
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 180);
+    state.pings.forEach((p) => {
+      if (p.until < serverTick) return;
+      g.lineStyle(3, 0xffc53d, 0.45 + pulse * 0.35);
+      g.strokeCircle(p.x, p.y, p.r);
+      g.fillStyle(0xffc53d, 0.06 + pulse * 0.04);
+      g.fillCircle(p.x, p.y, p.r);
+    });
+  }
+
+  /** "!" over hiders who were just spotted (seekers' view). */
+  private drawMarks(state: MatchState, selfId: string, _renderTick: number, now: number): void {
+    const g = this.markGfx;
+    g.clear();
+    for (const [id, until] of this.spots) {
+      if (now > until) {
+        this.spots.delete(id);
+        continue;
+      }
+      if (id === selfId) continue;
+      const ps = state.players.get(id);
+      const pose = ps ? this.pose(state, id, selfId) : null;
+      if (!ps || !pose || pose.hidden) continue;
+      const y = pose.y - 52;
+      g.fillStyle(0xff4d4d, 0.95);
+      g.fillTriangle(pose.x - 7, y - 18, pose.x + 7, y - 18, pose.x, y);
+      g.fillCircle(pose.x, y + 6, 3);
+    }
+  }
+
+  /** Blackout: darkness with the seekers' flashlights, from the same light map as co-op. */
+  private updateDark(
+    state: MatchState,
+    selfId: string,
+    local: { x: number; y: number; aim: number } | null,
+    cam: Phaser.Cameras.Scene2D.Camera,
+    map: MapDef,
+    dtSec: number,
+  ): void {
+    const dark = state.mode === "hideseek" && state.round.dark;
+    if (dark !== this.darkOn) {
+      this.darkOn = dark;
+      this.lightmap.setActive(dark);
+      if (dark) this.lightmap.setWorld(sightWorld(map.solids));
+    }
+    if (!dark) return;
+    const role = this.myRole(state, selfId);
+    const allies: { x: number; y: number; aim: number; downed: boolean }[] = [];
+    state.players.forEach((p, id) => {
+      if (id === selfId || p.role !== ROLE.SEEKER || !p.alive) return;
+      allies.push({ x: p.x, y: p.y, aim: p.aim, downed: false });
+    });
+    const eye = local ?? { x: cam.midPoint.x, y: cam.midPoint.y };
+    this.lightmap.update({
+      cam,
+      eye,
+      me: role === ROLE.SEEKER && local ? { x: local.x, y: local.y, aim: local.aim, downed: false } : null,
+      allies,
+      headlights: [],
+      lamps: [],
+      brightness: 0.32,
+      flicker: 1,
+      danger: 0,
+      dtSec,
+    });
+  }
+
+  /** Mode events: feedback only (the state already holds the outcome). */
+  onEvent(
+    ev: NetEvent,
+    state: MatchState,
+    selfId: string,
+    spatial: (x: number, y: number) => { distance: number; pan: number },
+  ): void {
+    switch (ev.t) {
+      case "gg": {
+        if (ev.p === selfId) {
+          sfx.levelChange(!ev.d);
+          const w = WEAPONS[gunGameWeapon(ev.l)];
+          const last = ev.l >= GUN_GAME.ladder.length - 1;
+          showBanner(
+            ev.d ? `Back to level ${ev.l + 1}` : last ? "Final weapon" : `Level ${ev.l + 1}`,
+            last ? `${w.name}: one more elimination wins` : w.name,
+            ev.d ? "warn" : "good",
+          );
+        }
+        break;
+      }
+      case "round": {
+        const role = this.myRole(state, selfId);
+        const name = roleName(state.mode, role);
+        if (ev.s === "prep")
+          showBanner(
+            `Round ${ev.n}`,
+            role === ROLE.SEEKER
+              ? `You are a ${name}: wait for the others to hide`
+              : role === ROLE.HIDER
+                ? state.mode === "prophunt"
+                  ? "You are a Prop: press Q (or E on an object) to transform"
+                  : "You are a Hider: find a place out of sight"
+                : "Spectating until the next round",
+          );
+        else if (ev.s === "hunt")
+          showBanner(
+            state.mode === "prophunt" ? "The hunt begins" : "Ready or not, here they come",
+            "",
+            "warn",
+          );
+        else if (ev.s === "break")
+          showBanner(
+            ev.w === ROLE.SEEKER
+              ? state.mode === "prophunt"
+                ? "Hunters win the round"
+                : "Seekers win the round"
+              : state.mode === "prophunt"
+                ? "Props win the round"
+                : "Hiders win the round",
+            "",
+            ev.w === role ? "good" : "info",
+          );
+        break;
+      }
+      case "spot": {
+        this.spots.set(ev.p, performance.now() + 1600);
+        if (ev.p === selfId) {
+          sfx.spotted(true);
+          modeHudStore.patch({ spottedAt: performance.now() });
+        } else sfx.spotted(false);
+        break;
+      }
+      case "found": {
+        const v = state.players.get(ev.p)?.name ?? "?";
+        const by = state.players.get(ev.by)?.name ?? "";
+        if (ev.p === selfId) showBanner("You were found", by ? `by ${by}` : "", "warn");
+        else showToast(by ? `${by} found ${v}` : `${v} is out`);
+        break;
+      }
+      case "taunt": {
+        const s = spatial(ev.x, ev.y);
+        sfx.taunt(ev.v, s.distance, s.pan);
+        const text = this.scene.add
+          .text(ev.x, ev.y - 30, "♪", { ...LABEL_STYLE, fontSize: "22px", color: "#ffc53d" })
+          .setOrigin(0.5)
+          .setDepth(48);
+        this.bubbles.push({ text, until: performance.now() + 1400 });
+        break;
+      }
+      case "dhit":
+        this.effects.impact(ev.x, ev.y, 0);
+        break;
+      case "penalty":
+        if (ev.p === selfId) {
+          modeHudStore.patch({ penaltyAt: performance.now() });
+          showToast(`Innocent object: −${ev.dmg} health`);
+        }
+        break;
+      case "hint":
+        showToast(
+          this.myRole(state, selfId) === ROLE.SEEKER
+            ? "Hint: the props are somewhere in the highlighted areas"
+            : "The hunters got a hint about your area",
+        );
+        break;
+      case "msg":
+        if (ev.p === selfId) showToast(ev.s);
+        break;
+    }
+  }
+
+  private updateHud(state: MatchState, selfId: string, serverTick: number): void {
+    const ps = this.me(state, selfId);
+    const r = state.round;
+    const role = ps?.role ?? 0;
+    const tr = state.tickRate || 20;
+    const ally = state.allies.get(selfId);
+    const left = (tick: number) => Math.max(0, (tick - serverTick) / tr);
+    let leader: { name: string; level: number; you: boolean } | null = null;
+    if (state.mode === "gungame") {
+      state.players.forEach((p, id) => {
+        if (!leader || p.gg > leader.level) leader = { name: p.name, level: p.gg, you: id === selfId };
+      });
+    }
+    const kinds =
+      state.mode === "prophunt"
+        ? DISGUISES.filter((d) => mapKinds(state.mapId).has(d.kind)).map((d) => ({
+            index: d.index,
+            name: d.name,
+            kind: d.kind,
+          }))
+        : [];
+    const prev = modeHudStore.get();
+    modeHudStore.patch({
+      mode: state.mode,
+      ggLevel: ps?.gg ?? 0,
+      ggLeader: leader,
+      overtime: state.mode === "gungame" && r.stage === "overtime",
+      role,
+      stage: r.stage,
+      stageLeftSec: r.end ? left(r.end) : 0,
+      round: r.num,
+      rounds: r.of,
+      variant: r.variant,
+      dark: r.dark,
+      seekers: r.seekers,
+      hiders: r.hiders,
+      points: ps?.pts ?? 0,
+      spectating: (() => {
+        const id = this.spectateTarget(state, selfId);
+        return id ? (state.players.get(id)?.name ?? null) : null;
+      })(),
+      disguise: ally && ally.k >= 0 ? (disguiseDef(ally.k)?.name ?? null) : null,
+      locked: !!ally?.lk,
+      transformInSec: ally ? left(ally.cdT) : 0,
+      tauntInSec: ally ? left(ally.cdS) : 0,
+      decoyInSec: ally ? left(ally.cdD) : 0,
+      kinds: sameKinds(prev.kinds, kinds) ? prev.kinds : kinds,
+      ...(role !== ROLE.HIDER || state.mode !== "prophunt" ? { pickerOpen: false } : {}),
+    });
+  }
+
+  reset(): void {
+    for (const img of this.sprites.values()) img.destroy();
+    this.sprites.clear();
+    for (const l of this.labels.values()) l.destroy();
+    this.labels.clear();
+    this.snaps.length = 0;
+    this.spots.clear();
+    this.pingGfx.clear();
+    this.markGfx.clear();
+    if (this.darkOn) {
+      this.darkOn = false;
+      this.lightmap.setActive(false);
+    }
+    modeHudStore.patch({ pickerOpen: false, banner: null, toast: null, spectating: null });
+  }
+}
+
+/** Kinds of objects present on a map (what a prop may become). */
+const kindCache = new Map<string, Set<string>>();
+function mapKinds(mapId: string): Set<string> {
+  let k = kindCache.get(mapId);
+  if (!k) {
+    k = new Set((MAPS[mapId as keyof typeof MAPS]?.party?.props ?? []).map((p) => p.kind));
+    kindCache.set(mapId, k);
+  }
+  return k;
+}
+
+function sameKinds(a: { index: number }[], b: { index: number }[]): boolean {
+  return a.length === b.length && a.every((x, i) => x.index === b[i]!.index);
+}
+
+/** Exposed for the HUD: the prop key reminders. */
+export const PROP_KEYS_HELP = `Q choose · E copy · C lock · T taunt · G decoy (${PROP_HUNT.decoySec}s)`;

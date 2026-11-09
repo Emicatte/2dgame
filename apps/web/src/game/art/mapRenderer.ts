@@ -1,5 +1,6 @@
 import {
   type DecorDef,
+  disguiseByName,
   hashString,
   type MapDef,
   mulberry32,
@@ -7,12 +8,13 @@ import {
   type ThemeDef,
 } from "@scrapline/shared";
 import { hex, makeCanvas, roundRect, shade, speckle } from "./canvas.ts";
+import { drawPropShape } from "./propArt.ts";
 
 /**
  * Bakes the static map (floor, decals, shadows, solid props) into one canvas texture.
  * Static geometry costs a single draw call per frame, leaving the frame budget for players and FX.
  */
-export function renderMap(map: MapDef, scale = 1): HTMLCanvasElement {
+export function renderMap(map: MapDef, scale = 1, opts: { props?: boolean } = {}): HTMLCanvasElement {
   const [c, ctx] = makeCanvas(map.width * scale, map.height * scale);
   ctx.scale(scale, scale);
   const rand = mulberry32(hashString(map.id));
@@ -24,8 +26,72 @@ export function renderMap(map: MapDef, scale = 1): HTMLCanvasElement {
   for (const d of map.decor) drawDecor(ctx, d, map.theme, rand);
   drawShadows(ctx, map);
   for (const s of map.solids) drawSolid(ctx, s, map, rand);
+  if (map.party) drawParty(ctx, map, opts.props !== false);
   drawBorder(ctx, map);
   return c;
+}
+
+/**
+ * Party maps: dark corners, hiding spots and the transformable objects. Prop Hunt draws its objects
+ * live (real and disguised alike), so the baked map leaves them out there (`props: false`).
+ */
+function drawParty(ctx: CanvasRenderingContext2D, map: MapDef, props: boolean) {
+  const party = map.party!;
+  for (const r of party.shadows) {
+    const g = ctx.createRadialGradient(
+      r.x + r.w / 2,
+      r.y + r.h / 2,
+      0,
+      r.x + r.w / 2,
+      r.y + r.h / 2,
+      Math.max(r.w, r.h) * 0.75,
+    );
+    g.addColorStop(0, hex(0x000000, 0.62));
+    g.addColorStop(1, hex(0x000000, 0.38));
+    ctx.fillStyle = g;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+  }
+  for (const h of party.hideSpots) {
+    ctx.save();
+    ctx.translate(h.x, h.y);
+    if (h.kind === "bush") {
+      ctx.fillStyle = hex(0x23401f);
+      for (let i = 0; i < 9; i++) {
+        const a = (i / 9) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * h.r * 0.55, Math.sin(a) * h.r * 0.55, h.r * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = hex(0x3a6a30);
+      ctx.beginPath();
+      ctx.arc(0, -2, h.r * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Tarp over a pile / a hanging curtain: a creased sheet.
+      ctx.fillStyle = hex(h.kind === "tarp" ? 0x2f5f86 : 0x6b2f3a);
+      roundRect(ctx, -h.r, -h.r * 0.85, h.r * 2, h.r * 1.7, 6);
+      ctx.fill();
+      ctx.strokeStyle = hex(0x000000, 0.35);
+      ctx.lineWidth = 2;
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * h.r * 0.5, -h.r * 0.8);
+        ctx.lineTo(i * h.r * 0.35, h.r * 0.8);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+  if (!props) return;
+  for (const p of party.props) {
+    const def = disguiseByName(p.kind);
+    if (!def) continue;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(((p.rot ?? 0) * Math.PI) / 180);
+    drawPropShape(ctx, def);
+    ctx.restore();
+  }
 }
 
 /** Fine grain (noise speckle) only matters at full resolution; thumbnails skip it. */
@@ -378,7 +444,7 @@ function drawDecor(ctx: CanvasRenderingContext2D, d: DecorDef, t: ThemeDef, rand
  * software renderers): shadows are drawn on a 1/8-size canvas and upscaled with smoothing.
  */
 function drawShadows(ctx: CanvasRenderingContext2D, map: MapDef) {
-  const tall = new Set(["building", "container", "machine", "wall", "tank", "ruin"]);
+  const tall = new Set(["building", "container", "machine", "wall", "tank", "ruin", "shelf"]);
   const k = 1 / 8;
   const [sc, sctx] = makeCanvas(map.width * k, map.height * k);
   sctx.scale(k, k);
@@ -563,6 +629,36 @@ function drawSolid(ctx: CanvasRenderingContext2D, s: SolidDef, map: MapDef, rand
       // Edge light strip in the building's accent
       ctx.fillStyle = hex(accent, 0.75);
       ctx.fillRect(s.x + 4, s.y + s.h - 8, s.w - 8, 2);
+      break;
+    }
+    case "shelf": {
+      // Pallet rack: steel uprights, loaded shelves.
+      bevel(ctx, s, 0x3a4048, 0x22262c, 2);
+      const boxes = [0x8a6a42, 0x6b4a33, 0x9a7a4c, 0x5a6a78];
+      const horizontal = s.w >= s.h;
+      const len = horizontal ? s.w : s.h;
+      for (let o = 8; o < len - 14; o += 26) {
+        const c = boxes[Math.floor(rand() * boxes.length)]!;
+        ctx.fillStyle = hex(c);
+        if (horizontal) ctx.fillRect(s.x + o, s.y + 5, 20, s.h - 14);
+        else ctx.fillRect(s.x + 5, s.y + o, s.w - 10, 20);
+      }
+      ctx.fillStyle = hex(0xe0a33a, 0.85);
+      if (horizontal) {
+        for (let o = 0; o <= s.w - 4; o += 120) ctx.fillRect(s.x + o, s.y, 4, s.h - 4);
+      } else {
+        for (let o = 0; o <= s.h - 4; o += 120) ctx.fillRect(s.x, s.y + o, s.w, 4);
+      }
+      break;
+    }
+    case "desk": {
+      bevel(ctx, s, 0x8a6a48, 0x4f3a26, 3);
+      ctx.fillStyle = hex(0x1c2128);
+      ctx.fillRect(s.x + s.w * 0.35, s.y + 8, s.w * 0.3, s.h * 0.35);
+      ctx.fillStyle = hex(0x6fd3ff, 0.5);
+      ctx.fillRect(s.x + s.w * 0.35 + 2, s.y + 10, s.w * 0.3 - 4, s.h * 0.35 - 4);
+      ctx.fillStyle = hex(0xe8e2d4, 0.85);
+      ctx.fillRect(s.x + 10, s.y + s.h - 20, 22, 10);
       break;
     }
     case "vending": {
