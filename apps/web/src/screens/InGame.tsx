@@ -1,9 +1,11 @@
 import {
+  GUN_GAME,
   isPveMode,
   isTeamMode,
   KILL_BY_EXPLOSION,
   KILL_BY_VEHICLE,
   MODE_NAMES,
+  MODES,
   type NetEvent,
   PLAYER,
   TEAMS,
@@ -16,6 +18,7 @@ import { pveHudStore } from "../game/pve/pveHud.ts";
 import { keyLabel, settingsStore } from "../lib/settings.ts";
 import { useStore } from "../lib/store.ts";
 import { gameEvents, session, sessionStore } from "../net/session.ts";
+import { ModeHud } from "./ModeHud.tsx";
 import { PveHud } from "./PveHud.tsx";
 
 interface FeedItem {
@@ -424,7 +427,10 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
             You have the enemy flag: bring it to your flag stand
           </div>
         )}
-        {isPveMode(s.mode) ? null : teams ? (
+        {MODES[s.mode]?.hud === "gungame" && <ModeHud kind="gungame" />}
+        {isPveMode(s.mode) ? null : MODES[s.mode]?.hud === "roles" ? (
+          <ModeHud kind="roles" />
+        ) : teams ? (
           <div className="hud__top" data-testid="team-scores">
             {([1, 2] as const).map((t, i) => (
               <div
@@ -461,12 +467,21 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
             >
               {formatClock(hud.timeLeftSec)}
             </div>
-            <div className="hud-box hud__score">
-              <b className="mono">
-                {leader?.kills ?? 0}/{s.killLimit}
-              </b>
-              <small>Leader</small>
-            </div>
+            {s.mode === "gungame" ? (
+              <div className="hud-box hud__score">
+                <b className="mono">
+                  {Math.max(0, ...s.players.map((p) => p.gg)) + 1}/{GUN_GAME.ladder.length}
+                </b>
+                <small>Top level</small>
+              </div>
+            ) : (
+              <div className="hud-box hud__score">
+                <b className="mono">
+                  {leader?.kills ?? 0}/{s.killLimit}
+                </b>
+                <small>Leader</small>
+              </div>
+            )}
           </div>
         )}
 
@@ -500,27 +515,30 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
                 </span>
               </div>
             </div>
-            <div className="hud__bottom-right">
-              {hud.reloading && <span className="reload-tag">Reloading</span>}
-              <div className="ammo">
-                <span className={`ammo__mag ${hud.mag === 0 ? "is-empty" : ""}`} data-testid="hud-ammo">
-                  {hud.mag}
-                </span>
-                <span className="ammo__reserve">/ {hud.reserve < 0 ? "∞" : hud.reserve}</span>
+            {/* Unarmed (hiders, props): no ammo or slots to show. */}
+            {hud.slots.some((sl) => sl.weaponId) && (
+              <div className="hud__bottom-right">
+                {hud.reloading && <span className="reload-tag">Reloading</span>}
+                <div className="ammo">
+                  <span className={`ammo__mag ${hud.mag === 0 ? "is-empty" : ""}`} data-testid="hud-ammo">
+                    {hud.mag}
+                  </span>
+                  <span className="ammo__reserve">/ {hud.reserve < 0 ? "∞" : hud.reserve}</span>
+                </div>
+                <span className="weapon-name">{hud.weaponName}</span>
+                <div className="slots">
+                  {hud.slots.map((sl) => (
+                    <div
+                      key={sl.key}
+                      className={`slot ${sl.active ? "is-active" : ""} ${sl.weaponId ? "" : "is-empty"}`}
+                    >
+                      <kbd>{sl.key}</kbd>
+                      <span>{sl.weaponId ? sl.name : "—"}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <span className="weapon-name">{hud.weaponName}</span>
-              <div className="slots">
-                {hud.slots.map((sl) => (
-                  <div
-                    key={sl.key}
-                    className={`slot ${sl.active ? "is-active" : ""} ${sl.weaponId ? "" : "is-empty"}`}
-                  >
-                    <kbd>{sl.key}</kbd>
-                    <span>{sl.weaponId ? sl.name : "—"}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            )}
           </>
         )}
 

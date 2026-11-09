@@ -25,6 +25,7 @@ import {
   inSector,
   isDifficulty,
   isMapId,
+  isRoleMode,
   isTeamMode,
   isVehicleKind,
   type LightDef,
@@ -83,6 +84,7 @@ import { PlayerView } from "../entities/PlayerView.ts";
 import { VehicleView } from "../entities/VehicleView.ts";
 import { type HudObjective, type HudVehicle, hudStore, uiStore } from "../hudStore.ts";
 import { InputManager } from "../input/InputManager.ts";
+import { ModeLayer } from "../modes/ModeLayer.ts";
 import { ServerClock } from "../net/clock.ts";
 import {
   type RemoteSample,
@@ -173,6 +175,9 @@ export class ArenaScene extends Phaser.Scene {
   private doorWorlds: { world: CollisionWorld; shotWorld: CollisionWorld } | null = null;
   private pickupViews = new Map<string, PickupView>();
   private views = new Map<string, PlayerView>();
+  private modes!: ModeLayer;
+  /** Prop Hunt bakes the map without its objects (they are drawn live): which variant is loaded. */
+  private mapProps = true;
   private vehicleViews = new Map<string, VehicleView>();
   private vbuffer = new VehicleBuffer();
   /** Pose of every vehicle as rendered this frame (players on seats follow it). */
@@ -230,6 +235,7 @@ export class ArenaScene extends Phaser.Scene {
     this.lightmap = new Lightmap(this);
     this.lightmap.setQuality(settingsStore.get().quality);
     this.pve.lightmap = this.lightmap;
+    this.modes = new ModeLayer(this, this.effects, this.lightmap);
     this.perf = new PerfRecorder(this.game, () => this.children.length);
     this.crosshair = new Crosshair(this);
     this.predictor = new Predictor(collisionWorldFor(this.map), 0, airWorldFor(this.map));
@@ -288,6 +294,38 @@ export class ArenaScene extends Phaser.Scene {
         return { x: (x - cam.worldView.x) * cam.zoom, y: (y - cam.worldView.y) * cam.zoom };
       },
       predictor: () => ({ corrections: this.predictor.corrections, pending: this.predictor.pendingCount }),
+      /** Round modes / Gun Game, as this client received them (E2E secrecy checks). */
+      mode: () => {
+        const st = this.room?.state;
+        if (!st) return null;
+        const players: {
+          id: string;
+          role: number;
+          masked: boolean;
+          x: number;
+          y: number;
+          gg: number;
+          pts: number;
+        }[] = [];
+        st.players.forEach((p, id) => {
+          players.push({ id, role: p.role, masked: p.masked, x: p.x, y: p.y, gg: p.gg, pts: p.pts });
+        });
+        return {
+          mode: st.mode,
+          stage: st.round.stage,
+          round: st.round.num,
+          dark: st.round.dark,
+          allies: [...st.allies.keys()],
+          ally: (() => {
+            const g = st.allies.get(this.room?.sessionId ?? "");
+            return g ? { x: g.x, y: g.y, d: g.d, k: g.k, lk: g.lk } : null;
+          })(),
+          disguises: st.disguises.size,
+          pings: st.pings.size,
+          players,
+          body: this.predictor.body,
+        };
+      },
       vehicles: () => {
         const out: {
           id: string;
@@ -439,6 +477,43 @@ export class ArenaScene extends Phaser.Scene {
         return true;
       },
       stopAuto: () => autopilot.set(null),
+      /**
+       * Host-mode party scenarios (dev and E2E builds): "first" puts a player first in the join
+       * order (round modes pick seekers in that order), "teleport" moves one, "eliminate" credits
+       * an elimination with the killer's current weapon.
+       */
+      partyDebug: (op: string, a = "", b = "", x = 0, y = 0) => {
+        type P = {
+          sim: { x: number; y: number; slot: number; slots: { id: number }[] };
+          protectedUntil: number;
+        };
+        const sim = (
+          session.room as unknown as {
+            debugSim?: () => {
+              players: Map<string, P>;
+              damageFromMode(t: P, raw: number, by: P | null, w: number, x: number, y: number): void;
+            } | null;
+          }
+        ).debugSim?.();
+        if (!sim) return false;
+        const pa = sim.players.get(a);
+        if (!pa) return false;
+        if (op === "first") {
+          const rest = [...sim.players.entries()].filter(([id]) => id !== a);
+          sim.players.clear();
+          sim.players.set(a, pa);
+          for (const [id, p] of rest) sim.players.set(id, p);
+        } else if (op === "teleport") {
+          pa.sim.x = x;
+          pa.sim.y = y;
+        } else if (op === "eliminate") {
+          const killer = sim.players.get(b) ?? null;
+          pa.protectedUntil = 0;
+          const w = killer ? (killer.sim.slots[killer.sim.slot]?.id ?? 0) : 0;
+          sim.damageFromMode(pa, 999, killer, w, pa.sim.x, pa.sim.y);
+        } else return false;
+        return true;
+      },
       perfReset: () => this.perf?.reset(),
       createDebugRoom: (
         spawns: { x: number; y: number }[],
@@ -489,7 +564,9 @@ export class ArenaScene extends Phaser.Scene {
 
   private loadMap(map: MapDef) {
     this.map = map;
-    const key = `map-${map.id}`;
+    const props = ModeLayer.mapProps(this.room?.state?.mode ?? "");
+    this.mapProps = props;
+    const key = map.party && !props ? `map-${map.id}-bare` : `map-${map.id}`;
     this.mapImage?.destroy();
     this.mapImage = undefined;
     for (const t of this.mapTiles) t.destroy();
@@ -499,7 +576,7 @@ export class ArenaScene extends Phaser.Scene {
       // maximum texture size on many devices.
       const TILE = 1024;
       if (!this.textures.exists(`${key}-0-0`)) {
-        const full = renderMap(map);
+        const full = renderMap(map, 1, { props });
         for (let ty = 0; ty < map.height; ty += TILE) {
           for (let tx = 0; tx < map.width; tx += TILE) {
             const w = Math.min(TILE, map.width - tx);
@@ -518,7 +595,7 @@ export class ArenaScene extends Phaser.Scene {
         }
       }
     } else {
-      if (!this.textures.exists(key)) this.addStaticCanvas(key, renderMap(map));
+      if (!this.textures.exists(key)) this.addStaticCanvas(key, renderMap(map, 1, { props }));
       this.mapImage = this.add.image(0, 0, key).setOrigin(0).setDepth(0);
     }
     this.cameras.main.setBackgroundColor(map.theme.fog);
@@ -694,7 +771,9 @@ export class ArenaScene extends Phaser.Scene {
   private onPatch(state: MatchState) {
     if (!this.room) return;
     const mapId = isMapId(state.mapId) ? state.mapId : DEFAULT_MAP;
-    if (mapId !== this.map.id && this.pendingMap !== mapId) {
+    const wantProps = ModeLayer.mapProps(state.mode);
+    const propsChanged = mapId === this.map.id && !!this.map.party && wantProps !== this.mapProps;
+    if ((mapId !== this.map.id || propsChanged) && this.pendingMap !== mapId) {
       // Baking a map takes a moment on slow devices: do it on the next frame so joining a room
       // (whose first state carries the map) shows the lobby at once instead of freezing on it.
       this.pendingMap = mapId;
@@ -711,11 +790,15 @@ export class ArenaScene extends Phaser.Scene {
     if (inMatch) this.clock.onSnapshot(state.tick);
 
     const samples = new Map<string, RemoteSample>();
+    const selfId = this.room.sessionId;
     state.players.forEach((p, id) => {
+      // Round modes: masked players are drawn from their ghost when this client may see it.
+      const pose = this.modes.pose(state, id, selfId);
       samples.set(id, {
-        x: p.x,
-        y: p.y,
-        aim: p.aim,
+        x: pose.x,
+        y: pose.y,
+        aim: pose.aim,
+        hidden: pose.hidden,
         alive: p.alive,
         weapon: p.weapon,
         hp: p.hp,
@@ -729,7 +812,7 @@ export class ArenaScene extends Phaser.Scene {
       const v = this.views.get(id)!;
       v.setSkin(p.skin);
       v.setName(p.name);
-      v.setTeam(isTeamMode(state.mode) ? p.team : 0);
+      v.setTeam(isTeamMode(state.mode) || isRoleMode(state.mode) ? p.team : 0);
     });
     for (const [id, v] of this.views) {
       if (!state.players.has(id)) {
@@ -738,6 +821,7 @@ export class ArenaScene extends Phaser.Scene {
       }
     }
     if (inMatch) this.buffer.push(state.tick, samples);
+    this.modes.onPatch(state, state.tick, inMatch);
 
     const vsamples = new Map<string, VehicleSample>();
     state.vehicles.forEach((v, id) => {
@@ -809,15 +893,17 @@ export class ArenaScene extends Phaser.Scene {
     const me = state.players.get(this.room.sessionId);
     if (me && inMatch) {
       const wasAlive = this.predictorAlive;
-      this.predictorAlive = me.alive && phase === "playing";
+      this.predictorAlive = me.alive && phase === "playing" && !this.modes.ownFrozen(state, selfId);
       if (me.alive && !wasAlive) this.localAliveSince = performance.now();
       this.predictor.downed = me.downed;
+      this.predictor.body = this.modes.ownBody(state, selfId);
       const wasDriving = this.predictor.driving;
       this.predictor.reconcile(
         me,
         this.predictorAlive,
         me.vehicle ? state.vehicles.get(me.vehicle) : undefined,
         this.env,
+        this.modes.ownPose(state, selfId),
       );
       if (this.predictor.driving && !wasDriving && this.predictor.vehicle) {
         const v = this.predictor.vehicle;
@@ -839,6 +925,7 @@ export class ArenaScene extends Phaser.Scene {
 
   private onPhaseChange(_from: MatchPhase, to: MatchPhase) {
     if (to === "countdown" || to === "lobby") pveHud.reset();
+    if (to === "countdown" || to === "lobby") this.modes.reset();
     if (to === "countdown") {
       this.lastCountdownSec = -1;
       this.controls.reset();
@@ -927,8 +1014,18 @@ export class ArenaScene extends Phaser.Scene {
           break;
       }
       if (this.pve.active) this.onPveEvent(ev);
+      const st = this.room?.state;
+      if (st && self) this.modes.onEvent(ev, st, self, (x, y) => this.listenerSpatial(x, y));
       this.eventQueue.push({ tick, ev });
     }
+  }
+
+  /** Distance and stereo pan of a world point from the listener (the local player or the camera). */
+  private listenerSpatial(x: number, y: number) {
+    const me = this.views.get(this.room?.sessionId ?? "");
+    const lx = me?.root.x ?? this.cameras.main.midPoint.x;
+    const ly = me?.root.y ?? this.cameras.main.midPoint.y;
+    return { distance: Math.hypot(x - lx, y - ly), pan: clamp((x - lx) / 900, -1, 1) };
   }
 
   /** Immediate PvE feedback (hit markers on enemies, damage direction from enemies, banners). */
@@ -1333,6 +1430,7 @@ export class ArenaScene extends Phaser.Scene {
     if (!this.clock.ready) return;
 
     this.sampleEdgeInputs();
+    this.modes.handleInput(this.controls, state, this.room.sessionId);
     const stalled = this.netMetrics.updateStall(now, this.predictor.pendingCount, NET.inputStallMs, dt);
     if (stalled || sessionStore.get().status === "reconnecting") {
       // Connection interrupted: hold the local player instead of predicting ever further ahead of
@@ -1370,6 +1468,12 @@ export class ArenaScene extends Phaser.Scene {
     this.updateEnterTarget(state, renderTick);
     this.renderVehicles(renderTick, dt / 1000, state);
     this.renderPlayers(renderTick, dt / 1000, state);
+    {
+      const self = this.room.sessionId;
+      const meView = this.views.get(self);
+      const local = meView ? { x: meView.root.x, y: meView.root.y, aim: this.predictor.sim.aim } : null;
+      this.modes.update(state, self, renderTick, state.tick, dt / 1000, local, this.cameras.main, this.map);
+    }
     if (this.pve.active) {
       const me = this.views.get(this.room.sessionId);
       this.updateDread(dt / 1000, state);
@@ -1601,6 +1705,8 @@ export class ArenaScene extends Phaser.Scene {
       obstacles.push(...circles);
       if (!mount || id !== mount.vehicleId) vehicleObstacles.push(...circles);
     });
+    const self = this.room?.sessionId;
+    if (self) obstacles.push(...this.modes.obstacles(state, self, renderTick));
     return { obstacles, vehicleObstacles, ridePose };
   }
 
@@ -1768,9 +1874,11 @@ export class ArenaScene extends Phaser.Scene {
         const laser = this.laserLength(x, y, aim, slot?.id ?? NO_WEAPON);
         const anim = localWeaponAnim(s, this.localAnim);
         view.update(x, y, aim, ps.alive, slot?.id ?? NO_WEAPON, ps.hp, ps.protected, dtSec, laser, anim);
+        // Prop Hunt: a disguised local player is drawn as their object (ModeLayer), not as a person.
+        if (this.predictor.body) view.root.setVisible(false);
       } else {
         const sample = this.buffer.sample(id, renderTick);
-        if (!sample) {
+        if (!sample || sample.hidden) {
           view.root.setVisible(false);
           continue;
         }
@@ -1816,7 +1924,10 @@ export class ArenaScene extends Phaser.Scene {
 
   private updateCamera(dt: number) {
     const cam = this.cameras.main;
-    const me = this.views.get(this.room?.sessionId ?? "");
+    const state = this.room?.state;
+    // Out of the round: follow somebody still playing (whose pose this client may see).
+    const watching = state ? this.modes.spectateTarget(state, this.room?.sessionId ?? "") : null;
+    const me = this.views.get(watching ?? this.room?.sessionId ?? "");
     if (!me) return;
     const pointer = this.input_pointer();
     // In a vehicle the view leads along the direction of travel and widens a little with speed and

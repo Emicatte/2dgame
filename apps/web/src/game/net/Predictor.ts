@@ -69,6 +69,8 @@ export class Predictor {
   mount: Mount | null = null;
   /** PvE: the local player is downed (crawls, cannot fire), as last confirmed by the server. */
   downed = false;
+  /** Prop Hunt: the object the local player moves as (radius, speed), as last confirmed. */
+  body: { radius: number; speed: number } | null = null;
   private airWorld: CollisionWorld;
   private pending: InputFrame[] = [];
   private seq = 0;
@@ -115,6 +117,7 @@ export class Predictor {
         emit,
         obstacles: env.obstacles,
         downed: this.downed,
+        body: this.body,
       });
       return;
     }
@@ -191,7 +194,17 @@ export class Predictor {
    * its synchronized state is the state after the acknowledged input, and the same replay of the
    * pending inputs rebuilds the prediction.
    */
-  reconcile(ps: PlayerState, alive: boolean, vs?: VehicleState, env: PredictEnv = NO_ENV): void {
+  /**
+   * `pose`: the player's real pose when their public one is masked (round modes: it comes from
+   * their own ghost in MatchState.allies).
+   */
+  reconcile(
+    ps: PlayerState,
+    alive: boolean,
+    vs?: VehicleState,
+    env: PredictEnv = NO_ENV,
+    pose?: { x: number; y: number; aim: number } | null,
+  ): void {
     const ack = ps.ack;
     if (ack < this.lastAck) {
       this.staleAcks++;
@@ -215,11 +228,11 @@ export class Predictor {
     const before = tracked ? { x: tracked.x, y: tracked.y } : null;
 
     const s = this.sim;
-    s.x = ps.x;
-    s.y = ps.y;
+    s.x = pose ? pose.x : ps.x;
+    s.y = pose ? pose.y : ps.y;
     s.vx = ps.vx;
     s.vy = ps.vy;
-    s.aim = ps.aim;
+    s.aim = pose ? pose.aim : ps.aim;
     s.dash = ps.dash;
     s.dashCd = ps.dashCd;
     s.dashDx = ps.dashDx;

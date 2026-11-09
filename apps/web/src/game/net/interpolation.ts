@@ -9,6 +9,8 @@ export interface RemoteSample {
   hp: number;
   protected: boolean;
   reloading: boolean;
+  /** Not drawn (round modes: a masked player this client may not see). */
+  hidden?: boolean;
 }
 
 interface Snapshot {
@@ -64,6 +66,8 @@ export class SnapshotBuffer {
     if (!b) return a;
     // Do not slide across a respawn or a death: show the newer state as soon as it begins.
     if (a.alive !== b.alive) return renderTick - older.tick > 0.5 ? b : a;
+    // Nor across a hidden player coming into (or out of) sight: they appear where they are.
+    if (!!a.hidden !== !!b.hidden) return b.hidden ? b : renderTick - older.tick > 0.5 ? b : a;
     const t = (renderTick - older.tick) / (newer.tick - older.tick);
     if (Math.hypot(b.x - a.x, b.y - a.y) > 200) return t < 0.5 ? a : b;
     return {

@@ -644,6 +644,44 @@ class Sfx {
       this.tone(out, t, "triangle", kind === "hover" ? 1500 : 900, kind === "hover" ? 1500 : 700, 0.05, 0.4);
   }
 
+  /** Prop Hunt taunt: one of four silly squeaks / whistles, positional. */
+  taunt(variant: number, distance = 0, pan = 0): void {
+    if (!this.ctx) return;
+    const out = this.out(this.sfxBus, pan, Math.max(0.05, 0.55 - distance / 3000));
+    if (!out) return;
+    const t = this.ctx.currentTime;
+    const tunes = [
+      [880, 660, 990],
+      [523, 784, 523],
+      [1200, 400],
+      [660, 880, 1100, 1320],
+    ][variant % 4]!;
+    tunes.forEach((f, i) => {
+      this.tone(out, t + i * 0.11, "square", f, f * 1.04, 0.1, 0.32);
+    });
+  }
+
+  /** Round modes: a hider was spotted (seekers) / you were spotted (the hider). */
+  spotted(you: boolean): void {
+    if (!this.ctx) return;
+    const out = this.out(this.uiBus, 0, you ? 0.45 : 0.3);
+    if (!out) return;
+    const t = this.ctx.currentTime;
+    this.tone(out, t, "sawtooth", you ? 330 : 1320, you ? 220 : 1760, 0.18, 0.35);
+  }
+
+  /** Gun Game: next weapon (up) or one level back (down). */
+  levelChange(up: boolean): void {
+    if (!this.ctx) return;
+    const out = this.out(this.uiBus, 0, 0.4);
+    if (!out) return;
+    const t = this.ctx.currentTime;
+    const notes = up ? [523, 784, 1046] : [523, 392];
+    notes.forEach((n, i) => {
+      this.tone(out, t + i * 0.07, "triangle", n, n, 0.12, 0.45);
+    });
+  }
+
   stinger(win: boolean): void {
     if (!this.ctx) return;
     const out = this.out(this.uiBus, 0, 0.4);

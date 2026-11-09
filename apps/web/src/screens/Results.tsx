@@ -1,4 +1,13 @@
-import { DIFFICULTY, isDifficulty, isTeamMode, missionById, type PveResult, TEAMS } from "@scrapline/shared";
+import {
+  DIFFICULTY,
+  isDifficulty,
+  isMapId,
+  isTeamMode,
+  MAPS,
+  missionById,
+  type PveResult,
+  TEAMS,
+} from "@scrapline/shared";
 import { useEffect } from "react";
 import { Button, formatClock, Panel } from "../components/ui.tsx";
 import { useStore } from "../lib/store.ts";
@@ -35,6 +44,8 @@ export function Results() {
   }, [r]);
 
   if (r?.pve) return <PveResults r={r.pve} />;
+  const pointsLabel =
+    s.mode === "gungame" ? "Level" : s.mode === "hideseek" || s.mode === "prophunt" ? "Points" : null;
 
   return (
     <div className="screen screen--dim">
@@ -63,6 +74,7 @@ export function Results() {
                 <tr>
                   <th>#</th>
                   <th>Player</th>
+                  {pointsLabel && <th className="num">{pointsLabel}</th>}
                   <th className="num">Elims</th>
                   <th className="num">Deaths</th>
                   <th className="num">Accuracy</th>
@@ -73,6 +85,11 @@ export function Results() {
                   <tr key={row.id} className={row.id === s.selfId ? "is-self" : ""}>
                     <td className="mono">{row.placement}</td>
                     <td className={teams && row.team ? `team-tag--${row.team}` : undefined}>{row.name}</td>
+                    {pointsLabel && (
+                      <td className="num" data-testid="result-points">
+                        {"points" in row ? (row.points ?? "—") : "—"}
+                      </td>
+                    )}
                     <td className="num">{row.kills}</td>
                     <td className="num">{row.deaths}</td>
                     <td className="num">
@@ -119,6 +136,31 @@ export function Results() {
             )}
           </Panel>
         </div>
+        {s.voteMaps.length > 1 && (
+          <Panel title="Next map">
+            <fieldset className="vote-row" aria-label="Vote for the next map" data-testid="map-vote">
+              {s.voteMaps.filter(isMapId).map((m) => {
+                const votes = s.players.filter((p) => p.vote === m).length;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    className="mode-card"
+                    aria-pressed={self?.vote === m}
+                    onClick={() => session.voteMap(m)}
+                    data-testid={`vote-${m}`}
+                  >
+                    {MAPS[m].name}
+                    <small>
+                      {votes} vote{votes === 1 ? "" : "s"}
+                      {m === s.mapId ? " · current" : ""}
+                    </small>
+                  </button>
+                );
+              })}
+            </fieldset>
+          </Panel>
+        )}
         <div className="row">
           <span className="field__hint">Back to the lobby in {formatClock(backIn)}</span>
           <span className="spacer" />
@@ -254,6 +296,31 @@ function PveResults({ r }: { r: PveResult }) {
             )}
           </Panel>
         </div>
+        {s.voteMaps.length > 1 && (
+          <Panel title="Next map">
+            <fieldset className="vote-row" aria-label="Vote for the next map" data-testid="map-vote">
+              {s.voteMaps.filter(isMapId).map((m) => {
+                const votes = s.players.filter((p) => p.vote === m).length;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    className="mode-card"
+                    aria-pressed={self?.vote === m}
+                    onClick={() => session.voteMap(m)}
+                    data-testid={`vote-${m}`}
+                  >
+                    {MAPS[m].name}
+                    <small>
+                      {votes} vote{votes === 1 ? "" : "s"}
+                      {m === s.mapId ? " · current" : ""}
+                    </small>
+                  </button>
+                );
+              })}
+            </fieldset>
+          </Panel>
+        )}
         <div className="row">
           <span className="field__hint">Back to the lobby in {formatClock(backIn)}</span>
           <span className="spacer" />

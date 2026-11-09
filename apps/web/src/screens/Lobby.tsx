@@ -1,16 +1,20 @@
 import {
   type GameMode,
   isPveMode,
+  isRoleMode,
   isTeamMode,
   MAPS,
   MATCH_LIMITS,
   MODE_BLURBS,
+  MODE_CATEGORIES,
   MODE_NAMES,
   MODE_SCORE_UNIT,
-  modeNeedsVehicles,
-  PVE_MODES,
+  MODE_VARIANTS,
+  MODES,
+  mapSupportsMode,
+  modeEnabled,
   PVP_MAP_IDS,
-  PVP_MODES,
+  ROUND_LIMITS,
   skinById,
   TEAM_SIZE,
   TEAMS,
@@ -18,6 +22,7 @@ import {
 import { useState } from "react";
 import { mapThumb } from "../components/mapThumbs.ts";
 import { Button, formatClock, hexColor, LevelChip, Panel } from "../components/ui.tsx";
+import { MODE_FLAGS } from "../lib/modeFlags.ts";
 import { useStore } from "../lib/store.ts";
 import { HOST_MODE } from "../net/api.ts";
 import { type LobbyPlayer, session, sessionStore } from "../net/session.ts";
@@ -110,6 +115,19 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
     ));
 
   const humans = s.players.filter((p) => !p.id.startsWith("bot:"));
+  const def = MODES[s.mode];
+  const roles = isRoleMode(s.mode);
+  /** The mode has its own end rule (ladder, rounds): no score limit to pick. */
+  const ownEnd = s.mode === "gungame" || roles;
+  const tooFew = humans.length < def.players.min;
+  /** Modes a host can pick here, by category (co-op last). */
+  const pickable = MODE_CATEGORIES.map((c) => ({
+    ...c,
+    modes: c.modes.filter(
+      (m): m is GameMode =>
+        m in MODES && MODES[m as GameMode].status === "available" && modeEnabled(m, MODE_FLAGS),
+    ),
+  })).filter((c) => c.modes.length > 0);
 
   return (
     <div className="screen screen--dim">
@@ -196,68 +214,78 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
           <Panel title="Match">
             <div className="stack">
               {canHost && (
-                <>
-                  <fieldset className="mode-grid" aria-label="Competitive modes" data-testid="mode-select">
-                    {PVP_MODES.map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        className="mode-card"
-                        aria-pressed={s.mode === m}
-                        onClick={() => session.updateSettings({ mode: m })}
-                        data-testid={`mode-${m}`}
-                      >
-                        {MODE_NAMES[m]}
-                      </button>
-                    ))}
-                  </fieldset>
-                  <fieldset className="mode-grid mode-grid--coop" aria-label="Co-op modes">
-                    {PVE_MODES.map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        className="mode-card mode-card--coop"
-                        aria-pressed={s.mode === m}
-                        onClick={() => session.updateSettings({ mode: m })}
-                        data-testid={`mode-${m}`}
-                      >
-                        {MODE_NAMES[m]}
-                        <small>Co-op 1–4</small>
-                      </button>
-                    ))}
-                  </fieldset>
-                </>
+                <div className="stack" data-testid="mode-select" style={{ gap: 6 }}>
+                  {pickable.map((c) => (
+                    <fieldset
+                      key={c.id}
+                      className={`mode-grid ${c.id === "coop" ? "mode-grid--coop" : ""}`}
+                      aria-label={`${c.name} modes`}
+                    >
+                      <legend className="stencil mode-grid__legend">{c.name}</legend>
+                      {c.modes.map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          className={`mode-card ${c.id === "coop" ? "mode-card--coop" : ""}`}
+                          aria-pressed={s.mode === m}
+                          onClick={() => session.updateSettings({ mode: m })}
+                          data-testid={`mode-${m}`}
+                        >
+                          {MODE_NAMES[m]}
+                          <small>
+                            {MODES[m].players.min === MODES[m].players.max
+                              ? MODES[m].players.min
+                              : `${MODES[m].players.min}–${MODES[m].players.max}`}{" "}
+                            players
+                          </small>
+                        </button>
+                      ))}
+                    </fieldset>
+                  ))}
+                </div>
               )}
               <p className="mode-blurb" data-testid="mode-blurb">
                 {MODE_BLURBS[s.mode]}
               </p>
+              {(ownEnd || !canHost) && (
+                <ul className="mode-rules" data-testid="mode-rules">
+                  {def.rules.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              )}
               {isPveMode(s.mode) ? (
                 <PveMatchSettings canHost={canHost} />
               ) : (
                 <>
                   <div className="grid-3">
-                    {PVP_MAP_IDS.map((id) => (
-                      <button
-                        key={id}
-                        type="button"
-                        className={`map-card ${modeNeedsVehicles(s.mode) && !MAPS[id].vehicleSpawns ? "is-unavailable" : ""}`}
-                        aria-pressed={s.mapId === id}
-                        disabled={!canHost || (modeNeedsVehicles(s.mode) && !MAPS[id].vehicleSpawns)}
-                        onClick={() => session.updateSettings({ map: id })}
-                        title={
-                          modeNeedsVehicles(s.mode) && !MAPS[id].vehicleSpawns
-                            ? `${MODE_NAMES[s.mode]} needs a map with vehicles`
-                            : MAPS[id].tagline
-                        }
-                        data-testid={`map-${id}`}
-                      >
-                        <img className="map-card__preview" src={mapThumb(id)} alt="" />
-                        <span className="map-card__label">
-                          {MAPS[id].name}
-                          {MAPS[id].vehicleSpawns && <span className="map-card__tag">Vehicles</span>}
-                        </span>
-                      </button>
-                    ))}
+                    {PVP_MAP_IDS.filter((id) => mapSupportsMode(MAPS[id], s.mode) || id === s.mapId).map(
+                      (id) => (
+                        <button
+                          key={id}
+                          type="button"
+                          className="map-card"
+                          aria-pressed={s.mapId === id}
+                          disabled={!canHost}
+                          onClick={() => session.updateSettings({ map: id })}
+                          title={
+                            MAPS[id].players
+                              ? `${MAPS[id].tagline} Best with ${MAPS[id].players!.min}–${MAPS[id].players!.max} players.`
+                              : MAPS[id].tagline
+                          }
+                          data-testid={`map-${id}`}
+                        >
+                          <img className="map-card__preview" src={mapThumb(id)} alt="" />
+                          <span className="map-card__label">
+                            {MAPS[id].name}
+                            {MAPS[id].vehicleSpawns && def.vehicles && (
+                              <span className="map-card__tag">Vehicles</span>
+                            )}
+                            {MAPS[id].party && <span className="map-card__tag">Party</span>}
+                          </span>
+                        </button>
+                      ),
+                    )}
                   </div>
                   <div className="row" style={{ flexWrap: "wrap" }} data-testid="match-rules">
                     <span className="badge">{MODE_NAMES[s.mode]}</span>
@@ -266,9 +294,25 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                         {s.teamSize}v{s.teamSize}
                       </span>
                     )}
-                    <span className="badge">{formatClock(s.durationSec)} min</span>
+                    {roles ? (
+                      <>
+                        <span className="badge">{s.killLimit} rounds</span>
+                        <span className="badge" data-testid="variant-badge">
+                          {MODE_VARIANTS[s.mode]?.find((v) => v.id === s.round.variant)?.name ?? "Classic"}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="badge">{formatClock(s.durationSec)} min</span>
+                        {!ownEnd && (
+                          <span className="badge">
+                            {s.killLimit} {MODE_SCORE_UNIT[s.mode]}
+                          </span>
+                        )}
+                      </>
+                    )}
                     <span className="badge">
-                      {s.killLimit} {MODE_SCORE_UNIT[s.mode]}
+                      {def.players.min}–{def.players.max} players
                     </span>
                     {teams && <span className="badge">Friendly fire {s.friendlyFire ? "on" : "off"}</span>}
                   </div>
@@ -296,41 +340,82 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                       </select>
                     </div>
                   )}
-                  <div className="setting-row">
-                    <span>Duration</span>
-                    <select
-                      className="input"
-                      value={s.durationSec}
-                      onChange={(e) => session.updateSettings({ durationSec: Number(e.target.value) })}
-                    >
-                      {DURATIONS.filter(
-                        (d) => d >= MATCH_LIMITS.durationSec.min && d <= MATCH_LIMITS.durationSec.max,
-                      ).map((d) => (
-                        <option key={d} value={d}>
-                          {d / 60} minutes
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="setting-row">
-                    <span>
-                      {MODE_SCORE_UNIT[s.mode].charAt(0).toUpperCase() + MODE_SCORE_UNIT[s.mode].slice(1)} to
-                      win
-                    </span>
-                    <select
-                      className="input"
-                      value={s.killLimit}
-                      onChange={(e) => session.updateSettings({ killLimit: Number(e.target.value) })}
-                    >
-                      {[...new Set([...SCORE_LIMITS[s.mode], s.killLimit])]
-                        .sort((a, b) => a - b)
-                        .map((k) => (
-                          <option key={k} value={k}>
-                            {k}
+                  {roles && (
+                    <>
+                      <div className="setting-row">
+                        <span>Variant</span>
+                        <select
+                          className="input"
+                          value={s.round.variant}
+                          onChange={(e) => session.updateSettings({ variant: e.target.value })}
+                          data-testid="variant"
+                        >
+                          {(MODE_VARIANTS[s.mode] ?? []).map((v) => (
+                            <option key={v.id} value={v.id} title={v.blurb}>
+                              {v.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="setting-row">
+                        <span>Rounds</span>
+                        <select
+                          className="input"
+                          value={s.killLimit}
+                          onChange={(e) => session.updateSettings({ rounds: Number(e.target.value) })}
+                          data-testid="rounds"
+                        >
+                          {Array.from(
+                            { length: ROUND_LIMITS.max - ROUND_LIMITS.min + 1 },
+                            (_, i) => i + ROUND_LIMITS.min,
+                          ).map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
+                  {!roles && (
+                    <div className="setting-row">
+                      <span>Duration</span>
+                      <select
+                        className="input"
+                        value={s.durationSec}
+                        onChange={(e) => session.updateSettings({ durationSec: Number(e.target.value) })}
+                      >
+                        {DURATIONS.filter(
+                          (d) => d >= MATCH_LIMITS.durationSec.min && d <= MATCH_LIMITS.durationSec.max,
+                        ).map((d) => (
+                          <option key={d} value={d}>
+                            {d / 60} minutes
                           </option>
                         ))}
-                    </select>
-                  </div>
+                      </select>
+                    </div>
+                  )}
+                  {!ownEnd && (
+                    <div className="setting-row">
+                      <span>
+                        {MODE_SCORE_UNIT[s.mode].charAt(0).toUpperCase() + MODE_SCORE_UNIT[s.mode].slice(1)}{" "}
+                        to win
+                      </span>
+                      <select
+                        className="input"
+                        value={s.killLimit}
+                        onChange={(e) => session.updateSettings({ killLimit: Number(e.target.value) })}
+                      >
+                        {[...new Set([...SCORE_LIMITS[s.mode], s.killLimit])]
+                          .sort((a, b) => a - b)
+                          .map((k) => (
+                            <option key={k} value={k}>
+                              {k}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
                   {teams ? (
                     <div className="setting-row">
                       <span>Friendly fire</span>
@@ -392,19 +477,21 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                   variant="primary"
                   size="lg"
                   block
-                  disabled={!allReady}
+                  disabled={!allReady || tooFew}
                   onClick={() => session.startMatch()}
                   data-testid="start-match"
                 >
-                  {allReady
-                    ? isPveMode(s.mode)
-                      ? s.mode === "survival"
-                        ? "Start survival"
-                        : "Start mission"
-                      : s.players.length < 2
-                        ? "Start practice"
-                        : "Start match"
-                    : "Waiting for ready…"}
+                  {tooFew
+                    ? `Needs ${def.players.min} players`
+                    : allReady
+                      ? isPveMode(s.mode)
+                        ? s.mode === "survival"
+                          ? "Start survival"
+                          : "Start mission"
+                        : s.players.length < 2
+                          ? "Start practice"
+                          : "Start match"
+                      : "Waiting for ready…"}
                 </Button>
               ) : (
                 <Button

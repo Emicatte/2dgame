@@ -10,6 +10,7 @@ import { InGame } from "./screens/InGame.tsx";
 import { Lobby } from "./screens/Lobby.tsx";
 import { CreateDialog, JoinDialog, MainMenu, type MenuView } from "./screens/MainMenu.tsx";
 import { Onboarding } from "./screens/Onboarding.tsx";
+import { PlayScreen } from "./screens/PlayScreen.tsx";
 import { Results } from "./screens/Results.tsx";
 import { Leaderboard, Loadout, Profile, RoomBrowser, SettingsSheet } from "./screens/Sheets.tsx";
 import { currentLoadout, loadProfile, profileStore } from "./state/profile.ts";
@@ -107,6 +108,7 @@ export function App() {
     screen = (
       <>
         <MainMenu onNavigate={setView} busy={busy} setBusy={setBusy} />
+        {view === "play" && <PlayScreen onBack={back} />}
         {view === "browse" && <RoomBrowser onBack={back} />}
         {view === "join" && <JoinDialog onClose={back} initialCode={invite ?? ""} />}
         {view === "create" && <CreateDialog onClose={back} />}

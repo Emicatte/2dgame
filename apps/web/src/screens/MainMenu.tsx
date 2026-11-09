@@ -8,6 +8,7 @@ import { currentLoadout, profileStore } from "../state/profile.ts";
 
 export type MenuView =
   | "main"
+  | "play"
   | "browse"
   | "join"
   | "create"
@@ -92,10 +93,14 @@ export function MainMenu({
               <Button
                 variant="primary"
                 size="lg"
-                onClick={() => onNavigate("create")}
+                onClick={() => onNavigate("play")}
                 disabled={busy}
-                data-testid="create-room"
+                data-testid="open-play"
               >
+                Play
+                <kbd>all modes</kbd>
+              </Button>
+              <Button onClick={() => onNavigate("create")} disabled={busy} data-testid="create-room">
                 Create arena
                 <kbd>you host</kbd>
               </Button>
@@ -123,8 +128,12 @@ export function MainMenu({
                 Team Deathmatch
                 <kbd>2v2</kbd>
               </Button>
+              <Button onClick={() => onNavigate("play")} disabled={busy} data-testid="open-play">
+                Play · all modes
+                <kbd>party · co-op</kbd>
+              </Button>
               <Button onClick={() => onNavigate("browse")} disabled={busy}>
-                Play · browse rooms
+                Browse rooms
               </Button>
               <Button onClick={() => void coop()} disabled={busy} data-testid="create-coop">
                 Outbreak · co-op
