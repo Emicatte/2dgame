@@ -100,6 +100,49 @@ describe("Final Breach: map and script", () => {
     expect(pve.props.get("rig")!.used).toBe(true);
   });
 
+  it("atrium waves never spawn behind a closed door, even with the squad pressed against one", () => {
+    const { sim, pve, ps } = start(from(stepOf("waves")), ["alpha", "bravo"], "veteran");
+    const [a, b] = ps as [ServerPlayer, ServerPlayer];
+    a.protectedUntil = Number.MAX_SAFE_INTEGER;
+    b.protectedUntil = Number.MAX_SAFE_INTEGER;
+    // Every mission door is still shut during the waves.
+    const grid = buildNavGrid(pveWorlds(map, FINAL_BREACH.doors, new Set()).world);
+    const squad = buildFlowField(grid, 1, [nearestWalkable(grid, 3330, 1080, 1)]);
+    const seen = new Set<string>();
+    const stray: string[] = [];
+    // At the core-descent door (east wall): the atrium's east zones are in plain view, and the
+    // corridor behind the door is the closest out-of-sight floor.
+    for (let i = 0; i < 20 * 60; i++) {
+      place(a, 3330, 1060);
+      place(b, 3330, 1110);
+      tick(sim);
+      for (const z of pve.zw.zombies.values()) {
+        if (z.dead || seen.has(z.id)) continue;
+        seen.add(z.id);
+        const c = nearestWalkable(grid, z.x, z.y, 1, 3);
+        if (c < 0 || squad.dist[c]! >= NAV_INF)
+          stray.push(`${z.def.kind}@${Math.round(z.x)},${Math.round(z.y)}`);
+      }
+    }
+    expect(seen.size).toBeGreaterThan(10);
+    expect(stray).toEqual([]);
+  });
+
+  it("a wave enemy shut in behind a closed door is culled instead of holding the wave open", () => {
+    const { sim, pve, ps } = start(from(stepOf("waves")), ["alpha"], "veteran");
+    const a = ps[0]!;
+    a.protectedUntil = Number.MAX_SAFE_INTEGER;
+    for (let i = 0; i < 20 * 20 && !pve.waves.run; i++) tick(sim);
+    // In the core descent, 300 px from the player but on the other side of the shut door.
+    const wave = pve.waves.run!.number;
+    const z = pve.zw.spawn("walker", 3640, 1080, { state: "hunt", wave });
+    for (let i = 0; i < 20 * 26 && !z.dead && pve.zw.zombies.has(z.id); i++) {
+      place(a, 3300, 1080);
+      tick(sim);
+    }
+    expect(pve.zw.zombies.has(z.id)).toBe(false);
+  });
+
   it("the escape is on a clock: missing it fails the mission", () => {
     const { sim, pve, ps } = start(from(stepOf("kill") + 1), ["alpha"], "recruit");
     const a = ps[0]!;
