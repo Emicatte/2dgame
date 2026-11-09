@@ -483,7 +483,6 @@ export class ArenaScene extends Phaser.Scene {
     const zoom = Math.min(this.scale.width / VIEW_W, this.scale.height / VIEW_H);
     this.baseZoom = clamp(zoom, 0.5, 2);
     cam.setZoom(this.baseZoom * this.zoomFactor);
-    cam.setBounds(0, 0, this.map.width, this.map.height);
   }
 
   // ---------------------------------------------------------------- map
@@ -1398,10 +1397,17 @@ export class ArenaScene extends Phaser.Scene {
     if (sb !== uiStore.get().scoreboard) uiStore.patch({ scoreboard: sb });
   }
 
+  /**
+   * Aim from the drawn body (the point the camera is locked on) to the cursor: with the mouse
+   * still it stays exactly the same while the player moves. The ray itself starts at the predicted
+   * position, at most one fixed step (a few px) from the drawn body: parallel and within that
+   * distance of the crosshair.
+   */
   private aimAngle(): number {
     const pointer = this.input_pointer();
-    const sim = this.predictor.sim;
-    return Math.atan2(pointer.worldY - sim.y, pointer.worldX - sim.x);
+    const me = this.views.get(this.room?.sessionId ?? "");
+    const from = me && !this.predictor.mount ? me.root : this.predictor.sim;
+    return Math.atan2(pointer.worldY - from.y, pointer.worldX - from.x);
   }
 
   private input_pointer() {
@@ -1838,12 +1844,19 @@ export class ArenaScene extends Phaser.Scene {
       clamp((pointer.x - this.scale.width / 2) / (this.scale.width / 2), -1, 1) * 140 * cursorLead;
     const lookY =
       clamp((pointer.y - this.scale.height / 2) / (this.scale.height / 2), -1, 1) * 100 * cursorLead;
-    const tx = me.root.x + lookX + leadX;
-    const ty = me.root.y + lookY + leadY;
+    // The camera is locked on the player; only the look-ahead (towards the cursor, along the
+    // vehicle's travel) is smoothed. With the mouse still the player keeps their place on screen,
+    // so the crosshair moves with them and the aim does not drift while they walk. No clamping to
+    // the map edges either: near a wall the view shows a little outside rather than letting the
+    // player slide away under a still crosshair.
     const k = 1 - Math.exp(-dt / (mount ? 140 : 90));
-    const mid = cam.midPoint;
-    cam.centerOn(Phaser.Math.Linear(mid.x, tx, k), Phaser.Math.Linear(mid.y, ty, k));
+    this.camLook.x += (lookX + leadX - this.camLook.x) * k;
+    this.camLook.y += (lookY + leadY - this.camLook.y) * k;
+    cam.centerOn(me.root.x + this.camLook.x, me.root.y + this.camLook.y);
   }
+
+  /** Smoothed camera offset from the player (look-ahead), see updateCamera. */
+  private readonly camLook = { x: 0, y: 0 };
 
   private updateMenuCamera(dt: number) {
     this.menuCamAngle += dt / 16000;

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased (branch `dread`)
+
+### Fixed
+- **The crosshair moves with the player.** The camera lagged behind the player (and stopped at
+  the map's edges), so with the mouse still the player slid away under a fixed crosshair and the
+  aim rotated by itself: hard to fight at close range. The camera is now locked on the player
+  (only the look-ahead towards the cursor is smoothed), it no longer stops at the map's edges, and
+  the aim is taken from the drawn body: with the mouse still, the aim does not move while walking.
+
 ## 0.6.1 — 2026-11-09 (practice bots that play like people)
 
 ### Changed

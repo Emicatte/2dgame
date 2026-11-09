@@ -17,6 +17,8 @@ const ARGS = [
 
 interface Hooks {
   selfId(): string | null;
+  rendered(id: string): { x: number; y: number; visible: boolean } | null;
+  toScreen(x: number, y: number): { x: number; y: number };
   phase(): string | null;
   players(): {
     id: string;
@@ -201,4 +203,40 @@ test("host alone: the practice bots move, fight and hurt the host", async () => 
   expect(moved).toBeGreaterThan(200);
   // They shoot: the host (standing still) gets hit, or the bots already traded kills.
   expect(lowest < 100 || botDamage > 0).toBe(true);
+});
+
+test("the crosshair moves with the player: walking with the mouse still keeps the player's place on screen", async () => {
+  test.setTimeout(120_000);
+  browsers = [await chromium.launch({ executablePath: CHROME, headless: true, args: ARGS })];
+  const a = await (await browsers[0]!.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+  await onboard(a, "Aim");
+  await a.getByTestId("create-room").click();
+  await a.getByTestId("create-submit").click();
+  await expect(a.getByTestId("host-hint")).toBeVisible({ timeout: 15_000 });
+  await a.getByTestId("start-match").click();
+  await phaseIs(a, "playing", 30_000);
+  await a.mouse.move(760, 360);
+  await a.waitForTimeout(1200);
+  const onScreen = () =>
+    hooks(a, (h) => {
+      const r = h.rendered(h.selfId()!)!;
+      const s = h.toScreen(r.x, r.y);
+      return { sx: s.x, sy: s.y, x: r.x, y: r.y };
+    });
+  const start = await onScreen();
+  const seen = [start];
+  // Spawns are often by the edge of the map: walk away from the nearest edge, both axes.
+  for (const key of ["KeyS", "KeyW", "KeyD", "KeyA"]) {
+    await a.keyboard.down(key);
+    for (let i = 0; i < 4; i++) {
+      await a.waitForTimeout(200);
+      seen.push(await onScreen());
+    }
+    await a.keyboard.up(key);
+  }
+  const travelled = Math.max(...seen.map((p) => Math.hypot(p.x - start.x, p.y - start.y)));
+  const drift = Math.max(...seen.map((p) => Math.hypot(p.sx - start.sx, p.sy - start.sy)));
+  console.log(`[aim e2e] walked up to ${Math.round(travelled)} px, screen drift ${drift.toFixed(1)} px`);
+  expect(travelled).toBeGreaterThan(150);
+  expect(drift).toBeLessThan(4);
 });
