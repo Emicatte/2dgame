@@ -156,7 +156,8 @@ describe("Black Site: map and doors", () => {
   });
 
   it("decontamination vents: offline without power; with it, gas only after the warning, twice as hard on the infected", () => {
-    const { sim, pve, ps } = start(BLACK_SITE);
+    // No ambient infected: only the gas may hurt here.
+    const { sim, pve, ps } = start({ ...BLACK_SITE, ambient: undefined });
     const a = ps[0]!;
     clearEnemies(pve);
     a.protectedUntil = 0;

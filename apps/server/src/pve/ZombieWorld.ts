@@ -351,7 +351,9 @@ export class ZombieWorld {
       if (z.dead) continue;
       let nearest = Number.POSITIVE_INFINITY;
       for (const a of actors) if (a.alive) nearest = Math.min(nearest, Math.hypot(a.x - z.x, a.y - z.y));
-      if (nearest < 1200) z.lastNearTick = tick;
+      // A wave enemy with no path to anyone (shut in behind a door) counts as far away: it is
+      // culled as a straggler instead of holding the wave open forever.
+      if (nearest < 1200 && (z.wave === 0 || this.reachesSquad(z, actors))) z.lastNearTick = tick;
       if (tick >= z.nextThink) {
         this.think(z, actors);
         const every = nearest < 900 ? 2 : nearest < 1800 ? 5 : 10;
@@ -423,6 +425,19 @@ export class ZombieWorld {
 
   private fieldFor(targetId: string, cls: NavClass): FlowField | null {
     return this.targetFields.get(targetId)?.fields[cls] ?? null;
+  }
+
+  /** False only when every player's flow field proves there is no path from the enemy to them. */
+  private reachesSquad(z: Zombie, actors: readonly PveActor[]): boolean {
+    let known = false;
+    for (const a of actors) {
+      if (!a.alive || a.airborne) continue;
+      const f = this.fieldFor(a.id, z.cls);
+      if (!f) return true;
+      known = true;
+      if (fieldDistancePx(this.host.nav(), f, z.x, z.y) < Number.POSITIVE_INFINITY) return true;
+    }
+    return !known;
   }
 
   /** Path distance (px) from the enemy to a player; Infinity if no path. */

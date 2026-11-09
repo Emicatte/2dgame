@@ -397,7 +397,22 @@ describe("waves", () => {
     const a = addPlayer(sim, "alpha");
     place(a, 330, 2050);
     a.protectedUntil = Number.MAX_SAFE_INTEGER;
-    // Enemies locked inside the security compound (gate closed).
+    pve.waves.start({ enemies: { walker: 3 } }, 9, [], 1, squadScale(1), DIFFICULTY.veteran);
+    pve.waves.run!.queue.length = 0;
+    // Enemies locked inside the security compound (gate closed), as if a door had shut on them.
+    for (const x of [2860, 2900, 2940]) pve.zw.spawn("walker", x, 600, { state: "hunt", wave: 9 });
+    expect(pve.waves.remaining).toBe(3);
+    for (let i = 0; i < 20 * 40 && !pve.waves.done; i++) tick(sim);
+    expect(pve.waves.done).toBe(true);
+  });
+
+  it("wave spawns never land behind a closed door, even when the zone is there", () => {
+    const sim = makeSim();
+    const pve = startPve(sim, "outbreak");
+    const a = addPlayer(sim, "alpha");
+    place(a, 330, 2050);
+    a.protectedUntil = Number.MAX_SAFE_INTEGER;
+    // The zone is inside the security compound (gate closed): the director looks elsewhere.
     pve.waves.start(
       { enemies: { walker: 3 } },
       9,
@@ -408,8 +423,8 @@ describe("waves", () => {
     );
     for (let i = 0; i < 20 * 3; i++) tick(sim);
     expect(pve.waves.run?.spawned).toBe(3);
-    for (let i = 0; i < 20 * 40 && !pve.waves.done; i++) tick(sim);
-    expect(pve.waves.done).toBe(true);
+    for (const z of pve.zw.zombies.values())
+      if (z.wave === 9) expect(pve.zw.pathDistance(z, "alpha")).toBeLessThan(Infinity);
   });
 });
 

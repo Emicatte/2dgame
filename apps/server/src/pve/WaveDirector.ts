@@ -1,10 +1,15 @@
 import {
+  buildFlowField,
   cellCenter,
   type DifficultyDef,
+  type FlowField,
   hasLineOfSight,
   MAX_ZOMBIES,
+  NAV_INF,
+  type NavClass,
   type NavGrid,
   navClassFor,
+  nearestWalkable,
   type SquadScale,
   type Vec2,
   type WaveDef,
@@ -93,6 +98,8 @@ export function spawnQueue(counts: Partial<Record<ZombieKind, number>>, rng: () 
 export class WaveDirector {
   run: WaveRun | null = null;
   private fallback: Vec2[] | null = null;
+  /** Per nav class: the cells reachable from the squad, rebuilt once per tick when needed. */
+  private reach = new Map<NavClass, { tick: number; field: FlowField | null }>();
 
   constructor(
     private readonly zw: ZombieWorld,
@@ -106,6 +113,28 @@ export class WaveDirector {
   /** Map changed (or doors opened): recompute the generic spawn candidates lazily. */
   resetCandidates(): void {
     this.fallback = null;
+    this.reach.clear();
+  }
+
+  /**
+   * Cells a body of class `cls` can walk to from a player on the ground (closed mission doors are
+   * solids in the nav grid, so the rooms behind them are not reachable). Null when nobody is on
+   * the ground: then any walkable cell will do.
+   */
+  private reachable(nav: NavGrid, cls: NavClass): FlowField | null {
+    const tick = this.host.tick;
+    const cached = this.reach.get(cls);
+    if (cached?.tick === tick) return cached.field;
+    const sources: number[] = [];
+    for (const a of this.host.actors()) {
+      if (!a.alive || a.airborne) continue;
+      const c = nearestWalkable(nav, a.x, a.y, cls, 4);
+      if (c >= 0) sources.push(c);
+    }
+    const field =
+      sources.length > 0 ? buildFlowField(nav, cls, sources, NAV_INF, cached?.field ?? undefined) : null;
+    this.reach.set(cls, { tick, field });
+    return field;
   }
 
   start(
@@ -210,16 +239,19 @@ export class WaveDirector {
   }
 
   /**
-   * A valid spawn: on a cell the body fits, at least SPAWN_MIN_DIST from every player and out of
-   * their sight unless far away, not on another enemy. Zones first, then generic candidates.
+   * A valid spawn: on a cell the body fits and that leads to the squad (never in a room behind a
+   * closed door), at least SPAWN_MIN_DIST from every player and out of their sight unless far
+   * away, not on another enemy. Zones first, then generic candidates.
    */
   findSpawn(kind: ZombieKind, zones: readonly Vec2[]): Vec2 | null {
     const def = ZOMBIES[kind];
     const nav = this.host.nav();
     const cls = navClassFor(def.radius);
+    const reach = this.reachable(nav, cls);
     const ok = (x: number, y: number, strict: boolean): boolean => {
       const c = Math.floor(x / nav.cell) + Math.floor(y / nav.cell) * nav.cols;
       if (x < 0 || y < 0 || x >= nav.width || y >= nav.height || !walkable(nav, c, cls)) return false;
+      if (reach && reach.dist[c]! >= NAV_INF) return false;
       for (const a of this.host.actors()) {
         if (!a.alive) continue;
         const d = Math.hypot(a.x - x, a.y - y);

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased (branch `dread`)
+
+### Fixed
+- **Outbreak: no more infected spawning behind closed doors.** When the squad stood where every
+  spawn zone was in plain view (e.g. Final Breach, against the core-descent door during the atrium
+  waves), the wave director fell back to the nearest floor out of sight, which could be a room
+  behind a door still shut: those infected could never reach anybody, never counted as
+  stragglers (they were close), and the wave never ended. Spawns now only land on floor with a
+  path to a player, and a wave enemy with no path to anyone is culled after the straggler delay
+  like one left far behind. Regression tests for both (Final Breach and First Contact).
+
 ## 0.6.2 — 2026-11-09 (the crosshair moves with the player)
 
 ### Fixed
