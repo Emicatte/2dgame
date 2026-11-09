@@ -1,25 +1,31 @@
 import {
   type Difficulty,
+  defaultVariant,
   FIRST_CONTACT,
   type GameMode,
   isDifficulty,
   isPveMode,
+  isRoleMode,
   isTeamMode,
   MAPS,
   MATCH_LIMITS,
   type MapId,
   type MatchState,
   MODE_DEFAULTS,
+  MODE_VARIANTS,
+  MODES,
+  mapSupportsMode,
+  mapsForMode,
   missionById,
-  modeNeedsVehicles,
   PVE_SQUAD,
-  PVP_MAP_IDS,
+  ROUND_LIMITS,
   SURVIVAL_MAPS,
   TEAM_ALPHA,
   TEAM_BRAVO,
   TEAM_SIZE,
 } from "@scrapline/shared";
 import type { PveConfig } from "../pve/PveController.ts";
+import { pveOver } from "../pve/pveRoom.ts";
 import type { GameSimulation, ServerPlayer } from "../simulation/GameSimulation.ts";
 
 /**
@@ -43,6 +49,16 @@ export class MatchRules {
   /** Co-op PvE (Outbreak, Survival): every human on team 1, no friendly fire, no practice targets. */
   get pveMode(): boolean {
     return isPveMode(this.state.mode);
+  }
+
+  /** Hide & Seek, Prop Hunt: sides assigned at match start, no practice targets, rounds. */
+  get roleMode(): boolean {
+    return isRoleMode(this.state.mode);
+  }
+
+  /** Practice bots fill a lonely room in this mode (never in co-op or the round modes). */
+  get practiceAllowed(): boolean {
+    return !this.pveMode && !this.roleMode;
   }
 
   humans(): ServerPlayer[] {
@@ -75,6 +91,13 @@ export class MatchRules {
       if (mode === "survival") this.state.pve.mission = "";
       if (!isDifficulty(this.state.pve.difficulty)) this.state.pve.difficulty = "veteran";
       for (const p of this.sim.players.values()) p.team = 1;
+    } else if (isRoleMode(mode)) {
+      this.state.teamSize = 0;
+      this.state.maxPlayers = Math.max(MODES[mode].players.max, humans);
+      const variants = MODE_VARIANTS[mode] ?? [];
+      if (!variants.some((v) => v.id === this.state.round.variant))
+        this.state.round.variant = defaultVariant(mode);
+      for (const p of this.sim.players.values()) p.team = 0;
     } else if (isTeamMode(mode)) {
       const size = Math.min(TEAM_SIZE.max, Math.max(d.teamSize, Math.ceil(humans / 2)));
       this.state.teamSize = size;
@@ -111,6 +134,12 @@ export class MatchRules {
   }
 
   applyCombatRules(): void {
+    if (this.roleMode) {
+      // Sides are teams during the match: seekers never hurt seekers.
+      this.sim.rules = { teams: true, friendlyFire: false };
+      if (this.sim.mode !== this.state.mode) this.sim.setMode(this.state.mode as GameMode);
+      return;
+    }
     if (this.pveMode) {
       // One squad: shots pass through teammates.
       this.sim.rules = { teams: true, friendlyFire: false };
@@ -131,13 +160,106 @@ export class MatchRules {
       return mapId === m.map ? null : m.map;
     }
     if (mode === "survival") return SURVIVAL_MAPS.includes(mapId) ? null : SURVIVAL_MAPS[0]!;
-    // Competitive modes never run on PvE maps.
-    if (MAPS[mapId].pve) {
-      const pvp = PVP_MAP_IDS.find((id) => !modeNeedsVehicles(mode) || MAPS[id].vehicleSpawns?.length);
-      return pvp ?? "industrial";
+    // Every other mode: the map's compatibility metadata (never a PvE map, vehicles for Mayhem,
+    // party data for Prop Hunt). See mapModes.
+    if (mapSupportsMode(MAPS[mapId], mode)) return null;
+    return mapsForMode(mode)[0] ?? "industrial";
+  }
+
+  /** Round modes: variant (validated against MODE_VARIANTS). */
+  setVariant(variant: string): boolean {
+    const list = MODE_VARIANTS[this.state.mode as GameMode];
+    if (!list?.some((v) => v.id === variant)) return false;
+    this.state.round.variant = variant;
+    return true;
+  }
+
+  /** Round modes: number of rounds (stored in the score limit). */
+  setRounds(n: number): boolean {
+    if (!this.roleMode || n < ROUND_LIMITS.min || n > ROUND_LIMITS.max) return false;
+    this.state.killLimit = n;
+    return true;
+  }
+
+  /**
+   * Results: offers the current map and up to two other maps compatible with the mode for the
+   * next match (co-op modes follow their missions: no vote).
+   */
+  openVote(rng: () => number = Math.random): void {
+    for (const ps of this.state.players.values()) ps.vote = "";
+    if (this.pveMode) {
+      this.state.voteMaps = "";
+      return;
     }
-    if (!modeNeedsVehicles(mode) || MAPS[mapId].vehicleSpawns?.length) return null;
-    return PVP_MAP_IDS.find((id) => MAPS[id].vehicleSpawns?.length) ?? null;
+    const current = this.state.mapId as MapId;
+    const others = mapsForMode(this.state.mode).filter((id) => id !== current);
+    for (let i = others.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [others[i], others[j]] = [others[j]!, others[i]!];
+    }
+    this.state.voteMaps = [current, ...others.slice(0, 2)].join(",");
+  }
+
+  vote(id: string, map: MapId): boolean {
+    const ps = this.state.players.get(id);
+    if (!ps || !this.state.voteMaps.split(",").includes(map)) return false;
+    ps.vote = map;
+    return true;
+  }
+
+  /** Closes the vote: the most voted map (the current one wins ties), or null to stay. */
+  closeVote(): MapId | null {
+    const options = this.state.voteMaps.split(",").filter(Boolean) as MapId[];
+    this.state.voteMaps = "";
+    const tally = new Map<string, number>();
+    for (const ps of this.state.players.values()) {
+      if (ps.vote) tally.set(ps.vote, (tally.get(ps.vote) ?? 0) + 1);
+      ps.vote = "";
+    }
+    const current = this.state.mapId as MapId;
+    let best: MapId = current;
+    let bestVotes = tally.get(current) ?? 0;
+    for (const id of options) {
+      const n = tally.get(id) ?? 0;
+      if (n > bestVotes) {
+        best = id;
+        bestVotes = n;
+      }
+    }
+    return best !== current && this.mapAllowed(best) ? best : null;
+  }
+
+  /** Why the host cannot start now (too few humans for the mode), or null. */
+  startBlocker(): string | null {
+    const def = MODES[this.state.mode as GameMode];
+    const humans = this.humans().length;
+    if (def && humans < def.players.min) return `${def.name} needs at least ${def.players.min} players`;
+    return null;
+  }
+
+  /**
+   * Why the running match ends at `tick`, or null. Shared by both room implementations: the
+   * PvE run, the mode controller (ladder won, rounds played, a side left empty), the score limit,
+   * then the clock (a mode may ask for overtime instead).
+   */
+  endReason(tick: number): string | null {
+    if (this.pveMode) {
+      if (pveOver(this.sim)) return "pve";
+      return tick >= this.state.phaseEndTick ? "time" : null;
+    }
+    const byMode = this.sim.modeOver();
+    if (byMode) return byMode;
+    const ctl = this.sim.ctl;
+    if ((!ctl || ctl.usesScoreLimit) && this.sim.leaderScore() >= this.state.killLimit) return "score-limit";
+    if (tick >= this.state.phaseEndTick) {
+      const extra = ctl?.overtime() ?? 0;
+      if (extra > 0) {
+        this.state.phaseEndTick = tick + this.sim.secToTicks(extra);
+        return null;
+      }
+      return "time";
+    }
+    return null;
   }
 
   /** PvE: the run configuration for the next match (null in competitive modes). */
@@ -167,6 +289,7 @@ export class MatchRules {
       return 1;
     }
     if (!this.teamMode) {
+      // Round modes: no side until the match starts (or the next round, for latecomers).
       p.team = 0;
       return 0;
     }
@@ -225,6 +348,11 @@ export class MatchRules {
    * empty (otherwise there is nobody to fight) — in that case teams are rebalanced.
    */
   prepareMatch(): void {
+    if (this.sim.ctl) {
+      this.applyCombatRules();
+      this.sim.ctl.configure({ rounds: this.state.killLimit, variant: this.state.round.variant });
+    }
+    if (this.roleMode) return;
     if (this.pveMode) {
       for (const p of this.sim.players.values()) p.team = 1;
       this.applyCombatRules();

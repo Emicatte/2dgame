@@ -63,6 +63,8 @@ import {
   type WeaponSlotState,
   weaponByIndex,
 } from "@scrapline/shared";
+import { createModeController } from "../modes/index.ts";
+import type { ModeController, ObjectHit } from "../modes/ModeController.ts";
 import {
   emptyPvePlayer,
   type PveConfig,
@@ -345,6 +347,11 @@ export class GameSimulation {
   private vehicleOverride: VehicleSpawnDef[] | null = null;
   /** PvE runtime (Outbreak, Survival); null in competitive modes. */
   pve: PveController | null = null;
+  /**
+   * Mode controller (Gun Game, Hide & Seek, Prop Hunt): every rule of those modes lives there.
+   * null for the modes built into this class (Deathmatch, TDM, Domination, CTF, Mayhem) and PvE.
+   */
+  ctl: ModeController | null = null;
   private events: NetEvent[] = [];
   private readonly history: HistoryFrame[] = [];
   private readonly tickRate: number;
@@ -396,10 +403,36 @@ export class GameSimulation {
     this.resetObjectives();
   }
 
-  /** Mode objectives (Domination points, CTF flags) for the current map. */
+  /** Mode objectives (Domination points, CTF flags) and the mode controller for the current map. */
   setMode(mode: GameMode): void {
     this.mode = mode;
+    this.ctl = createModeController(mode, this);
     this.resetObjectives();
+    this.resetPickups();
+    for (const p of this.players.values()) this.leaveVehicle(p, true);
+    this.resetVehicles();
+  }
+
+  /** Adds a gameplay event to this tick's batch (mode controllers). */
+  pushEvent(ev: NetEvent): void {
+    this.events.push(ev);
+  }
+
+  /** Events of this tick a given viewer may receive (hidden-information modes filter them). */
+  eventsFor(viewerId: string, events: readonly NetEvent[]): NetEvent[] {
+    const ctl = this.ctl;
+    if (!ctl?.hiddenInfo) return events as NetEvent[];
+    return events.filter((e) => ctl.eventVisible(viewerId, e));
+  }
+
+  /** Why the mode ends the match now, or null. */
+  modeOver(): string | null {
+    return this.ctl?.over() ?? null;
+  }
+
+  /** Real position of a player as a client rendering `viewTick` saw it (lag compensation). */
+  playerPoseAt(id: string, viewTick: number): { x: number; y: number; alive: boolean } | null {
+    return this.rewind(viewTick).get(id) ?? null;
   }
 
   resetObjectives(): void {
@@ -426,7 +459,11 @@ export class GameSimulation {
 
   private resetPickups(): void {
     this.pickups.clear();
-    for (const def of this.map.pickups) this.pickups.set(def.id, { def, active: true, respawnTick: 0 });
+    for (const def of this.map.pickups) {
+      // A mode may switch pickup kinds off (Gun Game: no weapon pickups); they never come back.
+      const allowed = this.ctl?.pickupAllowed(def.kind) ?? true;
+      this.pickups.set(def.id, { def, active: allowed, respawnTick: allowed ? 0 : Number.MAX_SAFE_INTEGER });
+    }
   }
 
   addPlayer(init: NewPlayer): ServerPlayer {
@@ -467,6 +504,7 @@ export class GameSimulation {
     if (p) this.leaveVehicle(p, true);
     if (p) this.dropFlag(p);
     this.players.delete(id);
+    if (p) this.ctl?.onLeave(p);
     return p;
   }
 
@@ -530,20 +568,27 @@ export class GameSimulation {
       p.stats = emptyStats();
       p.joinedTick = this.tick;
       p.alive = false;
-      this.spawn(p, true);
     }
+    // PREPARING: the mode assigns sides and rounds before anybody spawns.
+    this.ctl?.reset();
+    for (const p of this.players.values()) this.spawn(p, true);
   }
 
   spawnLater(p: ServerPlayer, delaySec: number): void {
     this.leaveVehicle(p, true);
     p.alive = false;
+    // Round modes: a newcomer watches until the next round.
+    if (this.ctl && !this.ctl.allowJoinSpawn(p)) {
+      p.respawnTick = 0;
+      return;
+    }
     p.respawnTick = this.tick + Math.max(1, this.secToTicks(delaySec));
   }
 
   /** Advances one server tick. `elapsedMs` is real time since the previous tick. */
   step(elapsedMs: number, mode: StepMode): NetEvent[] {
     this.tick += 1;
-    this.events = [];
+    // Events raised between ticks (mode abilities handled as messages) go out with this tick.
     const elapsedSec = clamp(elapsedMs, 0, 1000) / 1000;
     const creditCap = NET.maxInputCreditSeconds * NET.inputRate;
     const tickInputs = elapsedSec * NET.inputRate;
@@ -596,14 +641,17 @@ export class GameSimulation {
       this.updateVehicleLifecycle();
       this.updateObjectives();
       this.pve?.step();
+      this.ctl?.step();
     }
     if (this.pve) for (const e of this.pve.drainEvents()) this.events.push(e);
     this.recordHistory();
-    return this.events;
+    const out = this.events;
+    this.events = [];
+    return out;
   }
 
   private applyInput(p: ServerPlayer, frame: InputFrame, live: boolean): void {
-    const canAct = live && p.alive;
+    const canAct = live && p.alive && !(this.ctl?.frozen(p) ?? false);
     const downed = p.pve.downed;
     const pressed = frame.buttons & ~p.prevButtons;
     p.prevButtons = frame.buttons;
@@ -645,13 +693,17 @@ export class GameSimulation {
       }
       return;
     }
+    const modeBodies = this.ctl?.obstacles(p);
     stepPlayer(p.sim, frame, {
       world: this.world,
       seed: p.seed,
       alive: canAct,
       emit,
-      obstacles: this.groundObstacles(null),
+      obstacles: modeBodies?.length
+        ? [...this.groundObstacles(null), ...modeBodies]
+        : this.groundObstacles(null),
       downed,
+      body: this.ctl?.body(p) ?? null,
     });
     let entered = false;
     if (canAct && !downed && (pressed & BTN.INTERACT) !== 0) entered = this.tryEnter(p);
@@ -725,6 +777,8 @@ export class GameSimulation {
       if (t.id === shooter.id || !t.alive) continue;
       // Without friendly fire, shots pass through teammates (they never block or absorb them).
       if (!canDamage(shooter, t, this.rules)) continue;
+      // Prop Hunt: a disguised player is hit through their object (mode targets below).
+      if (this.ctl && !this.ctl.playerTargetable(t)) continue;
       if (t.vehicle) {
         // Occupants are hit only where they are exposed (window, turret, door), and never by
         // somebody riding in the same vehicle.
@@ -767,6 +821,8 @@ export class GameSimulation {
 
     // PvE enemies, where the shooter saw them (same rewind as players).
     if (this.pve) targets.push(...this.pve.shotTargets((z) => this.zombiePoseAt(z.id, viewTick) ?? z));
+    // Mode objects (Prop Hunt): real objects and disguised players alike.
+    if (this.ctl) targets.push(...this.ctl.shotTargets(shooter, viewTick));
 
     const damageByTarget = new Map<string, { dmg: number; x: number; y: number; precise: boolean }>();
     const angles: number[] = [];
@@ -823,7 +879,12 @@ export class GameSimulation {
 
     if (damageByTarget.size > 0) shooter.stats.shotsHit += 1;
     if (this.pve) this.pve.zw.noise(shot.ox, shot.oy, shotNoise(weapon));
+    const objectHits: ObjectHit[] = [];
     for (const [targetId, hit] of damageByTarget) {
+      if (targetId.startsWith("d:")) {
+        objectHits.push({ id: targetId.slice(2), dmg: hit.dmg, x: hit.x, y: hit.y });
+        continue;
+      }
       if (targetId.startsWith("z:")) {
         this.pve?.damageZombie(targetId.slice(2), hit.dmg, shooter, hit.precise, hit.x, hit.y);
         continue;
@@ -838,6 +899,22 @@ export class GameSimulation {
       const exposure = occupantSeat.get(targetId)?.exposure ?? 1;
       this.damagePlayer(target, hit.dmg * exposure, shooter, weapon.index, hit.x, hit.y);
     }
+    if (objectHits.length > 0) this.ctl?.onObjectHits(shooter, objectHits);
+  }
+
+  /**
+   * Damage from a mode rule (Prop Hunt: a hit on a disguised player's object, a hunter's penalty
+   * for shooting an innocent object). `attacker` null = nobody is credited.
+   */
+  damageFromMode(
+    target: ServerPlayer,
+    raw: number,
+    attacker: ServerPlayer | null,
+    weapon: number,
+    x: number,
+    y: number,
+  ): void {
+    this.damagePlayer(target, raw, attacker, weapon, x, y);
   }
 
   /**
@@ -922,9 +999,12 @@ export class GameSimulation {
     victim.sim.vy = 0;
     victim.stats.deaths += 1;
     victim.stats.streak = 0;
-    victim.respawnTick = this.tick + this.secToTicks(PLAYER.respawnSeconds);
+    const delay = this.ctl ? this.ctl.respawnDelay(victim, killer) : PLAYER.respawnSeconds;
+    // null: out until the next round (the mode respawns them).
+    victim.respawnTick = delay === null ? 0 : this.tick + Math.max(1, this.secToTicks(delay));
     if (!killer) {
       this.events.push({ t: "kill", k: "", v: victim.id, w: weapon, fb: false, st: 0 });
+      this.ctl?.onKill(victim, null, weapon);
       return;
     }
     killer.stats.kills += 1;
@@ -947,6 +1027,7 @@ export class GameSimulation {
       killer.stats.firstBlood = true;
     }
     this.events.push({ t: "kill", k: killer.id, v: victim.id, w: weapon, fb, st: killer.stats.streak });
+    this.ctl?.onKill(victim, killer, weapon);
   }
 
   /**
@@ -989,7 +1070,7 @@ export class GameSimulation {
   }
 
   spawn(p: ServerPlayer, freshMatch: boolean): void {
-    const pos = this.pve ? this.pve.spawnPoint(p) : this.chooseSpawn(p.id);
+    const pos = this.pve ? this.pve.spawnPoint(p) : (this.ctl?.spawnPoint(p) ?? this.chooseSpawn(p.id));
     p.pve.downed = false;
     const keepAim = p.sim.aim;
     p.sim = createPlayerSim(pos.x, pos.y, p.primary);
@@ -999,6 +1080,7 @@ export class GameSimulation {
     p.respawnTick = 0;
     p.protectedUntil = this.tick + this.secToTicks(PLAYER.spawnProtectionSeconds);
     if (!freshMatch) p.stats.streak = 0;
+    this.ctl?.onSpawn(p);
     this.events.push({ t: "spawn", p: p.id, x: Math.round(pos.x), y: Math.round(pos.y) });
   }
 
@@ -1043,6 +1125,8 @@ export class GameSimulation {
 
   private resetVehicles(): void {
     this.vehicles.clear();
+    // Modes without vehicles (Gun Game, the round modes) leave the parked vehicles out.
+    if (this.ctl && !this.ctl.vehicles) return;
     for (const spawn of this.vehicleOverride ?? this.map.vehicleSpawns ?? []) {
       const def = VEHICLES[spawn.kind];
       this.vehicles.set(spawn.id, {
@@ -1709,8 +1793,10 @@ export class GameSimulation {
     }
   }
 
-  /** Ranking: kills desc, deaths asc, earliest to reach the score first. */
+  /** Ranking: kills desc, deaths asc, earliest to reach the score first (modes may rank otherwise). */
   standings(): ServerPlayer[] {
+    const byMode = this.ctl?.standings();
+    if (byMode) return byMode;
     return [...this.players.values()].sort(
       (a, b) =>
         b.stats.kills - a.stats.kills ||
@@ -1728,11 +1814,13 @@ export class GameSimulation {
 
   /** What the score limit is compared with: best team score in team modes, top kills otherwise. */
   leaderScore(): number {
+    if (this.ctl) return this.ctl.leaderScore();
     return this.rules.teams ? Math.max(this.teamScores[1], this.teamScores[2]) : this.leaderKills();
   }
 
   /** Team modes: 1 or 2 for the team ahead, 0 for a draw (or outside team modes). */
   winningTeam(): number {
+    if (this.ctl) return this.ctl.winningTeam();
     if (!this.rules.teams) return 0;
     const [, a, b] = this.teamScores;
     return a > b ? 1 : b > a ? 2 : 0;

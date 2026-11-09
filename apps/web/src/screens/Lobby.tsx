@@ -33,6 +33,9 @@ const SCORE_LIMITS: Record<GameMode, number[]> = {
   dom: [50, 100, 150, 200],
   ctf: [1, 2, 3, 5],
   mayhem: [20, 30, 50, 80],
+  gungame: [],
+  hideseek: [],
+  prophunt: [],
   outbreak: [],
   survival: [],
 };

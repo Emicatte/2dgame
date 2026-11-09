@@ -37,6 +37,11 @@ const envSchema = z.object({
    * Must be shorter than the platform's kill timeout (Render: maxShutdownDelaySeconds).
    */
   SHUTDOWN_DRAIN_SEC: z.coerce.number().int().min(0).max(600).default(0),
+  /**
+   * Mode feature flags (see modeFlags in packages/shared/src/config/modes.ts): "-prophunt" turns a
+   * mode off, "+name" turns one in development on. Empty: every available mode.
+   */
+  MODE_FLAGS: z.string().max(400).default(""),
   /** Exposes /api/debug/* endpoints and verbose metrics. Never enable in production. */
   ENABLE_DEBUG_ROUTES: z
     .enum(["true", "false"])

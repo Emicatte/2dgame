@@ -1,4 +1,6 @@
 import { PLAYER } from "../config/game.ts";
+import type { GameMode } from "../config/modes.ts";
+import { disguiseByName } from "../config/party.ts";
 import { VEHICLES } from "../config/vehicles.ts";
 import { buildCollisionWorld, type CollisionWorld, circleIntersectsRect } from "../sim/collision.ts";
 import type { Vec2 } from "../sim/math.ts";
@@ -6,6 +8,7 @@ import { bodyFits } from "../sim/vehicle.ts";
 import { MILITARY_AIRBASE } from "./airbase.ts";
 import { BLACK_SITE } from "./blacksite.ts";
 import { FINAL_BREACH } from "./breach.ts";
+import { SALVAGE_DEPOT } from "./depot.ts";
 import { DESERT_OUTPOST } from "./desert.ts";
 import { DEAD_DISTRICT } from "./district.ts";
 import { DOWNTOWN } from "./downtown.ts";
@@ -31,6 +34,7 @@ export const MAPS: Record<MapId, MapDef> = {
   downtown: DOWNTOWN,
   mountain: MOUNTAIN_OUTPOST,
   facility: TACTICAL_FACILITY,
+  depot: SALVAGE_DEPOT,
   works: HALVORSEN_WORKS,
   district: DEAD_DISTRICT,
   outskirts: KESSLER_ROAD,
@@ -45,6 +49,31 @@ export const DEFAULT_MAP: MapId = "industrial";
 
 export function isMapId(v: unknown): v is MapId {
   return typeof v === "string" && v in MAPS;
+}
+
+/**
+ * Competitive and party modes a map supports. Explicit when the map lists them (`modes`),
+ * otherwise derived from its features: every PvP map hosts the classic modes; Vehicle Mayhem
+ * needs vehicles; Gun Game and Hide & Seek want a map that is not one of the large vehicle maps;
+ * Prop Hunt needs transformable objects (party data). PvE maps go through their mission lists.
+ */
+export function mapModes(map: MapDef): GameMode[] {
+  if (map.modes) return [...map.modes];
+  if (map.pve) return [];
+  const out: GameMode[] = ["deathmatch", "tdm", "dom", "ctf"];
+  if (map.vehicleSpawns?.length) out.push("mayhem");
+  if (!map.large) out.push("gungame", "hideseek");
+  if (map.party?.props.length) out.push("prophunt");
+  return out;
+}
+
+export function mapSupportsMode(map: MapDef, mode: string): boolean {
+  return (mapModes(map) as string[]).includes(mode);
+}
+
+/** PvP / party maps that support a mode, in map-picker order. */
+export function mapsForMode(mode: string): MapId[] {
+  return PVP_MAP_IDS.filter((id) => mapSupportsMode(MAPS[id], mode));
 }
 
 const worldCache = new Map<MapId, CollisionWorld>();
@@ -188,6 +217,46 @@ export function validateMap(map: MapDef): MapIssue[] {
   });
   for (const v of map.vehicleSpawns ?? []) {
     if (!reachable(v)) issues.push({ map: map.id, problem: `vehicle ${v.id} unreachable on foot` });
+  }
+  const party = map.party;
+  if (party) {
+    const spots: Vec2[] = [...party.seekerPen, ...party.hiderSpawns];
+    spots.forEach((s, i) => {
+      if (!isFreeSpot(world, s, clearance))
+        issues.push({ map: map.id, problem: `party spawn ${i} is blocked` });
+      else if (!reachable(s)) issues.push({ map: map.id, problem: `party spawn ${i} unreachable` });
+    });
+    if (party.seekerPen.length < 1) issues.push({ map: map.id, problem: "no seeker pen" });
+    if (party.hiderSpawns.length < 4) issues.push({ map: map.id, problem: "fewer than 4 hider spawns" });
+    party.props.forEach((p, i) => {
+      const def = disguiseByName(p.kind);
+      if (!def) {
+        issues.push({ map: map.id, problem: `prop ${i} has an unknown kind ${p.kind}` });
+        return;
+      }
+      if (!isFreeSpot(world, p, def.radius))
+        issues.push({ map: map.id, problem: `prop ${i} (${p.kind}) is blocked` });
+      else if (!reachable(p)) issues.push({ map: map.id, problem: `prop ${i} unreachable` });
+      for (let j = 0; j < i; j++) {
+        const q = party.props[j]!;
+        const r = def.radius + (disguiseByName(q.kind)?.radius ?? 0);
+        if ((p.x - q.x) ** 2 + (p.y - q.y) ** 2 < r * r)
+          issues.push({ map: map.id, problem: `props ${j} and ${i} overlap` });
+      }
+      for (const s of spots) {
+        const r = def.radius + PLAYER.radius;
+        if ((p.x - s.x) ** 2 + (p.y - s.y) ** 2 < r * r)
+          issues.push({ map: map.id, problem: `prop ${i} sits on a spawn` });
+      }
+    });
+    party.hideSpots.forEach((h, i) => {
+      if (!isFreeSpot(world, h, PLAYER.radius))
+        issues.push({ map: map.id, problem: `hiding spot ${i} is blocked` });
+    });
+  }
+  for (const m of map.modes ?? []) {
+    if (m === "prophunt" && !party?.props.length)
+      issues.push({ map: map.id, problem: "prophunt without props" });
   }
   return issues;
 }

@@ -16,12 +16,16 @@ import type { GameSimulation, ServerPlayer } from "./GameSimulation.ts";
  * Mirrors one simulated player into its synchronized schema object. Shared by ArenaRoom and the
  * offline client benchmark host (apps/web/src/bench), so both publish exactly the same state.
  */
-export function syncPlayerState(ps: PlayerState, p: ServerPlayer, tick: number): void {
+export function syncPlayerState(ps: PlayerState, p: ServerPlayer, tick: number, sim?: GameSimulation): void {
   const s = p.sim;
   ps.alive = p.alive;
-  ps.x = s.x;
-  ps.y = s.y;
-  ps.aim = s.aim;
+  // Hidden-information modes: a masked player's public pose is the last one the other side was
+  // allowed to see; the real one travels in MatchState.allies to their own side only.
+  const pub = sim?.ctl?.publicPose(p) ?? null;
+  ps.masked = pub !== null;
+  ps.x = pub ? pub.x : s.x;
+  ps.y = pub ? pub.y : s.y;
+  ps.aim = pub ? pub.aim : s.aim;
   ps.hp = p.hp;
   ps.kills = p.stats.kills;
   ps.deaths = p.stats.deaths;

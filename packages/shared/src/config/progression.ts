@@ -27,6 +27,14 @@ export const XP_RULES = {
   maxRewardedReturns: 6,
   perVehicleKill: 40,
   maxRewardedVehicleKills: 5,
+  /**
+   * Gun Game and the round modes: XP for the mode's own play (levels climbed, rounds survived,
+   * hiders found), capped per match so long private sessions cannot farm it.
+   */
+  perGunGameLevel: 15,
+  perRoundSurvived: 40,
+  perFind: 25,
+  maxModeXp: 400,
   maxPerMatch: 2000,
 } as const;
 
@@ -84,6 +92,11 @@ export interface MatchPerformance {
   flagCaptures?: number;
   flagReturns?: number;
   vehicleKills?: number;
+  /** Gun Game: levels climbed (net). */
+  gunGameLevels?: number;
+  /** Round modes: rounds survived as hider / prop, and hiders / props found as seeker. */
+  roundsSurvived?: number;
+  finds?: number;
 }
 
 export interface XpLine {
@@ -115,6 +128,28 @@ export function computeMatchXp(p: MatchPerformance): { total: number; lines: XpL
   if (returns > 0) lines.push({ reason: `${returns} flags returned`, xp: returns * XP_RULES.perFlagReturn });
   const wrecks = Math.min(p.vehicleKills ?? 0, XP_RULES.maxRewardedVehicleKills);
   if (wrecks > 0) lines.push({ reason: `${wrecks} vehicles wrecked`, xp: wrecks * XP_RULES.perVehicleKill });
+  const mode: XpLine[] = [];
+  if ((p.gunGameLevels ?? 0) > 0)
+    mode.push({
+      reason: `${p.gunGameLevels} weapon levels`,
+      xp: (p.gunGameLevels ?? 0) * XP_RULES.perGunGameLevel,
+    });
+  if ((p.roundsSurvived ?? 0) > 0)
+    mode.push({
+      reason: `${p.roundsSurvived} rounds survived`,
+      xp: (p.roundsSurvived ?? 0) * XP_RULES.perRoundSurvived,
+    });
+  if ((p.finds ?? 0) > 0) mode.push({ reason: `${p.finds} found`, xp: (p.finds ?? 0) * XP_RULES.perFind });
+  // Mode XP is earned only in a completed match and capped (a long private session cannot farm it).
+  if (p.completed) {
+    let left: number = XP_RULES.maxModeXp;
+    for (const l of mode) {
+      const xp = Math.min(l.xp, left);
+      if (xp <= 0) break;
+      lines.push({ reason: l.reason, xp });
+      left -= xp;
+    }
+  }
   if (p.firstBlood) lines.push({ reason: "First blood", xp: XP_RULES.firstBlood });
   if (p.bestStreak >= 5) lines.push({ reason: "Streak x5", xp: XP_RULES.streak5 });
   else if (p.bestStreak >= 3) lines.push({ reason: "Streak x3", xp: XP_RULES.streak3 });

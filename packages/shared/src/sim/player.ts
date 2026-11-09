@@ -101,6 +101,11 @@ export interface StepContext {
    * weapons until revived. Synchronized (PlayerState.downed) so the prediction applies it too.
    */
   downed?: boolean;
+  /**
+   * Prop Hunt: the player moves as an object (collision radius, speed factor). Synchronized in the
+   * owner's ghost (AllyState.k) so the prediction uses the same body.
+   */
+  body?: { radius: number; speed: number } | null;
 }
 
 export function emptySlot(): WeaponSlotState {
@@ -163,7 +168,7 @@ export function stepPlayer(s: PlayerSim, input: InputFrame, ctx: StepContext): v
     s.trigger = false;
     return;
   }
-  stepMovement(s, input, ctx, STEP_DT);
+  stepMovement(s, input, ctx, STEP_DT, ctx.body?.speed ?? 1);
   stepWeapons(s, input, ctx, STEP_DT);
 }
 
@@ -214,15 +219,16 @@ function stepMovement(s: PlayerSim, input: InputFrame, ctx: StepContext, dt: num
   }
   if (s.dashCd > 0) s.dashCd -= 1;
 
+  const radius = ctx.body?.radius ?? PLAYER.radius;
   if (s.vx !== 0 || s.vy !== 0) {
-    const r = resolveCircle(ctx.world, s.x + s.vx * dt, s.y + s.vy * dt, PLAYER.radius);
+    const r = resolveCircle(ctx.world, s.x + s.vx * dt, s.y + s.vy * dt, radius);
     s.x = r.x;
     s.y = r.y;
     if (r.hitX) s.vx = 0;
     if (r.hitY) s.vy = 0;
   }
   if (ctx.obstacles && ctx.obstacles.length > 0) {
-    const out = pushOutOfCircles(s.x, s.y, PLAYER.radius, ctx.obstacles);
+    const out = pushOutOfCircles(s.x, s.y, radius, ctx.obstacles);
     if (out.x !== s.x || out.y !== s.y) {
       // Slide along the body: drop the velocity component pointing into it.
       const nx = out.x - s.x;
@@ -233,7 +239,7 @@ function stepMovement(s: PlayerSim, input: InputFrame, ctx: StepContext, dt: num
         s.vx -= (nx / len) * vn;
         s.vy -= (ny / len) * vn;
       }
-      const r = resolveCircle(ctx.world, out.x, out.y, PLAYER.radius);
+      const r = resolveCircle(ctx.world, out.x, out.y, radius);
       s.x = r.x;
       s.y = r.y;
     }

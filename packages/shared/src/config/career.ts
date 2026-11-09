@@ -22,7 +22,42 @@ export interface MatchFacts {
   flagReturns: number;
   /** Crewed enemy vehicles wrecked. */
   vehicleKills: number;
+  /** Mode-specific counters (MODE_STAT_KEYS). */
+  extra?: Record<string, number>;
 }
+
+/**
+ * Mode-specific career counters. Stored in the career JSON (no schema change): unknown keys are
+ * dropped on read, values are clamped to non-negative integers.
+ */
+export const MODE_STAT_KEYS = [
+  /** Gun Game: matches won, ladder levels climbed. */
+  "gungameWins",
+  "gungameLevels",
+  /** Hide & Seek: seconds survived hidden, rounds survived, hiders found. */
+  "hideSeconds",
+  "hideRounds",
+  "hidersFound",
+  /** Prop Hunt: matches won, rounds survived as a prop, props found. */
+  "prophuntWins",
+  "propRounds",
+  "propsFound",
+  /** Matches won in vehicle modes. */
+  "vehicleWins",
+] as const;
+export type ModeStatKey = (typeof MODE_STAT_KEYS)[number];
+
+export const MODE_STAT_LABELS: Record<ModeStatKey, string> = {
+  gungameWins: "Gun Game wins",
+  gungameLevels: "Gun Game levels climbed",
+  hideSeconds: "Seconds hidden (Hide & Seek)",
+  hideRounds: "Hide & Seek rounds survived",
+  hidersFound: "Hiders found",
+  prophuntWins: "Prop Hunt wins",
+  propRounds: "Prop Hunt rounds survived",
+  propsFound: "Props found",
+  vehicleWins: "Vehicle mode wins",
+};
 
 export interface ModeStats {
   played: number;
@@ -44,6 +79,8 @@ export interface CareerStats {
   flagCaptures: number;
   flagReturns: number;
   vehicleKills: number;
+  /** Mode-specific counters (MODE_STAT_KEYS). */
+  extra: Partial<Record<ModeStatKey, number>>;
   challenges: ChallengeState;
 }
 
@@ -74,6 +111,20 @@ export const CHALLENGE_POOL: readonly ChallengeDef[] = [
     target: 1,
     xp: 100,
     count: (f) => (f.completed && f.mode === "mayhem" ? 1 : 0),
+  },
+  {
+    id: "partyround",
+    text: "Survive a round of Hide & Seek or Prop Hunt",
+    target: 1,
+    xp: 120,
+    count: (f) => (f.extra?.hideRounds ?? 0) + (f.extra?.propRounds ?? 0),
+  },
+  {
+    id: "ggladder",
+    text: "Climb 8 levels in Gun Game",
+    target: 8,
+    xp: 120,
+    count: (f) => f.extra?.gungameLevels ?? 0,
   },
   {
     id: "teamwin",
@@ -108,6 +159,7 @@ export function emptyCareer(day = ""): CareerStats {
     flagCaptures: 0,
     flagReturns: 0,
     vehicleKills: 0,
+    extra: {},
     challenges: { day, progress: {}, done: [] },
   };
 }
@@ -135,6 +187,12 @@ export function normalizeCareer(raw: unknown): CareerStats {
   c.flagCaptures = num(r.flagCaptures);
   c.flagReturns = num(r.flagReturns);
   c.vehicleKills = num(r.vehicleKills);
+  if (r.extra && typeof r.extra === "object") {
+    for (const k of MODE_STAT_KEYS) {
+      const v = num((r.extra as Record<string, unknown>)[k]);
+      if (v > 0) c.extra[k] = v;
+    }
+  }
   const ch = r.challenges as Record<string, unknown> | undefined;
   if (ch && typeof ch === "object" && typeof ch.day === "string") {
     c.challenges.day = ch.day.slice(0, 10);
@@ -200,6 +258,12 @@ export function applyMatchToCareer(
   c.flagCaptures += f.flagCaptures;
   c.flagReturns += f.flagReturns;
   c.vehicleKills += f.vehicleKills;
+  if (f.completed && f.extra) {
+    for (const k of MODE_STAT_KEYS) {
+      const add = num(f.extra[k]);
+      if (add > 0) c.extra[k] = (c.extra[k] ?? 0) + add;
+    }
+  }
   const rewards: XpLine[] = [];
   for (const d of dailyChallenges(day)) {
     if (c.challenges.done.includes(d.id)) continue;

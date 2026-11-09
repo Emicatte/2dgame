@@ -6,6 +6,7 @@ import {
   unlocksForLevel,
   type XpLine,
 } from "@scrapline/shared";
+import type { ModeFacts } from "../modes/ModeController.ts";
 import type { MatchPlayerResult } from "../persistence/repository.ts";
 import type { ServerPlayer } from "../simulation/GameSimulation.ts";
 
@@ -16,6 +17,8 @@ export interface ComputedResult {
   won: boolean;
   xp: ReturnType<typeof computeMatchXp>;
   persist: MatchPlayerResult;
+  /** Mode points (round modes) / ladder level (Gun Game), when the mode has a controller. */
+  points?: number;
 }
 
 /**
@@ -30,6 +33,8 @@ export function computeResults(
     completed: boolean;
     /** Team modes: the winning team (0 = draw). Undefined in free-for-all. */
     winnerTeam?: number;
+    /** Mode controller facts (Gun Game levels, rounds survived, finds, career counters). */
+    facts?: (p: ServerPlayer) => ModeFacts;
   },
 ): ComputedResult[] {
   const count = standings.length;
@@ -38,6 +43,7 @@ export function computeResults(
     const placement = i + 1;
     const participated = p.stats.activeTicks >= opts.minParticipationTicks;
     const completed = opts.completed && participated;
+    const facts = opts.facts?.(p);
     const won = teamMode
       ? completed && (opts.winnerTeam ?? 0) > 0 && p.team === opts.winnerTeam
       : completed && placement === 1 && count >= 2;
@@ -55,13 +61,18 @@ export function computeResults(
       flagCaptures: p.stats.flagCaptures,
       flagReturns: p.stats.returns,
       vehicleKills: p.stats.vehicleKills,
+      ...(facts
+        ? { gunGameLevels: facts.gunGameLevels, roundsSurvived: facts.roundsSurvived, finds: facts.finds }
+        : {}),
     });
+    const extra = facts && completed ? { ...facts.extra } : undefined;
     return {
       player: p,
       placement,
       completed,
       won,
       xp,
+      ...(facts ? { points: facts.points } : {}),
       persist: {
         playerId: p.playerId,
         kills: p.stats.kills,
@@ -77,6 +88,7 @@ export function computeResults(
         flagCaptures: p.stats.flagCaptures,
         flagReturns: p.stats.returns,
         vehicleKills: p.stats.vehicleKills,
+        ...(extra && Object.keys(extra).length > 0 ? { extra } : {}),
       },
     };
   });
@@ -91,6 +103,7 @@ export function resultRows(results: readonly ComputedResult[]): ResultRow[] {
     deaths: r.player.stats.deaths,
     placement: r.placement,
     accuracy: r.player.stats.shotsFired > 0 ? r.player.stats.shotsHit / r.player.stats.shotsFired : null,
+    ...(r.points !== undefined ? { points: r.points } : {}),
   }));
 }
 
