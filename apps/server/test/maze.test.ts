@@ -261,6 +261,32 @@ describe("Parkour, Escape Room, Night Hunt", () => {
     expect(hit).toBe(true);
   });
 
+  it("parkour: SPACE jumps (no dash burst); jumps clear low lasers, not blinking gates", () => {
+    const { sim, maze } = setupMode("parkour-101" as MapId, ["a"], "parkour");
+    const a = sim.players.get("a")!;
+    ticks(sim, 2);
+    hold(sim, "a", { buttons: BTN.DASH, mx: 1 });
+    ticks(sim, 1);
+    expect(a.sim.dash).toBeGreaterThan(0);
+    expect(a.sim.dashDx).toBe(0);
+    expect(Math.hypot(a.sim.vx, a.sim.vy)).toBeLessThan(400);
+    const low = maze.lasers!.find((l) => l.low)!;
+    put(a, low.x + low.w / 2, low.y + low.h / 2);
+    a.sim.dash = 5;
+    expect(announced(ticks(sim, 1), "laser")).toBe(false);
+    put(a, low.x + low.w / 2, low.y + low.h / 2);
+    a.sim.dash = 0;
+    expect(announced(ticks(sim, 1), "laser")).toBe(true);
+    const gate = maze.lasers!.find((l) => !l.low)!;
+    let hit = false;
+    for (let i = 0; i < sec(4) && !hit; i++) {
+      put(a, gate.x + gate.w / 2, gate.y + gate.h / 2);
+      a.sim.dash = 5;
+      hit = announced(ticks(sim, 1), "laser");
+    }
+    expect(hit).toBe(true);
+  });
+
   it("escape: plates need two players at once; the code opens only in order", () => {
     const { sim, state, maze } = setupMode("escape-202" as MapId, ["a", "b"], "escape");
     const [a, b] = [sim.players.get("a")!, sim.players.get("b")!];

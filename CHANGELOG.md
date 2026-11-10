@@ -2,6 +2,14 @@
 
 ## 0.9.0 — unreleased (branch `platform-home`)
 
+### Changed (Parkour, a real parkour)
+- SPACE / Shift **jump** on Parkour courses (shared sim, predicted): about 0.6 s in the air at
+  a little more than walking speed; airborne players clear gaps, spike strips and low lasers.
+- New course: four lanes, harder lane by lane: gaps, double gaps, narrow bridges, spike strips,
+  low lasers (jump), blinking laser gates and moving bars (time them), slaloms; a checkpoint at
+  the start and middle of every lane.
+- Spike traps are drawn on their real hitbox (they were drawn as a smaller square).
+
 ### Added (Puzzle Race, Hide & Seek Closing zone, graphics)
 - **Puzzle Race** (Challenge, 1–8): four lettered switches in a maze with every gate open; press
   them in the order of the code before the others (a wrong switch resets your code); first to

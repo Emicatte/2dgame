@@ -21,6 +21,7 @@ import {
   encodeInput,
   type HitTarget,
   hashString,
+  hasJumps,
   type InputFrame,
   inSector,
   isDifficulty,
@@ -28,6 +29,7 @@ import {
   isRoleMode,
   isTeamMode,
   isVehicleKind,
+  jumpArc,
   type LightDef,
   lerpAngle,
   MAPS,
@@ -741,6 +743,7 @@ export class ArenaScene extends Phaser.Scene {
       this.pickupViews.set(p.id, { id: p.id, base, icon, glow, x: p.x, y: p.y, active: true });
     }
     this.predictor?.setWorld(collisionWorldFor(map), airWorldFor(map));
+    if (this.predictor) this.predictor.jump = hasJumps(map);
     for (const v of this.vehicleViews.values()) v.destroy();
     this.vehicleViews.clear();
     this.vbuffer.clear();
@@ -835,6 +838,7 @@ export class ArenaScene extends Phaser.Scene {
       hashString(room.sessionId),
       airWorldFor(this.map),
     );
+    this.predictor.jump = hasJumps(this.map);
     this.netMetrics = new NetMetrics();
     const onState = (state: MatchState) => this.onPatch(state);
     const listener = room.onStateChange(onState);
@@ -1590,6 +1594,12 @@ export class ArenaScene extends Phaser.Scene {
       const local = meView ? { x: meView.root.x, y: meView.root.y, aim: this.predictor.sim.aim } : null;
       this.modes.update(state, self, renderTick, state.tick, dt / 1000, local, this.cameras.main, this.map);
       this.br.update(state, this.map, this.views, self, this.predictor.sim.alt, renderTick);
+      // Parkour: players grow with the height of their jump.
+      if (this.predictor.jump)
+        for (const [id, v] of this.views) {
+          const steps = id === self ? this.predictor.sim.dash : (state.players.get(id)?.hop ?? 0);
+          v.root.setScale(1 + 0.45 * jumpArc(steps));
+        }
     }
     if (this.pve.active) {
       const me = this.views.get(this.room.sessionId);

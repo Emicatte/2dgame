@@ -71,6 +71,8 @@ export class Predictor {
   downed = false;
   /** Prop Hunt: the object the local player moves as (radius, speed), as last confirmed. */
   body: { radius: number; speed: number } | null = null;
+  /** Parkour maps: the dash key jumps. */
+  jump = false;
   private airWorld: CollisionWorld;
   private pending: InputFrame[] = [];
   private seq = 0;
@@ -118,6 +120,7 @@ export class Predictor {
         obstacles: env.obstacles,
         downed: this.downed,
         body: this.body,
+        jump: this.jump,
       });
       return;
     }

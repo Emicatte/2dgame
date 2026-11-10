@@ -25,6 +25,11 @@ export const MAZE_SIZES: Record<MazeSize, { name: string; cells: number; traps: 
 };
 
 /** Cell pitch and wall thickness (px). The corridor is CELL - WALL wide. */
+/** Parkour courses: the dash key jumps (shared sim `StepContext.jump`). */
+export function hasJumps(map: MapDef): boolean {
+  return !!map.maze?.pits;
+}
+
 export const MAZE_CELL = 192;
 export const MAZE_WALL = 28;
 
@@ -59,6 +64,24 @@ export interface MazeSweeper {
   phase: number;
 }
 
+/**
+ * Parkour laser across a lane: `low` ones are always on and are jumped over; the others are full
+ * beams that blink (`onSec` / `offSec`) and must be timed.
+ */
+export interface MazeLaser extends Rect {
+  id: string;
+  low: boolean;
+  onSec: number;
+  offSec: number;
+  phase: number;
+}
+
+export function laserLive(l: MazeLaser, sec: number): boolean {
+  if (l.low) return true;
+  const c = l.onSec + l.offSec;
+  return (((sec + l.phase) % c) + c) % c < l.onSec;
+}
+
 /** Where a sweeper is at `sec` seconds since the start. */
 export function sweeperAt(s: MazeSweeper, sec: number): Rect {
   const k = 0.5 - 0.5 * Math.cos(((sec + s.phase) / s.periodSec) * Math.PI * 2);
@@ -91,6 +114,7 @@ export interface MazeDef {
   /** Parkour: gaps to dash over (walking in = a fall) and moving bars. */
   pits?: (Rect & { id: string })[];
   sweepers?: MazeSweeper[];
+  lasers?: MazeLaser[];
   /** Escape Room: the code clue shown on a terminal. */
   clue?: Vec2 & { text: string };
 }

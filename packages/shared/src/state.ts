@@ -75,6 +75,8 @@ export const PlayerState = schema(
     vx: t.float32().default(0).view(),
     vy: t.float32().default(0).view(),
     dash: t.uint8().default(0).view(),
+    /** Parkour jump steps left (public, so everyone sees the jump; 0 on the ground). */
+    hop: t.uint8().default(0),
     dashCd: t.uint8().default(0).view(),
     dashDx: t.float32().default(0).view(),
     dashDy: t.float32().default(0).view(),

@@ -51,6 +51,9 @@ export function syncPlayerState(ps: PlayerState, p: ServerPlayer, tick: number, 
   ps.vx = s.vx;
   ps.vy = s.vy;
   ps.dash = s.dash;
+  // A jump is a dash without direction (see JUMP in the shared sim).
+  const hop = s.dashDx === 0 && s.dashDy === 0 ? s.dash : 0;
+  if (ps.hop !== hop) ps.hop = hop;
   ps.dashCd = s.dashCd;
   ps.dashDx = s.dashDx;
   ps.dashDy = s.dashDy;

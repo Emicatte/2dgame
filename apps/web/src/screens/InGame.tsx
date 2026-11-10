@@ -556,7 +556,7 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
                 )}
               </div>
               <div className={`dash-meter ${hud.dashProgress >= 1 ? "is-ready" : ""}`}>
-                <span>Dash</span>
+                <span>{s.mode === "parkour" ? "Jump" : "Dash"}</span>
                 <span className="dash-meter__bar">
                   <span
                     className="dash-meter__fill"
