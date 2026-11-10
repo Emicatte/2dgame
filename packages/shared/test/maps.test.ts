@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CHALLENGE_DEFAULT_IDS,
   collisionWorldFor,
   isFreeSpot,
   MAP_IDS,
@@ -24,6 +25,7 @@ describe("maps", () => {
       "breach",
       "island",
       ...MAZE_DEFAULT_IDS,
+      ...CHALLENGE_DEFAULT_IDS,
     ]);
     expect(MAPS.works.pve).toBe(true);
     expect(MAPS.district.pve).toBe(true);
@@ -104,6 +106,8 @@ describe("maps", () => {
     it("offers Vehicle Mayhem only on vehicle maps and Gun Game / Hide & Seek off the large maps", () => {
       for (const id of PVP_MAP_IDS) {
         const m = MAPS[id];
+        // The Battle Royale island has vehicles but its own mode list.
+        if (id === "island") continue;
         expect(mapSupportsMode(m, "mayhem")).toBe(!!m.vehicleSpawns?.length);
         if (m.large) expect(mapSupportsMode(m, "gungame")).toBe(false);
       }

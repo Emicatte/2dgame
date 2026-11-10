@@ -8,6 +8,7 @@ import { bodyFits } from "../sim/vehicle.ts";
 import { MILITARY_AIRBASE } from "./airbase.ts";
 import { BLACK_SITE } from "./blacksite.ts";
 import { FINAL_BREACH } from "./breach.ts";
+import { buildChallenge, CHALLENGE_DEFAULT_IDS, parseChallengeId } from "./challenges.ts";
 import { withChests } from "./chests.ts";
 import { SALVAGE_DEPOT } from "./depot.ts";
 import { DESERT_OUTPOST } from "./desert.ts";
@@ -27,11 +28,15 @@ import { type MapDef, type MapId, SHOOT_THROUGH, TALL_SOLIDS } from "./types.ts"
 import { URBAN_WARFARE } from "./urban.ts";
 import { HALVORSEN_WORKS } from "./works.ts";
 
+export * from "./challenges.ts";
 export * from "./island.ts";
 export * from "./maze.ts";
 export * from "./types.ts";
 
-const BASE_MAPS: Record<Exclude<MapId, `maze-${string}`>, MapDef> = {
+const BASE_MAPS: Record<
+  Exclude<MapId, `maze-${string}` | `parkour-${string}` | `escape-${string}`>,
+  MapDef
+> = {
   industrial: INDUSTRIAL_ARENA,
   neon: NEON_DISTRICT,
   desert: DESERT_OUTPOST,
@@ -58,6 +63,10 @@ const LISTED: Record<string, MapDef> = Object.fromEntries([
     const p = parseMazeId(id)!;
     return [id, buildMaze(p.size, p.seed)];
   }),
+  ...CHALLENGE_DEFAULT_IDS.map((id) => {
+    const p = parseChallengeId(id)!;
+    return [id, buildChallenge(p.kind, p.seed)];
+  }),
 ]);
 const generated = new Map<string, MapDef>();
 
@@ -72,14 +81,18 @@ export const MAPS: Record<MapId, MapDef> = new Proxy(LISTED, {
     const hit = target[key] ?? generated.get(key);
     if (hit) return hit;
     const maze = parseMazeId(key);
-    if (!maze) return undefined;
-    const map = buildMaze(maze.size, maze.seed);
+    const ch = maze ? null : parseChallengeId(key);
+    if (!maze && !ch) return undefined;
+    const map = maze ? buildMaze(maze.size, maze.seed) : buildChallenge(ch!.kind, ch!.seed);
     if (generated.size > 64) generated.clear();
     generated.set(key, map);
     return map;
   },
   has(target, key) {
-    return typeof key === "string" && (key in target || parseMazeId(key) !== null);
+    return (
+      typeof key === "string" &&
+      (key in target || parseMazeId(key) !== null || parseChallengeId(key) !== null)
+    );
   },
 }) as Record<MapId, MapDef>;
 
@@ -104,8 +117,8 @@ export function mapModes(map: MapDef): GameMode[] {
   const out: GameMode[] = ["deathmatch", "tdm", "dom", "ctf", "chaos", "bounty"];
   if (map.vehicleSpawns?.length) out.push("mayhem");
   // Pursuit and Convoy need ground vehicles to drive.
-  if (map.vehicleSpawns?.some((v) => v.kind !== "heli")) out.push("pursuit", "convoy");
-  if (!map.large) out.push("gungame", "hideseek", "infection", "sabotage");
+  if (map.vehicleSpawns?.some((v) => v.kind !== "heli")) out.push("pursuit", "convoy", "racing");
+  if (!map.large) out.push("gungame", "hideseek", "infection", "sabotage", "hotpotato");
   if (map.party?.props.length) out.push("prophunt");
   return out;
 }

@@ -33,8 +33,38 @@ export const MAZE_TRAP = { offSec: 2, onSec: 1.2 } as const;
 
 export interface MazeGate extends DoorDef {
   color: number;
-  /** What opens it: a key to carry to the gate, or a switch to press (interact). */
-  opener: { kind: "key" | "switch"; x: number; y: number };
+  /**
+   * What opens it: a key to carry to the gate, a switch to press (interact), pressure plates that
+   * must all be held at once (co-op), or switches pressed in the order of a code (`order`).
+   */
+  opener: {
+    kind: "key" | "switch" | "plates" | "sequence";
+    x: number;
+    y: number;
+    points?: Vec2[];
+    order?: number[];
+  };
+}
+
+/** A moving bar (Parkour): it slides between two centres; touching it sends you back. */
+export interface MazeSweeper {
+  id: string;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  w: number;
+  h: number;
+  periodSec: number;
+  phase: number;
+}
+
+/** Where a sweeper is at `sec` seconds since the start. */
+export function sweeperAt(s: MazeSweeper, sec: number): Rect {
+  const k = 0.5 - 0.5 * Math.cos(((sec + s.phase) / s.periodSec) * Math.PI * 2);
+  const cx = s.x0 + (s.x1 - s.x0) * k;
+  const cy = s.y0 + (s.y1 - s.y0) * k;
+  return { x: cx - s.w / 2, y: cy - s.h / 2, w: s.w, h: s.h };
 }
 
 export interface MazeTrap extends Rect {
@@ -58,6 +88,11 @@ export interface MazeDef {
   route: number;
   /** Horror Maze: where the creature starts (a far dead end on the start side of the first gate). */
   lair: Vec2;
+  /** Parkour: gaps to dash over (walking in = a fall) and moving bars. */
+  pits?: (Rect & { id: string })[];
+  sweepers?: MazeSweeper[];
+  /** Escape Room: the code clue shown on a terminal. */
+  clue?: Vec2 & { text: string };
 }
 
 export function mazeId(size: MazeSize, seed: number): MapId {
@@ -77,11 +112,15 @@ export function randomMazeId(size: MazeSize): MapId {
   return mazeId(size, 1 + Math.floor(Math.random() * 999_999));
 }
 
-/** Same maze size (the lobby shows one card per size whatever the seed). */
+/** Same generated family (maze size, parkour, escape): the lobby shows one card per family. */
 export function sameMapFamily(a: string, b: string): boolean {
-  const pa = parseMazeId(a);
-  const pb = parseMazeId(b);
-  return pa && pb ? pa.size === pb.size : a === b;
+  const fam = (id: string) => {
+    const m = parseMazeId(id);
+    if (m) return `maze-${m.size}`;
+    const c = /^(parkour|escape)-\d+$/.exec(id);
+    return c ? c[1]! : id;
+  };
+  return fam(a) === fam(b);
 }
 
 // ------------------------------------------------------------------ generation
@@ -340,7 +379,7 @@ export function buildMaze(size: MazeSize, seed: number): MapDef {
     lights,
     spawns,
     pickups: [],
-    modes: ["maze"],
+    modes: ["maze", "nighthunt"],
     players: { min: 1, max: 8 },
     maze,
   };

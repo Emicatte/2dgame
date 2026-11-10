@@ -94,98 +94,19 @@ export const EXPERIENCE_CATEGORY_OF: Record<GameMode, ExperienceCategory> = {
   convoy: "racing",
   maze: "challenge",
   battleroyale: "action",
+  parkour: "challenge",
+  escape: "adventure",
+  nighthunt: "horror",
+  hotpotato: "party",
+  freeroam: "social",
+  racing: "racing",
 };
 
 /** Built in later phases of the platform roadmap (PROGRESS.md). Never startable. */
 export const PLANNED_EXPERIENCES: readonly Omit<
   ExperienceDef,
   "thumbnail" | "maps" | "launch" | "quick" | "durationLabel" | "progression"
->[] = [
-  {
-    id: "haunted",
-    name: "Haunted Facility",
-    category: "horror",
-    blurb: "Restore the power, find the keys, reach the exit. Something walks the halls.",
-    players: { min: 1, max: 4 },
-    gameplay: "noncombat",
-    rules: ["No weapons", "Objectives in the dark", "Avoid the creature"],
-    systems: ["ai", "objectives"],
-    status: "planned",
-    needs: "2D lighting, positional audio, the monster AI and the tension director",
-  },
-  {
-    id: "nighthunt",
-    name: "Night Hunt",
-    category: "horror",
-    blurb: "One player is the monster. Everyone else hides, runs and completes objectives.",
-    players: { min: 2, max: 8 },
-    gameplay: "noncombat",
-    rules: ["One monster with its own abilities", "Survivors cooperate", "Objectives to escape"],
-    systems: ["roles", "objectives", "secrecy"],
-    status: "planned",
-    needs: "The horror lighting and audio, monster abilities",
-  },
-  {
-    id: "parkour",
-    name: "Parkour Challenge",
-    category: "challenge",
-    blurb: "Obstacle courses with dashes, moving hazards and checkpoints against the clock.",
-    players: { min: 1, max: 8 },
-    gameplay: "noncombat",
-    rules: ["Checkpoints", "Moving obstacles", "Timer and records"],
-    systems: ["objectives"],
-    status: "planned",
-    needs: "Courses, moving hazards and the time-trial board",
-  },
-  {
-    id: "escaperoom",
-    name: "Escape Room",
-    category: "adventure",
-    blurb: "Codes, mechanisms and shared puzzles. Get everyone out together.",
-    players: { min: 2, max: 4 },
-    gameplay: "noncombat",
-    rules: ["Puzzles need teamwork", "No weapons", "One exit"],
-    systems: ["objectives"],
-    status: "planned",
-    needs: "The shared interaction system and puzzle content",
-  },
-  {
-    id: "racing",
-    name: "Vehicle Racing",
-    category: "racing",
-    blurb: "Laps, checkpoints and bumpers on dedicated circuits.",
-    players: { min: 2, max: 8 },
-    gameplay: "noncombat",
-    rules: ["Countdown start", "Laps and checkpoints", "Lap records"],
-    systems: ["vehicles", "objectives"],
-    status: "planned",
-    needs: "Circuits and lap timing",
-  },
-  {
-    id: "hotpotato",
-    name: "Hot Potato",
-    category: "party",
-    blurb: "Pass the ticking charge before it goes off.",
-    players: { min: 3, max: 8 },
-    gameplay: "noncombat",
-    rules: ["Tag to pass it on", "Last one standing wins"],
-    systems: ["rounds"],
-    status: "planned",
-    needs: "A tag interaction",
-  },
-  {
-    id: "freeroam",
-    name: "Free Roam",
-    category: "social",
-    blurb: "A big map with no objectives: drive, explore and meet friends.",
-    players: { min: 1, max: 8 },
-    gameplay: "noncombat",
-    rules: ["No PvP", "Vehicles everywhere", "Minigames to find"],
-    systems: ["vehicles"],
-    status: "planned",
-    needs: "A hub map and PvP-off rules",
-  },
-];
+>[] = [];
 
 function systemsOf(mode: GameMode): ExperienceSystem[] {
   const def = MODES[mode];
@@ -229,6 +150,12 @@ const CARD_MAP: Partial<Record<GameMode, MapId>> = {
   convoy: "urban",
   maze: "maze-m-4721",
   battleroyale: "island",
+  parkour: "parkour-101",
+  escape: "escape-202",
+  nighthunt: "maze-m-4721",
+  hotpotato: "motel",
+  freeroam: "island",
+  racing: "airbase",
 };
 
 function fromMode(mode: GameMode): ExperienceDef {
@@ -281,6 +208,18 @@ function fromOperation(op: (typeof COOP_OPERATIONS)[number]): ExperienceDef {
   };
 }
 
+/** Haunted Facility: the Escape Room's dark variant, with a creature in the rooms. */
+const HAUNTED: ExperienceDef = {
+  ...fromMode("escape"),
+  id: "haunted",
+  name: "Haunted Facility",
+  category: "horror",
+  blurb: "The escape rooms with the lights out and something walking the halls. Puzzles first, then run.",
+  rules: ["Same puzzles: key, plates, code", "No weapons: avoid it", "Caught: back to your checkpoint"],
+  launch: { mode: "escape", variant: "horror" },
+  systems: ["ai", "objectives"],
+};
+
 /** Horror Maze: the maze mode's horror variant, with a card of its own in Horror. */
 const HORROR_MAZE: ExperienceDef = {
   ...fromMode("maze"),
@@ -301,6 +240,7 @@ const HORROR_MAZE: ExperienceDef = {
 export const EXPERIENCES: readonly ExperienceDef[] = [
   ...GAME_MODES.map(fromMode),
   HORROR_MAZE,
+  HAUNTED,
   ...COOP_OPERATIONS.map(fromOperation),
   ...PLANNED_EXPERIENCES.map(
     (p): ExperienceDef => ({

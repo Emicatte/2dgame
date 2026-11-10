@@ -581,7 +581,8 @@ function DiscoverView({
       <header className="view-head">
         <h2>Discover</h2>
         <p>
-          {ready} experiences to play now, {CATALOG.length - ready} on the roadmap. Not everything here is
+          {ready} experiences to play now
+          {CATALOG.length > ready ? `, ${CATALOG.length - ready} on the roadmap` : ""}. Not everything here is
           about shooting.
         </p>
       </header>

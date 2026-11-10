@@ -16,8 +16,10 @@ import {
   mapSupportsMode,
   modeEnabled,
   PVP_MAP_IDS,
+  parseChallengeId,
   parseMazeId,
   ROUND_LIMITS,
+  randomChallengeId,
   randomMazeId,
   sameMapFamily,
   skinById,
@@ -56,6 +58,12 @@ const SCORE_LIMITS: Record<GameMode, number[]> = {
   survival: [],
   maze: [],
   battleroyale: [],
+  parkour: [],
+  escape: [],
+  nighthunt: [],
+  hotpotato: [],
+  freeroam: [],
+  racing: [1, 2, 3, 5],
 };
 
 export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
@@ -136,8 +144,15 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
   const rounds = isRoundMode(s.mode);
   const variants = MODE_VARIANTS[s.mode] ?? [];
   /** The mode has its own end rule (ladder, rounds): no score limit to pick. */
-  const ownEnd = s.mode === "gungame" || s.mode === "maze" || s.mode === "battleroyale" || rounds;
+  const ownEnd = SCORE_LIMITS[s.mode].length === 0 || rounds;
   const maze = parseMazeId(s.mapId);
+  const challenge = parseChallengeId(s.mapId);
+  /** A new seed for the generated map in use (maze, course, rooms). */
+  const reseed = maze
+    ? () => randomMazeId(maze.size)
+    : challenge
+      ? () => randomChallengeId(challenge.kind)
+      : null;
   const tooFew = humans.length < def.players.min;
   /** Modes a host can switch to here, by platform category (same grouping as the home catalog). */
   const pickable = EXPERIENCE_CATEGORIES.map((c) => ({
@@ -304,11 +319,13 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                           aria-pressed={sameMapFamily(s.mapId, id)}
                           disabled={!canHost}
                           onClick={() => {
-                            // Mazes: one card per size; picking one draws a fresh seed.
+                            // Generated maps: one card per family; picking one draws a fresh seed.
                             const m = parseMazeId(id);
-                            if (m && !sameMapFamily(s.mapId, id))
-                              session.updateSettings({ map: randomMazeId(m.size) });
-                            else if (!m) session.updateSettings({ map: id });
+                            const c = parseChallengeId(id);
+                            if (sameMapFamily(s.mapId, id) && (m || c)) return;
+                            session.updateSettings({
+                              map: m ? randomMazeId(m.size) : c ? randomChallengeId(c.kind) : id,
+                            });
                           }}
                           title={
                             MAPS[id].players
@@ -333,19 +350,20 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                       ),
                     )}
                   </div>
-                  {maze && (
+                  {reseed && (
                     <div className="row" data-testid="maze-seed">
                       <span className="field__hint">
-                        Seed <span className="mono">{maze.seed}</span>: everyone gets the same maze.
+                        Seed <span className="mono">{(maze ?? challenge)!.seed}</span>: everyone gets the same
+                        map.
                       </span>
                       <span className="spacer" />
                       {canHost && (
                         <Button
                           size="sm"
-                          onClick={() => session.updateSettings({ map: randomMazeId(maze.size) })}
+                          onClick={() => session.updateSettings({ map: reseed() })}
                           data-testid="new-maze"
                         >
-                          New maze
+                          New map
                         </Button>
                       )}
                     </div>

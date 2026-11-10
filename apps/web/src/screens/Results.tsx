@@ -4,6 +4,7 @@ import {
   isMapId,
   isTeamMode,
   MAPS,
+  MODES,
   missionById,
   type PveResult,
   TEAMS,
@@ -44,9 +45,9 @@ export function Results() {
   }, [r]);
 
   if (r?.pve) return <PveResults r={r.pve} />;
-  const timed = s.mode === "maze";
+  const timed = s.mode === "maze" || s.mode === "parkour" || s.mode === "escape" || s.mode === "racing";
   /** No weapons in the mode: no elimination, death or accuracy columns. */
-  const combat = !timed;
+  const combat = !timed && MODES[s.mode as keyof typeof MODES]?.weapons !== "None";
   const pointsLabel = timed
     ? "Time"
     : s.mode === "gungame"

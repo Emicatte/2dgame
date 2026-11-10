@@ -1,6 +1,6 @@
 import type { Vec2 } from "../sim/math.ts";
 import { mulberry32 } from "../sim/rng.ts";
-import type { DecorDef, LightDef, MapDef, PickupDef, SolidDef, SolidKind } from "./types.ts";
+import type { DecorDef, LightDef, MapDef, PickupDef, SolidDef, SolidKind, VehicleSpawnDef } from "./types.ts";
 
 /**
  * Scrapline Isle, the Battle Royale map: 4×4 districts of 1024 px separated by roads, each built
@@ -255,7 +255,18 @@ export function buildIsland(seed: number): MapDef {
   const spawns: Vec2[] = [];
   for (let a = 1; a < 4; a++) for (let b = 1; b < 4; b++) spawns.push({ x: a * BLOCK, y: b * BLOCK });
 
+  // Vehicles parked on the roads, between the crossroads (Battle Royale and Free Roam).
+  const kinds = ["car", "offroad", "car", "armored", "offroad", "car", "offroad", "car"] as const;
+  const vehicleSpawns: VehicleSpawnDef[] = kinds.map((kind, i) => {
+    const k = 1 + (i % 3);
+    const along = 512 + Math.floor(i / 3) * BLOCK;
+    return i % 2 === 0
+      ? { id: `v-${i}`, kind, x: k * BLOCK, y: along, angle: Math.PI / 2 }
+      : { id: `v-${i}`, kind, x: along, y: k * BLOCK, angle: 0 };
+  });
+
   return {
+    vehicleSpawns,
     id: "island",
     name: "Scrapline Isle",
     tagline: "Sixteen districts, one storm. The Battle Royale map.",
@@ -278,7 +289,7 @@ export function buildIsland(seed: number): MapDef {
     spawns,
     pickups,
     large: true,
-    modes: ["battleroyale"],
+    modes: ["battleroyale", "freeroam"],
     players: { min: 2, max: 16 },
     pois,
   };

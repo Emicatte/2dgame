@@ -216,3 +216,95 @@ describe("Horror Maze", () => {
     expect(Math.hypot(after.x - gx, after.y - gy)).toBeLessThan(Math.hypot(before.x - gx, before.y - gy));
   });
 });
+
+function setupMode(map: MapId, ids: string[], mode: "parkour" | "escape" | "nighthunt") {
+  const sim = new GameSimulation(MAPS[map], { tickRate: NET.serverTickRate, rng: () => 0.5 });
+  const state = new MatchState();
+  state.mapId = map;
+  const rules = new MatchRules(sim, state, (id) => id.startsWith("bot:"));
+  for (const id of ids) {
+    sim.addPlayer({
+      id,
+      playerId: `pid-${id}`,
+      name: id,
+      skin: "foundry",
+      level: 1,
+      primary: "rifle",
+      seed: 7,
+    });
+    state.players.set(id, new PlayerState());
+  }
+  rules.setMode(mode);
+  rules.prepareMatch();
+  sim.resetForMatch();
+  state.phase = "playing";
+  return { sim, state, ctl: sim.ctl as MazeMode, maze: MAPS[map].maze! };
+}
+
+describe("Parkour, Escape Room, Night Hunt", () => {
+  it("parkour: walking into a gap is a fall, dashing over it is not; moving bars hit", () => {
+    const { sim, maze } = setupMode("parkour-101" as MapId, ["a"], "parkour");
+    const a = sim.players.get("a")!;
+    const pit = maze.pits![0]!;
+    put(a, pit.x + pit.w / 2, pit.y + pit.h / 2);
+    a.sim.dash = 3;
+    expect(announced(ticks(sim, 1), "fell")).toBe(false);
+    put(a, pit.x + pit.w / 2, pit.y + pit.h / 2);
+    a.sim.dash = 0;
+    expect(announced(ticks(sim, 1), "fell")).toBe(true);
+    const sw = maze.sweepers![0]!;
+    let hit = false;
+    for (let i = 0; i < sec(4) && !hit; i++) {
+      put(a, sw.x0, (sw.y0 + sw.y1) / 2);
+      hit = announced(ticks(sim, 1), "swept");
+    }
+    expect(hit).toBe(true);
+  });
+
+  it("escape: plates need two players at once; the code opens only in order", () => {
+    const { sim, state, maze } = setupMode("escape-202" as MapId, ["a", "b"], "escape");
+    const [a, b] = [sim.players.get("a")!, sim.players.get("b")!];
+    const plates = maze.gates[1]!;
+    const [p0, p1] = plates.opener.points!;
+    put(a, p0!.x, p0!.y);
+    ticks(sim, 2);
+    syncModeState(state, sim, []);
+    expect(parseIdList(state.pve.doors).has("gate-b")).toBe(false);
+    put(a, p0!.x, p0!.y);
+    put(b, p1!.x, p1!.y);
+    ticks(sim, 2);
+    syncModeState(state, sim, []);
+    expect(parseIdList(state.pve.doors).has("gate-b")).toBe(true);
+    const code = maze.gates[2]!;
+    const pts = code.opener.points!;
+    const order = code.opener.order!;
+    const press = (j: number) => {
+      put(a, pts[j]!.x, pts[j]!.y);
+      ticks(sim, 2, () => hold(sim, "a", { buttons: BTN.INTERACT }));
+      ticks(sim, 2, () => hold(sim, "a", {}));
+    };
+    // A wrong first switch resets; then the right order opens.
+    const wrong = [0, 1, 2].find((j) => j !== order[0])!;
+    press(wrong);
+    for (const j of order) press(j);
+    syncModeState(state, sim, []);
+    expect(parseIdList(state.pve.doors).has("gate-c")).toBe(true);
+  });
+
+  it("night hunt: one monster, faster, catches by touch; all caught ends the match", () => {
+    const { sim, ctl } = setupMode(mazeId("m", 4721), ["a", "b"], "nighthunt");
+    const hunter = sim.players.get(ctl.hunter)!;
+    const prey = [...sim.players.values()].find((p) => p.id !== ctl.hunter)!;
+    expect(ctl.body(hunter)?.speed).toBeGreaterThan(1);
+    // Waiting in the lair: no catch even if someone stands next to it.
+    put(prey, hunter.sim.x + 20, hunter.sim.y);
+    expect(announced(ticks(sim, 2), "was caught")).toBe(false);
+    put(prey, sim.map.spawns[0]!.x, sim.map.spawns[0]!.y);
+    ticks(sim, sec(9));
+    put(hunter, 600, 600);
+    put(prey, 620, 600);
+    const ev = ticks(sim, 2);
+    expect(announced(ev, "was caught")).toBe(true);
+    expect(ctl.over()).toBe("all-caught");
+  });
+});

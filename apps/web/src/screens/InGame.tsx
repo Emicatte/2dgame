@@ -16,6 +16,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Button, formatClock, Panel } from "../components/ui.tsx";
 import { type HudObjective, type HudVehicle, hudStore, uiStore } from "../game/hudStore.ts";
+import { brMinimapStore } from "../game/modes/BrLayer.ts";
 import { modeHudStore } from "../game/modes/modeHud.ts";
 import { pveHudStore } from "../game/pve/pveHud.ts";
 import { keyLabel, settingsStore } from "../lib/settings.ts";
@@ -480,7 +481,7 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
           </div>
         ) : (
           <div className="hud__top">
-            {s.mode !== "maze" && (
+            {MODES[s.mode].weapons !== "None" && (
               <div className="hud-box hud__score">
                 <b className="mono" data-testid="hud-kills">
                   {bounty ? myPts : hud.kills}
@@ -493,7 +494,7 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
             >
               {formatClock(hud.timeLeftSec)}
             </div>
-            {s.mode === "maze" || s.mode === "battleroyale" ? null : s.mode === "gungame" ? (
+            {MODES[s.mode].weapons === "None" || s.mode === "battleroyale" ? null : s.mode === "gungame" ? (
               <div className="hud-box hud__score">
                 <b className="mono">
                   {Math.max(0, ...s.players.map((p) => p.gg)) + 1}/{GUN_GAME.ladder.length}
@@ -511,6 +512,7 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
           </div>
         )}
 
+        <BrMinimapView />
         {s.modeText && s.phase === "playing" && (
           <div className="mode-status" data-testid="mode-status">
             {s.modeText}
@@ -662,5 +664,59 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
         />
       )}
     </>
+  );
+}
+
+/** Battle Royale minimap: the island, the storm, the next circle, the bus line, you. */
+function BrMinimapView() {
+  const m = useStore(brMinimapStore);
+  if (!m.on) return null;
+  const S = 170;
+  const k = S / Math.max(m.w, m.h);
+  return (
+    <svg
+      className="br-minimap"
+      width={S}
+      height={S}
+      viewBox={`0 0 ${S} ${S}`}
+      aria-label="Minimap"
+      data-testid="br-minimap"
+    >
+      <rect x={0} y={0} width={m.w * k} height={m.h * k} fill="#2f3a2e" stroke="#4a5547" />
+      {m.pois.map((p) => (
+        <circle key={p.name} cx={p.x * k} cy={p.y * k} r={2} fill="#b9b4aa" />
+      ))}
+      {m.zone.r > 0 && (
+        <circle
+          cx={m.zone.x * k}
+          cy={m.zone.y * k}
+          r={m.zone.r * k}
+          fill="none"
+          stroke="#c9a7ff"
+          strokeWidth={2}
+        />
+      )}
+      {m.next.r > 0 && (
+        <circle
+          cx={m.next.x * k}
+          cy={m.next.y * k}
+          r={m.next.r * k}
+          fill="none"
+          stroke="#ffffff"
+          strokeDasharray="3 3"
+        />
+      )}
+      {m.bus && (
+        <line
+          x1={m.bus.x0 * k}
+          y1={m.bus.y0 * k}
+          x2={m.bus.x1 * k}
+          y2={m.bus.y1 * k}
+          stroke="#ff7a2e"
+          strokeDasharray="4 3"
+        />
+      )}
+      {m.me && <circle cx={m.me.x * k} cy={m.me.y * k} r={4} fill="#4fd8ff" stroke="#0e0f11" />}
+    </svg>
   );
 }

@@ -28,6 +28,7 @@ interface Zone {
 export class BattleRoyaleMode extends BaseMode {
   readonly mode = "battleroyale" as const;
   override readonly usesScoreLimit = false;
+  override readonly vehicles = true;
   private riders = new Set<string>();
   /** Ticks bots jump at (they choose like players do). */
   private botJump = new Map<string, number>();

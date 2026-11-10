@@ -111,3 +111,23 @@ describe("seeded mazes", () => {
     for (const t of map.maze!.traps) expect(t.w).toBeGreaterThan(PLAYER.radius * 6);
   });
 });
+
+describe("challenge maps", () => {
+  it("parkour and escape maps are valid and seeded", () => {
+    for (const id of ["parkour-101", "escape-202", "parkour-77", "escape-9"] as const) {
+      const map = MAPS[id as "parkour-101"];
+      expect(validateMap(map)).toEqual([]);
+      expect(map.maze).toBeDefined();
+    }
+    expect(JSON.stringify(MAPS["parkour-101"].maze)).not.toBe(
+      JSON.stringify(MAPS["parkour-77" as "parkour-101"].maze),
+    );
+  });
+
+  it("the escape exit is reachable once the three doors open, and not before", () => {
+    const map = MAPS["escape-202"];
+    expect(solvable(map)).toBe(true);
+    const can = reach(map, pveWorlds(map, map.maze!.gates, new Set()).world, map.spawns[0]!);
+    expect(can(map.maze!.exit)).toBe(false);
+  });
+});

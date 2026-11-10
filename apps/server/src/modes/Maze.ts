@@ -1,12 +1,14 @@
 import {
   emptySlot,
   formatIdList,
+  type GameMode,
   MAZE_TRAP,
   type MatchState,
   type MazeDef,
   type MazeGate,
   PLAYER,
   pveWorlds,
+  sweeperAt,
 } from "@scrapline/shared";
 import type { ZombieWorld } from "../pve/ZombieWorld.ts";
 import type { ServerPlayer } from "../simulation/GameSimulation.ts";
@@ -28,7 +30,20 @@ const REACH = 70;
  * The match ends when every player in it has reached the exit, or when the clock runs out.
  */
 export class MazeMode extends BaseMode {
-  readonly mode = "maze" as const;
+  /** Escape Room: the progress of each code sequence (gate id → switches pressed right). */
+  private seq = new Map<string, number>();
+  /** Interact was held last tick (presses are edges). */
+  private held = new Set<string>();
+  /** Night Hunt: the monster and the survivors it caught. */
+  hunter = "";
+  private caughtBy = new Set<string>();
+
+  constructor(
+    sim: ConstructorParameters<typeof BaseMode>[0],
+    readonly mode: GameMode = "maze",
+  ) {
+    super(sim);
+  }
   private open = new Set<string>();
   /** Key carriers by gate id. */
   private carrier = new Map<string, string>();
@@ -54,6 +69,7 @@ export class MazeMode extends BaseMode {
   }
 
   override configure(opts: { rounds: number; variant: string }): void {
+    // Night Hunt is always in the dark; its monster is a player, not the AI.
     this.variant = opts.variant === "horror" ? "horror" : "classic";
   }
 
@@ -62,11 +78,17 @@ export class MazeMode extends BaseMode {
     this.carrier.clear();
     this.checkpoint.clear();
     this.finished.clear();
+    this.seq.clear();
+    this.caughtBy.clear();
     this.startTick = this.sim.tick;
     this.applyWorld();
     const maze = this.maze;
+    if (this.mode === "nighthunt") {
+      const ids = this.players().map((p) => p.id);
+      this.hunter = ids[Math.floor(this.sim.rng() * ids.length)] ?? "";
+    }
     this.monster =
-      maze && this.variant === "horror"
+      maze && this.variant === "horror" && this.mode !== "nighthunt"
         ? new MazeMonster(
             this.sim,
             maze,
@@ -101,6 +123,8 @@ export class MazeMode extends BaseMode {
   override spawnPoint(p: ServerPlayer): { x: number; y: number } | null {
     const maze = this.maze;
     if (!maze) return null;
+    // Night Hunt: the monster starts in the far lair.
+    if (p.id === this.hunter) return { ...maze.lair };
     const cp = this.checkpoint.get(p.id) ?? 0;
     if (cp === 0) {
       const spawns = this.sim.map.spawns;
@@ -115,12 +139,19 @@ export class MazeMode extends BaseMode {
     p.sim.slot = 0;
   }
 
-  override respawnDelay(): number {
-    return 1;
+  override frozen(p: ServerPlayer): boolean {
+    // The monster waits 8 s before the hunt.
+    if (p.id === this.hunter && this.sim.tick - this.startTick < 8 * this.rate) return true;
+    return this.finished.has(p.id) || this.caughtBy.has(p.id);
   }
 
-  override frozen(p: ServerPlayer): boolean {
-    return this.finished.has(p.id);
+  /** Night Hunt: the monster is faster. */
+  override body(p: ServerPlayer): { radius: number; speed: number } | null {
+    return p.id === this.hunter ? { radius: PLAYER.radius, speed: 1.2 } : null;
+  }
+
+  override respawnDelay(): number | null {
+    return 1;
   }
 
   override playerTargetable(): boolean {
@@ -144,7 +175,7 @@ export class MazeMode extends BaseMode {
       const near = (q: { x: number; y: number }, r: number) => (q.x - x) ** 2 + (q.y - y) ** 2 <= r * r;
 
       for (const g of maze.gates) {
-        if (this.open.has(g.id)) continue;
+        if (this.open.has(g.id) || p.id === this.hunter) continue;
         if (g.opener.kind === "key") {
           const holder = this.carrier.get(g.id);
           if (!holder && near(g.opener, REACH)) {
@@ -153,10 +184,53 @@ export class MazeMode extends BaseMode {
           }
           if (this.carrier.get(g.id) === p.id && near(gateCenter(g), REACH + 30))
             this.openGate(g, `${p.name} opened the ${g.label.toLowerCase()}`);
-        } else if (p.interact && near(g.opener, REACH)) {
+        } else if (g.opener.kind === "switch" && p.interact && near(g.opener, REACH)) {
           p.interactPress = false;
           this.openGate(g, `${p.name} hit the switch: ${g.label.toLowerCase()} open`);
+        } else if (g.opener.kind === "sequence" && p.interact && !this.held.has(p.id)) {
+          const pts = g.opener.points ?? [];
+          const order = g.opener.order ?? [];
+          const j = pts.findIndex((q) => near(q, REACH));
+          if (j >= 0) {
+            const k = this.seq.get(g.id) ?? 0;
+            if (order[k] === j) {
+              this.seq.set(g.id, k + 1);
+              if (k + 1 >= order.length)
+                this.openGate(g, `${p.name} entered the code: ${g.label.toLowerCase()} open`);
+            } else {
+              this.seq.set(g.id, 0);
+              this.emit({ t: "announce", s: "Wrong order: the code resets", d: "", w: 0 });
+            }
+          }
         }
+      }
+      if (p.interact) this.held.add(p.id);
+      else this.held.delete(p.id);
+
+      // Night Hunt: the monster catches survivors by touch.
+      if (p.id === this.hunter) {
+        if (this.frozen(p)) continue;
+        for (const q of this.players()) {
+          if (q.id === p.id || !q.alive || this.finished.has(q.id) || this.caughtBy.has(q.id)) continue;
+          if (Math.hypot(q.sim.x - x, q.sim.y - y) < PLAYER.radius * 2.4) {
+            this.caughtBy.add(q.id);
+            this.emit({ t: "announce", s: `${q.name} was caught`, d: "", w: 0 });
+          }
+        }
+        continue;
+      }
+
+      // Parkour: walking into a gap (not dashing over it) or touching a moving bar.
+      const secs = (this.sim.tick - this.startTick) / this.rate;
+      const inRect = (r: { x: number; y: number; w: number; h: number }, pad: number) =>
+        x > r.x - pad && x < r.x + r.w + pad && y > r.y - pad && y < r.y + r.h + pad;
+      if (p.sim.dash === 0 && (maze.pits ?? []).some((q) => inRect(q, -6))) {
+        this.sendBack(p, `${p.name} fell`);
+        continue;
+      }
+      if ((maze.sweepers ?? []).some((sw) => inRect(sweeperAt(sw, secs), PLAYER.radius - 4))) {
+        this.sendBack(p, `${p.name} was swept away`);
+        continue;
       }
 
       // Checkpoints only move forward.
@@ -189,6 +263,14 @@ export class MazeMode extends BaseMode {
         });
       }
     }
+    // Pressure plates: every plate held by someone at the same moment.
+    for (const g of maze.gates) {
+      if (this.open.has(g.id) || g.opener.kind !== "plates") continue;
+      const pts = g.opener.points ?? [];
+      const live = this.players().filter((p) => p.alive);
+      if (pts.length && pts.every((q) => live.some((p) => Math.hypot(p.sim.x - q.x, p.sim.y - q.y) < 46)))
+        this.openGate(g, `${g.label} open: the plates are down`);
+    }
     // A carrier who left the match takes nothing with them.
     for (const [gate, holder] of this.carrier) {
       const p = this.sim.players.get(holder);
@@ -210,6 +292,13 @@ export class MazeMode extends BaseMode {
   }
 
   override over(): string | null {
+    if (this.mode === "nighthunt") {
+      const survivors = this.players().filter((p) => p.id !== this.hunter);
+      if (survivors.length === 0) return null;
+      if (survivors.every((p) => this.caughtBy.has(p.id))) return "all-caught";
+      if (survivors.every((p) => this.caughtBy.has(p.id) || this.finished.has(p.id))) return "escaped";
+      return null;
+    }
     const playing = this.players();
     return playing.length > 0 && playing.every((p) => this.finished.has(p.id)) ? "everyone-out" : null;
   }
@@ -235,6 +324,13 @@ export class MazeMode extends BaseMode {
   override sync(state: MatchState): void {
     const doors = formatIdList(this.open);
     if (state.pve.doors !== doors) state.pve.doors = doors;
+    // Night Hunt: role 1 marks the monster (HUD); caught survivors stand still.
+    for (const [id, ps] of state.players) {
+      const role = id === this.hunter ? 1 : 0;
+      if (ps.role !== role) ps.role = role;
+      const frozen = this.caughtBy.has(id);
+      if (ps.frozen !== frozen) ps.frozen = frozen;
+    }
   }
 
   override markEntries(): Map<string, MarkData> {
@@ -278,6 +374,35 @@ export class MazeMode extends BaseMode {
           l: holderName ? `${keyName(g)} · ${holderName}` : keyName(g),
           a: "",
         });
+      } else if (g.opener.kind === "plates") {
+        (g.opener.points ?? []).forEach((q, j) => {
+          const held = this.players().some((p) => p.alive && Math.hypot(p.sim.x - q.x, p.sim.y - q.y) < 46);
+          out.set(`${g.id}-p${j}`, {
+            k: "plate",
+            x: q.x,
+            y: q.y,
+            r: 40,
+            c: 0,
+            p: held ? 100 : 0,
+            l: "Plate",
+            a: "",
+          });
+        });
+      } else if (g.opener.kind === "sequence") {
+        const k = this.seq.get(g.id) ?? 0;
+        (g.opener.points ?? []).forEach((q, j) => {
+          const done = (g.opener.order ?? []).slice(0, k).includes(j);
+          out.set(`${g.id}-s${j}`, {
+            k: "switch",
+            x: q.x,
+            y: q.y,
+            r: REACH,
+            c: 0,
+            p: done ? 100 : 0,
+            l: `Switch ${"ABC"[j]}`,
+            a: "Press the switch",
+          });
+        });
       } else {
         out.set(`${g.id}-switch`, {
           k: "switch",
@@ -290,6 +415,33 @@ export class MazeMode extends BaseMode {
           a: "Open the gate",
         });
       }
+    }
+    if (maze.clue)
+      out.set("clue", {
+        k: "terminal",
+        x: maze.clue.x,
+        y: maze.clue.y,
+        r: 30,
+        c: 0,
+        p: 0,
+        l: maze.clue.text,
+        a: "",
+      });
+    for (const q of maze.pits ?? [])
+      out.set(q.id, { k: "pit", x: q.x + q.w / 2, y: q.y + q.h / 2, r: q.w / 2, c: 0, p: 0, l: "", a: "" });
+    const secs = (this.sim.tick - this.startTick) / this.rate;
+    for (const sw of maze.sweepers ?? []) {
+      const r = sweeperAt(sw, secs);
+      out.set(sw.id, {
+        k: "sweeper",
+        x: r.x + r.w / 2,
+        y: r.y + r.h / 2,
+        r: r.h / 2,
+        c: 0,
+        p: 100,
+        l: "",
+        a: "",
+      });
     }
     maze.checkpoints.forEach((cp, i) => {
       if (i === 0) return;
@@ -325,6 +477,12 @@ export class MazeMode extends BaseMode {
     const out = this.finished.size;
     const total = this.players().length;
     const gatesText = gates === 0 ? "gates open" : `${gates} gate${gates === 1 ? "" : "s"} shut`;
+    if (this.mode === "nighthunt") {
+      const caught = this.caughtBy.size;
+      const name = this.sim.players.get(this.hunter)?.name ?? "?";
+      return `Monster: ${name} · ${caught} caught · ${out} out`;
+    }
+    if (this.mode === "parkour") return `${out}/${total} finished`;
     return `${gatesText} · ${out}/${total} out`;
   }
 }

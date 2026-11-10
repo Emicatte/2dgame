@@ -323,7 +323,8 @@ export class PveLayer {
     const pve =
       state.mode === "outbreak" ||
       state.mode === "survival" ||
-      (state.mode === "maze" && state.round.variant === "horror");
+      state.mode === "nighthunt" ||
+      ((state.mode === "maze" || state.mode === "escape") && state.round.variant === "horror");
     const mission = state.mode === "outbreak" ? (missionById(state.pve.mission) ?? null) : null;
     if (this.active === pve && this.mapId === map.id && this.mission === mission) return;
     this.clear();

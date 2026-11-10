@@ -34,7 +34,10 @@ export type MapId =
    */
   | "maze-s-1207"
   | "maze-m-4721"
-  | "maze-l-9306";
+  | "maze-l-9306"
+  /** Seeded challenge maps (see challenges.ts); any seed works at run time. */
+  | "parkour-101"
+  | "escape-202";
 
 /** Visual style of a solid block; collision is always the rectangle itself. */
 export type SolidKind =

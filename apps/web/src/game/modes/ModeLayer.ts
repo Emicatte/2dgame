@@ -53,7 +53,7 @@ const roleName = (mode: string, role: number) =>
 
 /** Ring colour of a mode marker: its team, or amber for neutral ones. */
 /** Marks the maze draws itself (no ring). */
-const MAZE_KINDS = new Set(["trap", "door", "key", "switch"]);
+const MAZE_KINDS = new Set(["trap", "door", "key", "switch", "plate", "pit", "sweeper", "terminal"]);
 
 const markColor = (c: number) => (c === 1 || c === 2 ? TEAMS[c].color : 0xffc53d);
 
@@ -482,7 +482,33 @@ export class ModeLayer {
         }
       return true;
     }
-    const gateId = id.replace(/-(key|switch)$/, "");
+    if (m.k === "pit") {
+      const q = maze.pits?.find((x) => x.id === id);
+      if (!q) return true;
+      g.fillStyle(0x050506, 0.95);
+      g.fillRect(q.x, q.y, q.w, q.h);
+      g.lineStyle(3, 0xffc53d, 0.8);
+      g.strokeRect(q.x, q.y, q.w, q.h);
+      return true;
+    }
+    if (m.k === "sweeper") {
+      const q = maze.sweepers?.find((x) => x.id === id);
+      const w = q?.w ?? 30;
+      const h = q?.h ?? m.r * 2;
+      g.fillStyle(0xff5a52, 0.9);
+      g.fillRect(m.x - w / 2, m.y - h / 2, w, h);
+      g.lineStyle(2, 0xffd2cc, 0.9);
+      g.strokeRect(m.x - w / 2, m.y - h / 2, w, h);
+      return true;
+    }
+    if (m.k === "terminal") {
+      g.fillStyle(0x1b1d21, 1);
+      g.fillRect(m.x - 26, m.y - 18, 52, 36);
+      g.lineStyle(2, 0x7dffb0, 0.6 + pulse * 0.4);
+      g.strokeRect(m.x - 26, m.y - 18, 52, 36);
+      return true;
+    }
+    const gateId = id.replace(/-(key|switch|p\d|s\d)$/, "");
     const gate = maze.gates.find((x) => x.id === gateId);
     if (!gate) return false;
     if (m.k === "door") {
@@ -509,6 +535,14 @@ export class ModeLayer {
       g.lineBetween(m.x - 2 * s, m.y, m.x + 18 * s, m.y);
       g.lineBetween(m.x + 12 * s, m.y, m.x + 12 * s, m.y + 7 * s);
       g.lineBetween(m.x + 18 * s, m.y, m.x + 18 * s, m.y + 9 * s);
+      return true;
+    }
+    if (m.k === "plate") {
+      const on = m.p >= 100;
+      g.fillStyle(gate.color, on ? 0.7 : 0.18);
+      g.fillRect(m.x - 34, m.y - 34, 68, 68);
+      g.lineStyle(3, gate.color, on ? 1 : 0.6);
+      g.strokeRect(m.x - 34, m.y - 34, 68, 68);
       return true;
     }
     if (m.k === "switch") {

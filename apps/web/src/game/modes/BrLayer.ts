@@ -1,5 +1,29 @@
 import { DROP, type MapDef, type MatchState } from "@scrapline/shared";
 import type Phaser from "phaser";
+import { createStore } from "../../lib/store.ts";
+
+/** What the HUD minimap draws (Battle Royale), refreshed a few times a second. */
+export interface BrMinimap {
+  on: boolean;
+  w: number;
+  h: number;
+  zone: { x: number; y: number; r: number };
+  next: { x: number; y: number; r: number };
+  me: { x: number; y: number } | null;
+  bus: { x0: number; y0: number; x1: number; y1: number } | null;
+  pois: { x: number; y: number; name: string }[];
+}
+
+export const brMinimapStore = createStore<BrMinimap>({
+  on: false,
+  w: 1,
+  h: 1,
+  zone: { x: 0, y: 0, r: 0 },
+  next: { x: 0, y: 0, r: 0 },
+  me: null,
+  bus: null,
+  pois: [],
+});
 
 /** What a player view exposes to the layer (its root container). */
 interface ViewLike {
@@ -21,6 +45,7 @@ export class BrLayer {
   private labels: Phaser.GameObjects.Text[] = [];
   private labelsFor = "";
   private scaled = new Set<string>();
+  private miniAt = 0;
 
   constructor(private readonly scene: Phaser.Scene) {
     this.storm = scene.add.graphics().setDepth(44);
@@ -49,9 +74,25 @@ export class BrLayer {
     if (!on) {
       for (const id of this.scaled) views.get(id)?.root.setScale(1);
       this.scaled.clear();
+      if (brMinimapStore.get().on) brMinimapStore.patch({ on: false });
       return;
     }
     const br = state.br;
+    const now = performance.now();
+    if (now - this.miniAt > 150) {
+      this.miniAt = now;
+      const me = views.get(selfId)?.root;
+      brMinimapStore.set({
+        on: true,
+        w: map.width,
+        h: map.height,
+        zone: { x: br.cx, y: br.cy, r: br.r },
+        next: { x: br.ncx, y: br.ncy, r: br.nr },
+        me: me ? { x: me.x, y: me.y } : null,
+        bus: br.busEnd > 0 ? { x0: br.bx0, y0: br.by0, x1: br.bx1, y1: br.by1 } : null,
+        pois: (map.pois ?? []).map((p) => ({ x: p.x, y: p.y, name: p.name })),
+      });
+    }
     const t = performance.now() / 1000;
 
     // Storm: a wide ring whose inner edge is the safe circle darkens and tints everything outside.

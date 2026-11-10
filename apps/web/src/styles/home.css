@@ -640,3 +640,14 @@
     padding: 0 10px;
   }
 }
+
+/* ------------------------------------------------------------------ Battle Royale minimap */
+
+.br-minimap {
+  position: absolute;
+  top: 88px;
+  right: 16px;
+  background: rgba(14, 15, 17, 0.8);
+  border: 1px solid var(--line-2);
+  pointer-events: none;
+}

@@ -8,6 +8,7 @@ import { HideSeekMode } from "./HideSeek.ts";
 import { InfectionMode } from "./Infection.ts";
 import { MazeMode } from "./Maze.ts";
 import type { ModeController } from "./ModeController.ts";
+import { FreeRoamMode, HotPotatoMode, RacingMode } from "./PartyModes.ts";
 import { PropHuntMode } from "./PropHunt.ts";
 import { PursuitMode } from "./Pursuit.ts";
 import { SabotageMode } from "./Sabotage.ts";
@@ -38,9 +39,18 @@ export function createModeController(mode: GameMode, sim: GameSimulation): ModeC
     case "convoy":
       return new PursuitMode(sim, mode);
     case "maze":
-      return new MazeMode(sim);
+    case "parkour":
+    case "escape":
+    case "nighthunt":
+      return new MazeMode(sim, mode);
     case "battleroyale":
       return new BattleRoyaleMode(sim);
+    case "hotpotato":
+      return new HotPotatoMode(sim);
+    case "freeroam":
+      return new FreeRoamMode(sim);
+    case "racing":
+      return new RacingMode(sim);
     default:
       return null;
   }
