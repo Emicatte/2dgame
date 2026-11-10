@@ -155,3 +155,17 @@ describe("Battle Royale bots", () => {
     expect(looter.sim.alt).toBe(0);
   });
 });
+
+describe("Battle Royale inventory", () => {
+  it("weapons picked up fill the empty slots 1, 2, 3 in order", async () => {
+    const { takeWeapon } = await import("@scrapline/shared");
+    const { sim } = setup(["a"]);
+    const a = sim.players.get("a")!;
+    expect(a.sim.slots.every((s) => s.id === NO_WEAPON)).toBe(true);
+    takeWeapon(a.sim, "smg");
+    takeWeapon(a.sim, "shotgun");
+    takeWeapon(a.sim, "sniper");
+    expect(a.sim.slots.every((s) => s.id !== NO_WEAPON)).toBe(true);
+    expect(a.sim.slot).toBe(2);
+  });
+});

@@ -400,8 +400,8 @@ export function giveWeapon(s: PlayerSim, weaponId: WeaponId): void {
 
 /**
  * Picks a weapon up from the ground. Already carried: its ammo is added to that one. Otherwise it
- * goes in the free pickup slot, or replaces the held weapon (the sidearm is never replaced: then
- * the pickup slot). Returns the weapon left on the ground, if any. Server-only.
+ * goes in the first empty slot, else replaces the held weapon (the sidearm is never replaced:
+ * then the pickup slot). Returns the weapon left on the ground, if any. Server-only.
  */
 export function takeWeapon(
   s: PlayerSim,
@@ -417,8 +417,14 @@ export function takeWeapon(
     }
     return null;
   }
+  // An empty slot first (Battle Royale starts with all three empty); otherwise the usual rule.
+  const empty = s.slots.findIndex((sl) => sl.id === NO_WEAPON);
   const target =
-    s.slots[SLOT_PICKUP]!.id === NO_WEAPON || s.slot !== SLOT_PRIMARY ? SLOT_PICKUP : SLOT_PRIMARY;
+    empty >= 0
+      ? empty
+      : s.slots[SLOT_PICKUP]!.id === NO_WEAPON || s.slot !== SLOT_PRIMARY
+        ? SLOT_PICKUP
+        : SLOT_PRIMARY;
   const old = s.slots[target]!;
   s.slots[target] = ammo ? { id: def.index, mag: ammo.mag, reserve: ammo.reserve } : fullSlot(weaponId);
   s.slot = target;
