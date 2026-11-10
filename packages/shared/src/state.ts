@@ -60,6 +60,9 @@ export const PlayerState = schema(
     masked: t.boolean().default(false),
     /** Cannot move or act (seekers waiting out the hiding time). Applied by the prediction too. */
     frozen: t.boolean().default(false),
+    /** Battle Royale drop: altitude (0 on the ground) and parachute open. */
+    alt: t.uint16().default(0),
+    chute: t.boolean().default(false),
     /** Gun Game: ladder level (0-based). */
     gg: t.uint8().default(0),
     /** Round modes: points this match. */
@@ -385,6 +388,34 @@ export const PveState = schema(
 );
 export type PveState = SchemaType<typeof PveState>;
 
+/** Battle Royale: the bus line and the storm (current circle, next circle, when it moves). */
+export const BrState = schema(
+  {
+    /** Bus line (start → end) and the ticks it enters and leaves it. 0 = no bus. */
+    bx0: t.int16().default(0),
+    by0: t.int16().default(0),
+    bx1: t.int16().default(0),
+    by1: t.int16().default(0),
+    busStart: t.uint32().default(0),
+    busEnd: t.uint32().default(0),
+    /** Safe zone now and the next one. */
+    cx: t.int16().default(0),
+    cy: t.int16().default(0),
+    r: t.uint16().default(0),
+    ncx: t.int16().default(0),
+    ncy: t.int16().default(0),
+    nr: t.uint16().default(0),
+    /** 1-based storm phase; whether it is shrinking; the tick the wait or the shrink ends. */
+    phase: t.uint8().default(0),
+    shrinking: t.boolean().default(false),
+    until: t.uint32().default(0),
+    dps: t.uint8().default(0),
+    alive: t.uint8().default(0),
+  },
+  "BrState",
+);
+export type BrState = SchemaType<typeof BrState>;
+
 export type MatchPhase = "lobby" | "countdown" | "playing" | "results";
 
 export const MatchState = schema(
@@ -426,6 +457,8 @@ export const MatchState = schema(
     pve: t.ref(PveState),
     /** Round modes (Hide & Seek, Prop Hunt): stage, timer, round number, variant. */
     round: t.ref(RoundState),
+    /** Battle Royale: bus and storm. */
+    br: t.ref(BrState),
     /** Real poses of masked players, each visible only to that player's side (filtered). */
     allies: t.map(AllyState).view(),
     /** Prop Hunt objects (filtered: hunters receive them once the hunt starts). */

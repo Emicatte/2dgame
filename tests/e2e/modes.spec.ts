@@ -18,9 +18,10 @@ async function room(a: Page, b: Page, mode: string, spawns: { x: number; y: numb
     [spawns] as const,
   );
   const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
+  await a.getByTestId("change-mode").click();
   await a.getByTestId(`mode-${mode}`).click();
   await expect(a.getByTestId("mode-blurb")).toBeVisible();
-  await b.getByTestId("join-room").click();
+  await b.getByTestId("nav-rooms").click();
   await b.getByTestId("room-code-input").fill(code);
   await b.getByTestId("join-submit").click();
   await expect(b.getByTestId("room-code")).toHaveText(code, { timeout: 30_000 });

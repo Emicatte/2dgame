@@ -1,5 +1,97 @@
 # Changelog
 
+## 0.9.0 — unreleased (branch `platform-home`)
+
+### Added (Puzzle Race, Hide & Seek Closing zone, graphics)
+- **Puzzle Race** (Challenge, 1–8): four lettered switches in a maze with every gate open; press
+  them in the order of the code before the others (a wrong switch resets your code); first to
+  the lobby's puzzle count (1/3/5) wins.
+- **Hide & Seek · Closing zone** variant: from 40% of the hunt a safe zone shrinks towards a
+  hiding area; hiders outside it are revealed to the seekers.
+- Graphics: ground beyond the map edge (no more flat void near the borders), a lit curb on the
+  edge, soft ambient occlusion around every solid, colour grade on Medium and High.
+
+### Changed (arenas about twice the surface)
+- The nine combat arenas (Industrial, Neon, Desert, Urban, Airbase, Harbor, Downtown, Mountain,
+  Tactical Facility) are 1.375× wider and taller (≈1.9× the surface), `maps/expand.ts`: walls and
+  roads stretch, buildings and props keep their size, spawns, pickups, vehicles and objectives move
+  with the layout, and the freed space gets mirrored crate and sandbag cover (never on roads,
+  lanes or helipads). Party and PvE maps are unchanged.
+
+### Added (new modes)
+- **Parkour** (Challenge): seeded 3-lane course with pits (jump them with the dash), sweeping
+  bars, traps and checkpoints; fastest time wins.
+- **Escape Room** (Adventure, 2–4): three rooms locked by a key, pressure plates held together
+  and a switch sequence with its clue on a terminal. **Haunted Facility** is its horror variant
+  (dark, with the maze creature).
+- **Night Hunt** (Horror): one random player hunts the others in the dark maze after 8 s; the
+  survivors escape through the exit or are caught.
+- **Hot Potato** (Party): pass the bomb by touch before the fuse runs out; last one standing.
+- **Free Roam** (Social): drive and explore Scrapline Isle, no weapons, no damage.
+- **Racing**: laps around the flags of the vehicle maps, a car each on a grid.
+- Battle Royale minimap with the storm, the next circle and the bus line.
+- The catalog has no "Planned" cards left: every experience can be started.
+
+### Fixed
+- Battle Royale: picked-up weapons fill empty slots 1 and 2 before the pickup slot.
+
+### Added (Battle Royale, first scale)
+- **Battle Royale** (Action, up to 16 players for now) on **Scrapline Isle**, a 4096×4096 island of
+  16 named districts. Everyone starts on the flying bus, which crosses the island on a different
+  line each match; press SPACE (or dash) to jump, steer the freefall, open the parachute (SPACE,
+  or by itself low down), land where you aimed. You land unarmed: open chests and take weapons.
+  The storm closes in six phases towards a new circle each time and hurts outside it. No
+  respawns; the last one standing wins. Practice bots ride the bus, jump and loot too.
+- Altitude and parachute are part of the shared player simulation (predicted like walking).
+- `modebench.ts` takes `BENCH_PLAYERS` / `BENCH_MODES`; Battle Royale measured with 8–50
+  simulated players (see PROGRESS.md).
+
+### Changed (practice bots)
+- Bots only see what they face (130° field of view, plus anyone very close, and all around for a
+  moment after being hit by someone unseen), hear gunshots and go to investigate, and no longer
+  know where the nearest enemy is when idle (they patrol). In team modes teammates share the last
+  enemy one of them saw. Personalities: aggressive, tactical (flanks), cautious, explorer (loot),
+  support (sticks with hurt teammates); Rook, Vex and Kestrel are aggressive, tactical, cautious.
+
+### Added (Horror Maze)
+- **Horror Maze** (Horror, 1–4 players): the maze in the dark with flashlights, and one creature
+  driven by the Outbreak enemy AI. It sees only with line of sight, hears running, dashes, gates
+  and traps, remembers where it last saw you and searches there. A tension director draws it
+  towards the player furthest ahead after a long quiet spell (a sound near them, never a
+  teleport). Caught: back to your last checkpoint. Lobby: Variant Classic / Horror.
+
+### Added (Classic Maze)
+- **Classic Maze** (Challenge, 1–8 players, no weapons): a labyrinth generated from a seed in three
+  sizes (8×8, 12×12, 16×16 cells). Find the amber key and carry it to the amber gate, press E on
+  the switch of the cyan gate, cross the timed floor traps (a live trap sends you back to your
+  last checkpoint and drops the key you carried), reach the exit. Fastest time wins; the match
+  ends when everyone is out or the clock runs out. Results show times. The lobby has one card
+  per size and a **New maze** button (new seed); host and guests build the same maze from the id.
+- Gates use the same door mechanism as Outbreak (closed gates are solids, predicted identically on
+  every machine); keys, switches, checkpoints, traps and the exit are mode markers.
+
+### Changed
+- **New home.** One entry per destination in a top bar: **Play** (spotlight on the last
+  experience played, or a featured one, over its live map; one-click Play; recently played;
+  featured; categories), **Discover** (the whole catalog by category), **Rooms** (join with a code,
+  create a private room / arena, public rooms on the dedicated server), **Profile** (with Loadout
+  and Leaderboard) and **Settings**. The old menu's duplicate buttons are gone ("Outbreak · co-op",
+  "Team Deathmatch", "Browse rooms", the separate Play screen).
+- **The map is chosen only in the lobby.** "Create arena / private room" no longer asks for a map
+  first. Flow: Play → experience → Create lobby / Quick match → lobby (mode, map, rules, ready) →
+  start. The lobby stays the only authority (server-validated, host only); it shows the current mode
+  with a "Change mode" picker instead of the full grid of every mode, and tells guests the host
+  decides.
+- Card images are the real maps, rendered from game data one per idle slot (no frozen frame while
+  a page of cards appears); the previews drift on hover.
+
+### Added
+- **Experience catalog** (`packages/shared/src/config/experiences.ts`): eight platform categories
+  (Action, Survival, Horror, Party, Adventure, Challenge, Racing, Social) derived from the mode
+  registry and the co-op operations, first shown as "Planned" for the experiences still to build
+  (all of them are playable by the end of 0.9.0).
+- "Recently played", recorded when a match actually starts. Live "players in public rooms" in the
+  top bar on the dedicated server (host mode has no such data and shows nothing).
 ## 0.8.1 — unreleased (branch `party-dynamics`)
 
 ### Changed

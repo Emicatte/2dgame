@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  CHALLENGE_DEFAULT_IDS,
   collisionWorldFor,
   isFreeSpot,
   MAP_IDS,
   MAPS,
+  MAZE_DEFAULT_IDS,
   mapModes,
   mapSupportsMode,
   mapsForMode,
@@ -13,13 +15,24 @@ import {
 
 describe("maps", () => {
   it("ships the three arena maps unchanged, plus the vehicle maps (competitive list), and the PvE maps", () => {
-    expect(MAP_IDS).toEqual([...PVP_MAP_IDS, "works", "district", "outskirts", "blacksite", "breach"]);
+    const authored = PVP_MAP_IDS.filter((id) => !MAPS[id].maze && id !== "island");
+    expect(MAP_IDS).toEqual([
+      ...authored,
+      "works",
+      "district",
+      "outskirts",
+      "blacksite",
+      "breach",
+      "island",
+      ...MAZE_DEFAULT_IDS,
+      ...CHALLENGE_DEFAULT_IDS,
+    ]);
     expect(MAPS.works.pve).toBe(true);
     expect(MAPS.district.pve).toBe(true);
     expect(MAPS.outskirts.pve).toBe(true);
     expect(MAPS.blacksite.pve).toBe(true);
     expect(MAPS.breach.pve).toBe(true);
-    expect(PVP_MAP_IDS).toEqual([
+    expect(authored).toEqual([
       "industrial",
       "neon",
       "desert",
@@ -48,7 +61,8 @@ describe("maps", () => {
     expect(validateMap(MAPS.breach)).toEqual([]);
   });
 
-  for (const id of PVP_MAP_IDS) {
+  // Arena invariants; generated mazes have their own tests (maze.test.ts).
+  for (const id of PVP_MAP_IDS.filter((x) => !MAPS[x].maze && x !== "island")) {
     const map = MAPS[id];
     describe(map.name, () => {
       it("has valid, reachable spawns and pickups", () => {
@@ -92,6 +106,8 @@ describe("maps", () => {
     it("offers Vehicle Mayhem only on vehicle maps and Gun Game / Hide & Seek off the large maps", () => {
       for (const id of PVP_MAP_IDS) {
         const m = MAPS[id];
+        // The Battle Royale island has vehicles but its own mode list.
+        if (id === "island") continue;
         expect(mapSupportsMode(m, "mayhem")).toBe(!!m.vehicleSpawns?.length);
         if (m.large) expect(mapSupportsMode(m, "gungame")).toBe(false);
       }
@@ -125,5 +141,18 @@ describe("maps", () => {
     const wall = map.solids[0]!;
     expect(isFreeSpot(world, { x: wall.x + wall.w / 2, y: wall.y + wall.h / 2 })).toBe(false);
     expect(isFreeSpot(world, map.spawns[0]!)).toBe(true);
+  });
+});
+
+describe("expanded arenas", () => {
+  it("are about twice the surface, with extra cover, and objects keep their size", async () => {
+    const { ARENA_SCALE } = await import("../src/maps/expand.ts");
+    for (const id of ["industrial", "neon", "desert", "urban", "facility"] as const) {
+      const m = MAPS[id];
+      const area = (m.width * m.height) / ((m.width / ARENA_SCALE) * (m.height / ARENA_SCALE));
+      expect(area).toBeGreaterThan(1.8);
+      expect(area).toBeLessThan(2.1);
+      expect(m.solids.some((s) => s.kind === "crate" && s.w === 56)).toBe(true);
+    }
   });
 });

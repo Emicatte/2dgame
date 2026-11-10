@@ -235,9 +235,11 @@ describe("GameSimulation", () => {
   it("walls block shots", () => {
     const a = addPlayer(sim, "a", "sniper");
     const b = addPlayer(sim, "b");
-    // The wall at x 608..640 spans y 448..704 on Industrial Arena
-    place(a, 560, 600);
-    place(b, 700, 600);
+    // A tall wall of Industrial Arena, a player on each side of it.
+    const w = sim.map.solids.find((s) => s.kind === "wall" && s.w <= 32 && s.h >= 300)!;
+    const y = w.y + w.h / 2;
+    place(a, w.x - 48, y);
+    place(b, w.x + w.w + 90, y);
     sim.step(SERVER_TICK_MS, "live");
     sim.enqueue("a", frames("a", 1, { buttons: BTN.FIRE }, sim.tick));
     const events = drain(sim);

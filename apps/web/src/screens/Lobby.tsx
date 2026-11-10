@@ -1,12 +1,14 @@
 import {
+  EXPERIENCE_CATEGORIES,
+  EXPERIENCE_CATEGORY_OF,
   type GameMode,
   isPveMode,
   isRoundMode,
   isTeamMode,
   MAPS,
   MATCH_LIMITS,
+  type MapId,
   MODE_BLURBS,
-  MODE_CATEGORIES,
   MODE_NAMES,
   MODE_SCORE_UNIT,
   MODE_VARIANTS,
@@ -14,12 +16,17 @@ import {
   mapSupportsMode,
   modeEnabled,
   PVP_MAP_IDS,
+  parseChallengeId,
+  parseMazeId,
   ROUND_LIMITS,
+  randomChallengeId,
+  randomMazeId,
+  sameMapFamily,
   skinById,
   TEAM_SIZE,
   TEAMS,
 } from "@scrapline/shared";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { mapThumb } from "../components/mapThumbs.ts";
 import { Button, formatClock, hexColor, LevelChip, Panel } from "../components/ui.tsx";
 import { MODE_FLAGS } from "../lib/modeFlags.ts";
@@ -49,11 +56,21 @@ const SCORE_LIMITS: Record<GameMode, number[]> = {
   convoy: [],
   outbreak: [],
   survival: [],
+  maze: [],
+  battleroyale: [],
+  parkour: [],
+  escape: [],
+  nighthunt: [],
+  hotpotato: [],
+  freeroam: [],
+  racing: [1, 2, 3, 5],
+  puzzlerace: [1, 3, 5],
 };
 
 export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
   const s = useStore(sessionStore);
   const [copied, setCopied] = useState<"room" | "team" | null>(null);
+  const picker = useRef<HTMLDetailsElement>(null);
   const self = s.players.find((p) => p.id === s.selfId);
   const isHost = s.hostId === s.selfId;
   const isPrivate = s.kind === "private";
@@ -128,16 +145,25 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
   const rounds = isRoundMode(s.mode);
   const variants = MODE_VARIANTS[s.mode] ?? [];
   /** The mode has its own end rule (ladder, rounds): no score limit to pick. */
-  const ownEnd = s.mode === "gungame" || rounds;
+  const ownEnd = SCORE_LIMITS[s.mode].length === 0 || rounds;
+  const maze = parseMazeId(s.mapId);
+  const challenge = parseChallengeId(s.mapId);
+  /** A new seed for the generated map in use (maze, course, rooms). */
+  const reseed = maze
+    ? () => randomMazeId(maze.size)
+    : challenge
+      ? () => randomChallengeId(challenge.kind)
+      : null;
   const tooFew = humans.length < def.players.min;
-  /** Modes a host can pick here, by category (co-op last). */
-  const pickable = MODE_CATEGORIES.map((c) => ({
+  /** Modes a host can switch to here, by platform category (same grouping as the home catalog). */
+  const pickable = EXPERIENCE_CATEGORIES.map((c) => ({
     ...c,
-    modes: c.modes.filter(
-      (m): m is GameMode =>
-        m in MODES && MODES[m as GameMode].status === "available" && modeEnabled(m, MODE_FLAGS),
+    modes: (Object.keys(EXPERIENCE_CATEGORY_OF) as GameMode[]).filter(
+      (m) =>
+        EXPERIENCE_CATEGORY_OF[m] === c.id && MODES[m].status === "available" && modeEnabled(m, MODE_FLAGS),
     ),
   })).filter((c) => c.modes.length > 0);
+  const category = EXPERIENCE_CATEGORIES.find((c) => c.id === EXPERIENCE_CATEGORY_OF[s.mode])?.name;
 
   return (
     <div className="screen screen--dim">
@@ -223,36 +249,51 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
         <div className="stack">
           <Panel title="Match">
             <div className="stack">
-              {canHost && (
-                <div className="stack" data-testid="mode-select" style={{ gap: 6 }}>
-                  {pickable.map((c) => (
-                    <fieldset
-                      key={c.id}
-                      className={`mode-grid ${c.id === "coop" ? "mode-grid--coop" : ""}`}
-                      aria-label={`${c.name} modes`}
-                    >
-                      <legend className="stencil mode-grid__legend">{c.name}</legend>
-                      {c.modes.map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          className={`mode-card ${c.id === "coop" ? "mode-card--coop" : ""}`}
-                          aria-pressed={s.mode === m}
-                          onClick={() => session.updateSettings({ mode: m })}
-                          data-testid={`mode-${m}`}
-                        >
-                          {MODE_NAMES[m]}
-                          <small>
-                            {MODES[m].players.min === MODES[m].players.max
-                              ? MODES[m].players.min
-                              : `${MODES[m].players.min}–${MODES[m].players.max}`}{" "}
-                            players
-                          </small>
-                        </button>
-                      ))}
-                    </fieldset>
-                  ))}
-                </div>
+              <div className="lobby-mode" data-testid="lobby-mode">
+                <span className="stencil">{category} · mode</span>
+                <strong className="lobby-mode__name">{MODE_NAMES[s.mode]}</strong>
+              </div>
+              {canHost ? (
+                <details className="mode-picker" ref={picker} data-testid="mode-select">
+                  <summary className="btn btn--sm" data-testid="change-mode">
+                    Change mode
+                  </summary>
+                  <div className="stack" style={{ gap: 6, marginTop: 10 }}>
+                    {pickable.map((c) => (
+                      <fieldset key={c.id} className="mode-grid" aria-label={`${c.name} modes`}>
+                        <legend className="stencil mode-grid__legend">{c.name}</legend>
+                        {c.modes.map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            className="mode-card"
+                            aria-pressed={s.mode === m}
+                            onClick={() => {
+                              session.updateSettings({ mode: m });
+                              if (picker.current) picker.current.open = false;
+                            }}
+                            data-testid={`mode-${m}`}
+                          >
+                            {MODE_NAMES[m]}
+                            <small>
+                              {MODES[m].players.min === MODES[m].players.max
+                                ? MODES[m].players.min
+                                : `${MODES[m].players.min}–${MODES[m].players.max}`}{" "}
+                              players
+                            </small>
+                          </button>
+                        ))}
+                      </fieldset>
+                    ))}
+                  </div>
+                </details>
+              ) : (
+                isPrivate &&
+                !waiting && (
+                  <p className="field__hint" data-testid="guest-hint">
+                    The host picks the mode, the map and the rules.
+                  </p>
+                )
               )}
               <p className="mode-blurb" data-testid="mode-blurb">
                 {MODE_BLURBS[s.mode]}
@@ -268,16 +309,25 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                 <PveMatchSettings canHost={canHost} />
               ) : (
                 <>
-                  <div className="grid-3">
+                  <span className="stencil">Map</span>
+                  <div className="grid-3" data-testid="lobby-maps">
                     {PVP_MAP_IDS.filter((id) => mapSupportsMode(MAPS[id], s.mode) || id === s.mapId).map(
                       (id) => (
                         <button
                           key={id}
                           type="button"
                           className="map-card"
-                          aria-pressed={s.mapId === id}
+                          aria-pressed={sameMapFamily(s.mapId, id)}
                           disabled={!canHost}
-                          onClick={() => session.updateSettings({ map: id })}
+                          onClick={() => {
+                            // Generated maps: one card per family; picking one draws a fresh seed.
+                            const m = parseMazeId(id);
+                            const c = parseChallengeId(id);
+                            if (sameMapFamily(s.mapId, id) && (m || c)) return;
+                            session.updateSettings({
+                              map: m ? randomMazeId(m.size) : c ? randomChallengeId(c.kind) : id,
+                            });
+                          }}
                           title={
                             MAPS[id].players
                               ? `${MAPS[id].tagline} Best with ${MAPS[id].players!.min}–${MAPS[id].players!.max} players.`
@@ -285,7 +335,11 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                           }
                           data-testid={`map-${id}`}
                         >
-                          <img className="map-card__preview" src={mapThumb(id)} alt="" />
+                          <img
+                            className="map-card__preview"
+                            src={mapThumb(sameMapFamily(s.mapId, id) ? (s.mapId as MapId) : id)}
+                            alt=""
+                          />
                           <span className="map-card__label">
                             {MAPS[id].name}
                             {MAPS[id].vehicleSpawns && def.vehicles && (
@@ -297,6 +351,24 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                       ),
                     )}
                   </div>
+                  {reseed && (
+                    <div className="row" data-testid="maze-seed">
+                      <span className="field__hint">
+                        Seed <span className="mono">{(maze ?? challenge)!.seed}</span>: everyone gets the same
+                        map.
+                      </span>
+                      <span className="spacer" />
+                      {canHost && (
+                        <Button
+                          size="sm"
+                          onClick={() => session.updateSettings({ map: reseed() })}
+                          data-testid="new-maze"
+                        >
+                          New map
+                        </Button>
+                      )}
+                    </div>
+                  )}
                   <div className="row" style={{ flexWrap: "wrap" }} data-testid="match-rules">
                     <span className="badge">{MODE_NAMES[s.mode]}</span>
                     {teams && (
@@ -315,6 +387,11 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                       </>
                     ) : (
                       <>
+                        {variants.length > 0 && (
+                          <span className="badge" data-testid="variant-badge">
+                            {variants.find((v) => v.id === s.round.variant)?.name ?? variants[0]!.name}
+                          </span>
+                        )}
                         <span className="badge">{formatClock(s.durationSec)} min</span>
                         {!ownEnd && (
                           <span className="badge">
@@ -390,6 +467,23 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                         </select>
                       </div>
                     </>
+                  )}
+                  {!rounds && variants.length > 0 && (
+                    <div className="setting-row">
+                      <span>Variant</span>
+                      <select
+                        className="input"
+                        value={s.round.variant}
+                        onChange={(e) => session.updateSettings({ variant: e.target.value })}
+                        data-testid="variant"
+                      >
+                        {variants.map((v) => (
+                          <option key={v.id} value={v.id} title={v.blurb}>
+                            {v.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                   {!rounds && (
                     <div className="setting-row">

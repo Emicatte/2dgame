@@ -26,7 +26,7 @@ async function startRoom(a: Page, b: Page, map: string, spawns: { x: number; y: 
   );
   const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
   expect(code).toMatch(/^[A-Z0-9]{5}$/);
-  await b.getByTestId("join-room").click();
+  await b.getByTestId("nav-rooms").click();
   await b.getByTestId("room-code-input").fill(code);
   const t0 = Date.now();
   await b.getByTestId("join-submit").click();

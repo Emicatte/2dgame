@@ -38,19 +38,28 @@ import { currentLoadout, profileStore, refreshProfile, saveLoadout } from "../st
 
 // ------------------------------------------------------------------ room browser
 
-export function RoomBrowser({ onBack }: { onBack: () => void }) {
+/**
+ * Public rooms of the dedicated server, refreshed every 4 s (Friends & rooms tab). Calls back with
+ * the live totals so the home can show them: real numbers from the server, nothing estimated.
+ */
+export function RoomList({ onTotals }: { onTotals?: (rooms: number, players: number) => void }) {
   const [rooms, setRooms] = useState<RoomListing[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setRooms(await api.rooms());
+      const list = await api.rooms();
+      setRooms(list);
       setError(null);
+      onTotals?.(
+        list.length,
+        list.reduce((n, r) => n + r.players, 0),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load rooms");
     }
-  }, []);
+  }, [onTotals]);
 
   useEffect(() => {
     void load();
@@ -68,78 +77,55 @@ export function RoomBrowser({ onBack }: { onBack: () => void }) {
     }
   }
 
-  async function quick() {
-    setJoining("quick");
-    try {
-      await session.quickMatch(currentLoadout());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Matchmaking failed");
-      setJoining(null);
-    }
-  }
-
   return (
-    <div className="screen screen--dim">
-      <div className="sheet">
-        <SheetHeader title="Public rooms" onBack={onBack}>
-          <Button variant="primary" onClick={quick} disabled={!!joining}>
-            Quick match
-          </Button>
-        </SheetHeader>
-        <div className="sheet__body">
-          <Panel title={rooms ? `${rooms.length} open rooms` : "Loading…"}>
-            {error && (
-              <p className="field__error" role="alert">
-                {error}
-              </p>
-            )}
-            {rooms && rooms.length === 0 && (
-              <p className="field__hint">
-                No public rooms right now. Quick match creates one and others will join you.
-              </p>
-            )}
-            {rooms && rooms.length > 0 && (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Map</th>
-                    <th>Mode</th>
-                    <th>Status</th>
-                    <th className="num">Players</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rooms.map((r) => (
-                    <tr key={r.roomId}>
-                      <td>{isMapId(r.map) ? MAPS[r.map].name : r.map}</td>
-                      <td>
-                        {r.mode && r.mode in MODE_NAMES
-                          ? MODE_NAMES[r.mode as keyof typeof MODE_NAMES]
-                          : MODE_NAMES.deathmatch}
-                      </td>
-                      <td>
-                        <span className={`badge ${r.phase === "playing" ? "badge--accent" : "badge--good"}`}>
-                          {r.phase === "playing" ? "In match" : r.phase}
-                        </span>
-                      </td>
-                      <td className="num">
-                        {r.players}/{r.maxPlayers}
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        <Button size="sm" onClick={() => join(r.roomId)} disabled={!!joining}>
-                          {joining === r.roomId ? "Joining…" : "Join"}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </Panel>
-        </div>
-      </div>
-    </div>
+    <Panel title={rooms ? `Public rooms · ${rooms.length} open` : "Public rooms · loading…"}>
+      {error && (
+        <p className="field__error" role="alert">
+          {error}
+        </p>
+      )}
+      {rooms && rooms.length === 0 && (
+        <p className="field__hint">No public rooms right now. Quick match on any experience opens one.</p>
+      )}
+      {rooms && rooms.length > 0 && (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Map</th>
+              <th>Mode</th>
+              <th>Status</th>
+              <th className="num">Players</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {rooms.map((r) => (
+              <tr key={r.roomId}>
+                <td>{isMapId(r.map) ? MAPS[r.map].name : r.map}</td>
+                <td>
+                  {r.mode && r.mode in MODE_NAMES
+                    ? MODE_NAMES[r.mode as keyof typeof MODE_NAMES]
+                    : MODE_NAMES.deathmatch}
+                </td>
+                <td>
+                  <span className={`badge ${r.phase === "playing" ? "badge--accent" : "badge--good"}`}>
+                    {r.phase === "playing" ? "In match" : r.phase}
+                  </span>
+                </td>
+                <td className="num">
+                  {r.players}/{r.maxPlayers}
+                </td>
+                <td style={{ textAlign: "right" }}>
+                  <Button size="sm" onClick={() => join(r.roomId)} disabled={!!joining}>
+                    {joining === r.roomId ? "Joining…" : "Join"}
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Panel>
   );
 }
 
@@ -269,7 +255,15 @@ export function Loadout({ onBack }: { onBack: () => void }) {
 
 // ------------------------------------------------------------------ profile
 
-export function Profile({ onBack }: { onBack: () => void }) {
+export function Profile({
+  onBack,
+  onLoadout,
+  onLeaderboard,
+}: {
+  onBack: () => void;
+  onLoadout?: () => void;
+  onLeaderboard?: () => void;
+}) {
   const { profile } = useStore(profileStore);
   const [name, setName] = useState(profile?.nickname ?? "");
   const [msg, setMsg] = useState<string | null>(null);
@@ -307,7 +301,18 @@ export function Profile({ onBack }: { onBack: () => void }) {
   return (
     <div className="screen screen--dim">
       <div className="sheet">
-        <SheetHeader title="Profile" onBack={onBack} />
+        <SheetHeader title="Profile" onBack={onBack}>
+          {onLeaderboard && (
+            <Button variant="ghost" onClick={onLeaderboard} data-testid="open-leaderboard">
+              Leaderboard
+            </Button>
+          )}
+          {onLoadout && (
+            <Button onClick={onLoadout} data-testid="open-loadout">
+              Loadout
+            </Button>
+          )}
+        </SheetHeader>
         <div className="sheet__body stack">
           <Panel title="Pilot">
             <div className="row" style={{ flexWrap: "wrap", gap: 16 }}>

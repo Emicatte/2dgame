@@ -163,6 +163,8 @@ export interface GameEvents extends Record<string, unknown> {
   notice: NoticeMessage;
   results: ResultsMessage;
   roomChanged: Room<unknown, MatchState> | null;
+  /** Home screen: the map shown behind the menu while not in a room. */
+  menuMap: MapId;
 }
 
 export const gameEvents = new Emitter<GameEvents>();

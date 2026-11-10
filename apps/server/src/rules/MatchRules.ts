@@ -59,7 +59,7 @@ export class MatchRules {
 
   /** Practice bots fill a lonely room in this mode (never in co-op or the round modes). */
   get practiceAllowed(): boolean {
-    return !this.pveMode && !this.roleMode;
+    return !this.pveMode && !this.roleMode && MODES[this.state.mode as GameMode]?.weapons !== "None";
   }
 
   humans(): ServerPlayer[] {
@@ -109,6 +109,13 @@ export class MatchRules {
       this.state.maxPlayers = Math.max(d.maxPlayers, humans);
       for (const p of this.sim.players.values()) p.team = 0;
     }
+    // Any other mode with variants (Classic / Horror Maze) starts on its first one.
+    if (
+      !isRoleMode(mode) &&
+      MODE_VARIANTS[mode] &&
+      !MODE_VARIANTS[mode]!.some((v) => v.id === this.state.round.variant)
+    )
+      this.state.round.variant = defaultVariant(mode);
     this.applyCombatRules();
   }
 

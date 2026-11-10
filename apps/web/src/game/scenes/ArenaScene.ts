@@ -68,7 +68,7 @@ import Phaser from "phaser";
 import { keyLabel, settingsStore } from "../../lib/settings.ts";
 import { gameEvents, session, sessionStore } from "../../net/session.ts";
 import { currentLoadout } from "../../state/profile.ts";
-import { renderMap } from "../art/mapRenderer.ts";
+import { renderMap, renderOutskirts } from "../art/mapRenderer.ts";
 import { TEX, TEX_SCALE } from "../art/textures.ts";
 import { score } from "../audio/score.ts";
 import { sfx } from "../audio/sfx.ts";
@@ -84,6 +84,7 @@ import { PlayerView } from "../entities/PlayerView.ts";
 import { VehicleView } from "../entities/VehicleView.ts";
 import { type HudObjective, type HudVehicle, hudStore, uiStore } from "../hudStore.ts";
 import { InputManager } from "../input/InputManager.ts";
+import { BrLayer } from "../modes/BrLayer.ts";
 import { ModeLayer } from "../modes/ModeLayer.ts";
 import { ServerClock } from "../net/clock.ts";
 import {
@@ -175,11 +176,14 @@ export class ArenaScene extends Phaser.Scene {
   private pve!: PveLayer;
   /** Collision worlds with the current mission doors (null outside PvE maps with doors). */
   private doorWorlds: { world: CollisionWorld; shotWorld: CollisionWorld } | null = null;
+  /** Maze gates applied to the prediction world ("<map>|<open gates>"), "" = not yet. */
+  private mazeDoorKey = "";
   private pickupViews = new Map<string, PickupView>();
   /** Items on the ground (MatchState.drops); weapon drops carry their weapon index. */
   private dropViews = new Map<string, PickupView & { w: number | null }>();
   private views = new Map<string, PlayerView>();
   private modes!: ModeLayer;
+  private br!: BrLayer;
   /** Prop Hunt bakes the map without its objects (they are drawn live): which variant is loaded. */
   private mapProps = true;
   private vehicleViews = new Map<string, VehicleView>();
@@ -195,6 +199,7 @@ export class ArenaScene extends Phaser.Scene {
   private zoomFactor = 1;
   private engineTimer = 0;
   private mapTiles: Phaser.GameObjects.Image[] = [];
+  private outskirts?: Phaser.GameObjects.TileSprite;
   private pendingMap: MapId | null = null;
   private pointViews = new Map<string, PointView>();
   private flagViews = new Map<string, FlagView>();
@@ -240,6 +245,7 @@ export class ArenaScene extends Phaser.Scene {
     this.lightmap.setQuality(settingsStore.get().quality);
     this.pve.lightmap = this.lightmap;
     this.modes = new ModeLayer(this, this.effects, this.lightmap);
+    this.br = new BrLayer(this);
     this.perf = new PerfRecorder(this.game, () => this.children.length);
     this.crosshair = new Crosshair(this);
     this.predictor = new Predictor(collisionWorldFor(this.map), 0, airWorldFor(this.map));
@@ -250,6 +256,13 @@ export class ArenaScene extends Phaser.Scene {
 
     this.unsubs.push(
       gameEvents.on("roomChanged", (room) => this.attachRoom(room)),
+      gameEvents.on("menuMap", (id) => {
+        // Behind the home only: a room always shows its own map.
+        if (this.room || id === this.map.id || !(id in MAPS)) return;
+        this.time.delayedCall(0, () => {
+          if (!this.room && id !== this.map.id) this.loadMap(MAPS[id]);
+        });
+      }),
       gameEvents.on("net", ({ events, tick }) => this.onNetEvents(events, tick)),
       settingsStore.subscribe(() => this.applyQuality()),
       uiStore.subscribe(() => {
@@ -283,9 +296,21 @@ export class ArenaScene extends Phaser.Scene {
           hp: number;
           kills: number;
           deaths: number;
+          alt: number;
+          frozen: boolean;
         }[] = [];
         this.room?.state?.players.forEach((p, id) => {
-          out.push({ id, x: p.x, y: p.y, alive: p.alive, hp: p.hp, kills: p.kills, deaths: p.deaths });
+          out.push({
+            id,
+            x: p.x,
+            y: p.y,
+            alive: p.alive,
+            hp: p.hp,
+            kills: p.kills,
+            deaths: p.deaths,
+            alt: p.alt,
+            frozen: p.frozen,
+          });
         });
         return out;
       },
@@ -334,6 +359,8 @@ export class ArenaScene extends Phaser.Scene {
           })(),
           disguises: st.disguises.size,
           pings: st.pings.size,
+          mapId: st.mapId,
+          doors: st.pve.doors,
           players,
           body: this.predictor.body,
           modeText: st.modeText,
@@ -347,10 +374,18 @@ export class ArenaScene extends Phaser.Scene {
           abl: st.players.get(this.room?.sessionId ?? "")?.abl ?? 0,
           tick: st.tick,
           marks: (() => {
-            const out: { id: string; k: string; x: number; y: number; l: string; a: string; c: number }[] =
-              [];
+            const out: {
+              id: string;
+              k: string;
+              x: number;
+              y: number;
+              l: string;
+              a: string;
+              c: number;
+              p: number;
+            }[] = [];
             st.marks.forEach((m, id) => {
-              out.push({ id, k: m.k, x: m.x, y: m.y, l: m.l, a: m.a, c: m.c });
+              out.push({ id, k: m.k, x: m.x, y: m.y, l: m.l, a: m.a, c: m.c, p: m.p });
             });
             return out;
           })(),
@@ -580,6 +615,12 @@ export class ArenaScene extends Phaser.Scene {
       cam.filters.external.clear();
       // The vignette is a full-screen pass: High only.
       if (budget.vignette) cam.filters.external.addVignette(0.5, 0.5, 0.95, 0.35);
+      // Colour grade (Medium and High): a touch more saturation and contrast.
+      if (budget.grade) {
+        const cm = cam.filters.external.addColorMatrix().colorMatrix;
+        cm.saturate(0.12);
+        cm.contrast(0.06, true);
+      }
     }
   }
 
@@ -629,6 +670,15 @@ export class ArenaScene extends Phaser.Scene {
       this.mapImage = this.add.image(0, 0, key).setOrigin(0).setDepth(0);
     }
     this.cameras.main.setBackgroundColor(map.theme.fog);
+    // Ground beyond the edge (one repeating tile), under the map.
+    const outKey = `outskirts-${map.id}`;
+    if (!this.textures.exists(outKey)) this.addStaticCanvas(outKey, renderOutskirts(map));
+    const PAD = 1600;
+    this.outskirts?.destroy();
+    this.outskirts = this.add
+      .tileSprite(-PAD, -PAD, map.width + PAD * 2, map.height + PAD * 2, outKey)
+      .setOrigin(0)
+      .setDepth(-1);
 
     for (const l of this.lightImages) l.img.destroy();
     this.lightImages = map.lights.map((l, i) => ({
@@ -770,6 +820,7 @@ export class ArenaScene extends Phaser.Scene {
     this.pve.clear();
     pveHud.reset();
     this.doorWorlds = null;
+    this.mazeDoorKey = "";
     this.buffer.clear();
     this.clock.reset();
     this.eventQueue = [];
@@ -915,6 +966,14 @@ export class ArenaScene extends Phaser.Scene {
         if (this.pve.active) this.updateSight(state);
       }
       if (this.pve.active && this.pve.doorsChanged(state)) this.applyDoors(state);
+      // Maze gates: the same doors mechanism on a generated map (closed gates are solids).
+      if (this.map.maze) {
+        const key = `${this.map.id}|${state.pve.doors}`;
+        if (key !== this.mazeDoorKey) {
+          this.mazeDoorKey = key;
+          this.applyDoors(state);
+        }
+      }
       const scoreOn = this.pve.active && inMatch;
       if (scoreOn !== this.scoreOn) {
         this.scoreOn = scoreOn;
@@ -1137,7 +1196,7 @@ export class ArenaScene extends Phaser.Scene {
   /** Mission doors changed: every machine rebuilds the same collision worlds (exact prediction). */
   private applyDoors(state: MatchState) {
     const mission = state.mode === "outbreak" ? missionById(state.pve.mission) : undefined;
-    const doors = mission?.doors ?? [];
+    const doors = mission?.doors ?? this.map.maze?.gates ?? [];
     const open = state.mode === "survival" ? new Set(doors.map((d) => d.id)) : parseIdList(state.pve.doors);
     this.doorWorlds = doors.length > 0 ? pveWorlds(this.map, doors, open) : null;
     this.predictor.setWorld(this.doorWorlds?.world ?? collisionWorldFor(this.map), airWorldFor(this.map));
@@ -1148,7 +1207,8 @@ export class ArenaScene extends Phaser.Scene {
   private updateSight(state: MatchState) {
     const mission = state.mode === "outbreak" ? missionById(state.pve.mission) : undefined;
     const open = parseIdList(state.pve.doors);
-    const closed = state.mode === "survival" ? [] : (mission?.doors ?? []).filter((d) => !open.has(d.id));
+    const doors = mission?.doors ?? this.map.maze?.gates ?? [];
+    const closed = state.mode === "survival" ? [] : doors.filter((d) => !open.has(d.id));
     this.lightmap.setWorld(sightWorld(this.map.solids, closed));
   }
 
@@ -1529,6 +1589,7 @@ export class ArenaScene extends Phaser.Scene {
       const meView = this.views.get(self);
       const local = meView ? { x: meView.root.x, y: meView.root.y, aim: this.predictor.sim.aim } : null;
       this.modes.update(state, self, renderTick, state.tick, dt / 1000, local, this.cameras.main, this.map);
+      this.br.update(state, this.map, this.views, self, this.predictor.sim.alt, renderTick);
     }
     if (this.pve.active) {
       const me = this.views.get(this.room.sessionId);
@@ -1581,7 +1642,8 @@ export class ArenaScene extends Phaser.Scene {
     let buttons = 0;
     if (i.mouseDown) buttons |= BTN.FIRE;
     if (i.isDown("reload")) buttons |= BTN.RELOAD;
-    if (i.isDown("dash")) buttons |= BTN.DASH;
+    // Space also jumps from the Battle Royale bus and opens the parachute (it is the dash key).
+    if (i.isDown("dash") || i.isCodeDown("Space")) buttons |= BTN.DASH;
     if (i.isDown("interact")) buttons |= BTN.INTERACT;
     if (i.isDown("shield")) buttons |= BTN.SHIELD;
     if (this.seatPending) {
@@ -2005,6 +2067,8 @@ export class ArenaScene extends Phaser.Scene {
       cursorLead = 0.6;
       targetZoom = 1 - 0.1 * lead - 0.12 * pose.alt;
     }
+    // In the air (Battle Royale drop) the view widens with the altitude.
+    if (!mount && this.predictor.sim.alt > 0) targetZoom = 1 - 0.35 * BrLayer.altFrac(this.predictor.sim.alt);
     const zk = 1 - Math.exp(-dt / 500);
     this.zoomFactor += (targetZoom - this.zoomFactor) * zk;
     cam.setZoom(this.baseZoom * this.zoomFactor);
@@ -2204,9 +2268,20 @@ export class ArenaScene extends Phaser.Scene {
       this.lastCountdownSec = s;
     }
     const weapon = this.predictor.mount ? null : this.nearbyWeaponPickup();
-    const modePrompt = this.predictorAlive
-      ? this.modes.prompt(state, this.room.sessionId, { x: this.predictor.sim.x, y: this.predictor.sim.y })
-      : null;
+    const meState = state.players.get(this.room.sessionId);
+    const dropPrompt =
+      state.mode !== "battleroyale" || !meState
+        ? null
+        : meState.frozen && meState.alt > 0
+          ? { text: "SPACE: jump from the bus", progress: 0 }
+          : this.predictor.sim.alt > 0 && !this.predictor.sim.chute
+            ? { text: "SPACE: open the parachute", progress: 0 }
+            : null;
+    const modePrompt =
+      dropPrompt ??
+      (this.predictorAlive
+        ? this.modes.prompt(state, this.room.sessionId, { x: this.predictor.sim.x, y: this.predictor.sim.y })
+        : null);
     const interact = this.enterTarget
       ? `Enter ${this.enterTarget.def.name} as ${this.enterTarget.def.seats[this.enterTarget.seat]!.role}`
       : (this.enterBlocked ??

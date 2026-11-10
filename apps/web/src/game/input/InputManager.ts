@@ -66,6 +66,11 @@ export class InputManager {
     return this.down.has(settingsStore.get().bindings[action]);
   }
 
+  /** A physical key by code (fixed keys such as Space, the jump / parachute key). */
+  isCodeDown(code: string): boolean {
+    return this.enabled && this.down.has(code);
+  }
+
   /** True once per key press, until consumed. */
   consume(action: Action): boolean {
     if (!this.latched.has(action)) return false;

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import "./styles/global.css";
 import "./styles/screens.css";
+import "./styles/home.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("#root missing");

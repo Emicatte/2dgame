@@ -1,13 +1,17 @@
 import type { GameMode } from "@scrapline/shared";
 import type { GameSimulation } from "../simulation/GameSimulation.ts";
+import { BattleRoyaleMode } from "./BattleRoyale.ts";
 import { BountyMode } from "./Bounty.ts";
 import { ChaosMode } from "./Chaos.ts";
 import { GunGameMode } from "./GunGame.ts";
 import { HideSeekMode } from "./HideSeek.ts";
 import { InfectionMode } from "./Infection.ts";
+import { MazeMode } from "./Maze.ts";
 import type { ModeController } from "./ModeController.ts";
+import { FreeRoamMode, HotPotatoMode, RacingMode } from "./PartyModes.ts";
 import { PropHuntMode } from "./PropHunt.ts";
 import { PursuitMode } from "./Pursuit.ts";
+import { PuzzleRaceMode } from "./PuzzleRace.ts";
 import { SabotageMode } from "./Sabotage.ts";
 
 export type { ModeController } from "./ModeController.ts";
@@ -35,6 +39,21 @@ export function createModeController(mode: GameMode, sim: GameSimulation): ModeC
     case "pursuit":
     case "convoy":
       return new PursuitMode(sim, mode);
+    case "maze":
+    case "parkour":
+    case "escape":
+    case "nighthunt":
+      return new MazeMode(sim, mode);
+    case "puzzlerace":
+      return new PuzzleRaceMode(sim);
+    case "battleroyale":
+      return new BattleRoyaleMode(sim);
+    case "hotpotato":
+      return new HotPotatoMode(sim);
+    case "freeroam":
+      return new FreeRoamMode(sim);
+    case "racing":
+      return new RacingMode(sim);
     default:
       return null;
   }

@@ -140,3 +140,24 @@ export function roleText(mode: string): RoleText {
     blind: true,
   };
 }
+
+/**
+ * Battle Royale: the flying bus, the drop and the storm. Storm phases: wait, then shrink to a
+ * fraction of the map's half-diagonal; damage per second outside the safe zone.
+ */
+export const BATTLE_ROYALE = {
+  busSpeed: 420,
+  /** Bus line: half length (px) and how far from the map centre it may pass. */
+  busHalfLength: 2700,
+  busOffset: 600,
+  /** The storm starts as a circle around the whole map. */
+  stormStartRadius: 2950,
+  phases: [
+    { waitSec: 60, shrinkSec: 45, radius: 1700, dps: 2 },
+    { waitSec: 45, shrinkSec: 35, radius: 1000, dps: 4 },
+    { waitSec: 35, shrinkSec: 30, radius: 550, dps: 7 },
+    { waitSec: 25, shrinkSec: 25, radius: 250, dps: 10 },
+    { waitSec: 20, shrinkSec: 20, radius: 80, dps: 14 },
+    { waitSec: 15, shrinkSec: 20, radius: 0, dps: 20 },
+  ],
+} as const;

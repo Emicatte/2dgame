@@ -137,6 +137,43 @@ pnpm --filter @scrapline/shared exec vitest run test/maps.test.ts   # validates 
 pnpm test:e2e:p2p newmodes.spec                   # one two-browser match per new mode family
 ```
 
+## Results (2026-11-10, v0.9.0 Puzzle Race, Closing zone, graphics pass)
+
+| Suite | Count | Result |
+|---|---|---|
+| Lint, typecheck | — | clean (the one older warning) |
+| Unit: shared / web / server (+ Puzzle Race order, reset, win; Closing zone reveal) | 135 + 3 skipped / 147 / 267 + 8 skipped | pass |
+| E2E host mode: `platform` (incl. Puzzle Race solo start), `home`, `hostmode` | 7 | pass |
+
+## Results (2026-11-10, v0.9.0 new modes + bigger arenas, branch `platform-home`)
+
+| Suite | Count | Result |
+|---|---|---|
+| Lint, typecheck | — | clean (the one older warning) |
+| Unit: shared (+ expanded arenas: size, spawns and pickups clear and inside, cover off roads; challenge maps) / web (host load and vehicles on the bigger Urban) / server (+ Parkour, Escape Room, Night Hunt, Hot Potato, Free Roam, Racing, BR slots) | 135 + 3 skipped / 147 / 265 + 8 skipped | pass |
+| E2E host mode: `home`, `hostmode`, `vehicles`, `loot`, Survival boss, `platform` (new-mode lobbies; Parkour, Free Roam, Racing start) | 9 | pass |
+
+## Results (2026-11-10, v0.9.0 platform phases, branch `platform-home`)
+
+| Suite | Count | Result |
+|---|---|---|
+| Lint, typecheck (incl. E2E sources) | — | clean (the one older warning) |
+| Unit: shared (+ maze generator: determinism, validation, solvability over 30 seeds; island validity) / web / server (+ maze controller, Horror Maze creature, bot field of view / hearing / personalities, Battle Royale bus, drop, storm, last standing, bots loot) | 132 + 3 skipped / 147 / 258 + 8 skipped | pass |
+| E2E host mode: `maze.spec` (Classic Maze shared by host and guest, gates, keys, switch, traps; Horror Maze dark with its creature rendered), `battleroyale.spec` (bus, SPACE jump, freefall, parachute, landing, storm), practice bots after the AI changes | 4 | pass |
+| Server benchmark, Battle Royale, simulated random players (tick + filtered encoding, no transport) | 8 / 16 / 32 / 50 | 0.07 / 0.14 / 0.22 / 0.39 ms per tick; 2.5 / 4.8 / 9.1 / 13.9 KB/s per client |
+
+## Results (last run: 2026-11-10, v0.9.0 home overhaul, branch `platform-home`)
+
+| Suite | Count | Result |
+|---|---|---|
+| Lint (Biome), typecheck (tsc strict, E2E sources included) | — | clean (the one older warning) |
+| `packages/shared` unit (+ experience catalog: unique ids, every mode has a card, card maps belong to the mode, planned experiences never start, feature flags, operation ↔ room mapping) | 126 + 3 skipped | pass |
+| `apps/web` unit (+ recently played list) | 147 | pass |
+| `apps/server` unit + integration (unchanged; after merging 0.8.1) | 243 + 8 skipped | pass |
+| E2E host mode, home (`home.spec.ts`): one entry per destination, no map picker before the lobby (Play, Discover, experience card, Rooms), Escape closes the card and returns focus, category tile → filtered Discover, sheets go back where they came from, one-click Play → lobby, map and mode chosen in the lobby, "Continue" after a real match. Discover with all 18 map images: 4.5 s in this container (software rendering), longest main-thread task 189 ms | 2 | pass |
+| E2E host mode regressions, moved to the new navigation (`hostmode`, `leave`, `loot`, `newmodes`, `partymodes`, `outbreak`, `vehicles`) | 20 | 19 pass. **Outbreak First Contact co-op** fails at the guest's infected count, as it already did on `main` (see 0.8.0 below). The Gun Game test first failed because Discover kept the Party filter between visits (intended); the test now selects "All" |
+| E2E dedicated server, `teams.spec` (server-mode home, create room, change mode, team invite, join) | 1 | navigation steps pass; fails later at the elimination step, as the dedicated-server specs already did in this environment (~5 FPS software rendering, see 0.7.0 below) |
+
 ## Results (last run: 2026-11-10, v0.8.1, branch `party-dynamics`)
 
 | Suite | Count | Result |

@@ -29,7 +29,7 @@ async function onboard(page: Page, name: string) {
   await page.goto("/");
   await page.fill("#nick", name);
   await page.click("button[type=submit]");
-  await expect(page.getByTestId("create-room")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("hero-play")).toBeVisible({ timeout: 10_000 });
   await page.waitForFunction(() => !!(window as unknown as { __scrapline?: unknown }).__scrapline);
 }
 
@@ -49,8 +49,8 @@ test("leave match keeps you in the arena; leave arena leaves it", async () => {
   await onboard(a, "Alpha");
   await onboard(b, "Bravo");
 
+  await a.getByTestId("nav-rooms").click();
   await a.getByTestId("create-room").click();
-  await a.getByTestId("create-submit").click();
   await expect(a.getByTestId("host-hint")).toBeVisible({ timeout: 15_000 });
   const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
   await b.goto(`/?join=${code}`);
@@ -76,12 +76,12 @@ test("leave match keeps you in the arena; leave arena leaves it", async () => {
 
   // B: Leave arena → main menu; the host sees B gone.
   await b.getByTestId("leave-arena").click();
-  await expect(b.getByTestId("create-room")).toBeVisible({ timeout: 10_000 });
+  await expect(b.getByTestId("hero-play")).toBeVisible({ timeout: 10_000 });
   await expect.poll(() => players(a), { timeout: 10_000 }).toBeLessThan(2);
 
   // The host leaves the match too: nobody human is playing, the match ends (results, still in the arena).
   await a.keyboard.press("Escape");
   await a.getByTestId("leave-match").click();
   await phaseIs(a, "results", 10_000);
-  await expect(a.getByTestId("create-room")).toHaveCount(0);
+  await expect(a.getByTestId("hero-play")).toHaveCount(0);
 });

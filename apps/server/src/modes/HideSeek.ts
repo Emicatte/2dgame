@@ -9,7 +9,7 @@ import {
   SIGHT,
 } from "@scrapline/shared";
 import type { ServerPlayer } from "../simulation/GameSimulation.ts";
-import type { ModeFacts } from "./ModeController.ts";
+import type { MarkData, ModeFacts } from "./ModeController.ts";
 import { RoundMode } from "./RoundMode.ts";
 
 /**
@@ -17,7 +17,8 @@ import { RoundMode } from "./RoundMode.ts";
  * then the seekers hunt with their weapons. The server publishes a hider's position only while a
  * seeker can actually see them (screen box, line of sight, shadows, hiding spots, and in the
  * Blackout variant the flashlight cone). Variants: "classic" (found hiders are out until the next
- * round), "infect" (found hiders join the seekers), "blackout" (lights out periodically).
+ * round), "infect" (found hiders join the seekers), "blackout" (lights out periodically),
+ * "closing" (a safe zone shrinks during the hunt; hiders outside it are revealed).
  * Seekers have a sonar (G); hiders throw a noise decoy (G): a fake ping where they aim. Mid-hunt
  * the lights go out for 20 s in every variant (Blackout has its own cycle instead).
  */
@@ -29,6 +30,8 @@ export class HideSeekMode extends RoundMode {
   protected readonly surviveBonus = HIDE_SEEK.points.survive;
   protected readonly findPoints = HIDE_SEEK.points.find;
   private huntStart = 0;
+  /** Closing variant: the safe zone's centre (picked at hunt start) and current radius. */
+  private zone = { x: 0, y: 0, r: 0 };
   /** Hidden-time points already paid out, per player (in units of hiddenEverySec). */
   private readonly hiddenPaid = new Map<string, number>();
 
@@ -39,6 +42,36 @@ export class HideSeekMode extends RoundMode {
 
   protected override onHuntStart(): void {
     this.huntStart = this.sim.tick;
+    const m = this.sim.map;
+    const spots = m.party?.hideSpots ?? [];
+    const c =
+      spots.length > 0
+        ? spots[Math.floor(Math.random() * spots.length)]!
+        : { x: m.width / 2, y: m.height / 2 };
+    this.zone = { x: c.x, y: c.y, r: Math.hypot(m.width, m.height) };
+  }
+
+  /** Closing variant: shrinks the zone and reveals the hiders outside it. */
+  private closeZone(): void {
+    const z = HIDE_SEEK.zone;
+    const hunt = this.tickOf(HIDE_SEEK.huntSec);
+    const t = (this.sim.tick - this.huntStart) / hunt;
+    if (t < z.fromShare) return;
+    const k = Math.min(1, (t - z.fromShare) / (1 - z.fromShare));
+    const start = Math.hypot(this.sim.map.width, this.sim.map.height);
+    this.zone.r = start + (z.endRadius - start) * k;
+    const until = this.sim.tick + this.tickOf(SIGHT.holdSec);
+    for (const h of this.aliveSide(ROLE.HIDER))
+      if (Math.hypot(h.sim.x - this.zone.x, h.sim.y - this.zone.y) > this.zone.r)
+        this.exposedUntil.set(h.id, until);
+  }
+
+  override markEntries(): Map<string, MarkData> {
+    const out = new Map<string, MarkData>();
+    if (this.variant !== "closing" || this.stage !== "hunt") return out;
+    const { x, y, r } = this.zone;
+    out.set("zone", { k: "zone", x, y, r: Math.round(r), c: 0, p: 0, l: "Safe zone", a: "" });
+    return out;
   }
 
   protected override darkNow(): boolean {
@@ -93,6 +126,7 @@ export class HideSeekMode extends RoundMode {
   }
 
   protected override huntTick(): void {
+    if (this.variant === "closing") this.closeZone();
     const every = this.tickOf(HIDE_SEEK.points.hiddenEverySec);
     for (const h of this.aliveSide(ROLE.HIDER)) {
       const units = Math.floor((this.hiddenTicks.get(h.id) ?? 0) / every);

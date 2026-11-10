@@ -29,58 +29,6 @@
   max-width: 34ch;
 }
 
-.menu__nav {
-  display: grid;
-  gap: 10px;
-}
-
-.menu__nav .btn {
-  justify-content: space-between;
-}
-
-.menu__nav .btn kbd {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--muted);
-  letter-spacing: 0;
-}
-
-.menu__nav .btn--primary kbd {
-  color: var(--accent-ink);
-  opacity: 0.75;
-}
-
-.menu__row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.profile-strip {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  background: rgba(22, 24, 28, 0.86);
-  border: 1px solid var(--line);
-}
-
-.profile-strip__name {
-  font-weight: 700;
-  font-size: 17px;
-}
-
-.profile-strip .progress {
-  width: 120px;
-}
-
-.menu__footer {
-  display: flex;
-  gap: 16px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
 /* ------------------------------------------------------------------ sheets (loadout, settings, ...) */
 
 .sheet {
@@ -1267,13 +1215,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.profile-strip__rank {
-  color: var(--text-2);
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
 /* ------------------------------------------------------------------ Outbreak (co-op PvE) */
 
 .mode-grid--coop {
@@ -1995,78 +1936,6 @@
   width: min(1180px, 100%);
 }
 
-.play-tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 14px;
-}
-
-.play-tab {
-  padding: 8px 16px;
-  background: transparent;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  color: var(--text-2);
-  font: inherit;
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-
-.play-tab[aria-selected="true"] {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-}
-
-.play-tab:focus-visible {
-  outline: 2px solid var(--signal);
-  outline-offset: -2px;
-}
-
-.play-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 12px;
-}
-
-.play-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 14px;
-  background: var(--panel);
-  border: 1px solid var(--line-2);
-  clip-path: polygon(0 0, calc(100% - var(--chamfer)) 0, 100% var(--chamfer), 100% 100%, 0 100%);
-}
-
-.play-card.is-planned {
-  opacity: 0.7;
-  border-style: dashed;
-}
-
-.play-card__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.play-card__head h3 {
-  margin: 0;
-  font-size: 18px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.play-card__blurb {
-  margin: 0;
-  color: var(--text-2);
-  font-size: 14px;
-}
-
 .play-card__facts {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -2096,13 +1965,6 @@
   margin: 0;
   font-size: 12px;
   color: var(--muted);
-}
-
-.play-card__actions {
-  margin-top: auto;
-  display: flex;
-  gap: 8px;
-  padding-top: 4px;
 }
 
 .vote-row {

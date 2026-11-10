@@ -8,15 +8,22 @@ import { bodyFits } from "../sim/vehicle.ts";
 import { MILITARY_AIRBASE } from "./airbase.ts";
 import { BLACK_SITE } from "./blacksite.ts";
 import { FINAL_BREACH } from "./breach.ts";
+import { buildChallenge, CHALLENGE_DEFAULT_IDS, parseChallengeId } from "./challenges.ts";
 import { withChests } from "./chests.ts";
 import { SALVAGE_DEPOT } from "./depot.ts";
 import { DESERT_OUTPOST } from "./desert.ts";
 import { DEAD_DISTRICT } from "./district.ts";
 import { DOWNTOWN } from "./downtown.ts";
+import { expandArena } from "./expand.ts";
 import { TACTICAL_FACILITY } from "./facility.ts";
 import { HARBOR_CONFLICT } from "./harbor.ts";
 import { INDUSTRIAL_ARENA } from "./industrial.ts";
+
+export { ARENA_SCALE } from "./expand.ts";
+
+import { buildIsland } from "./island.ts";
 import { NIGHT_MARKET } from "./market.ts";
+import { buildMaze, MAZE_DEFAULT_IDS, parseMazeId } from "./maze.ts";
 import { MOTEL_STRIP } from "./motel.ts";
 import { MOUNTAIN_OUTPOST } from "./mountain.ts";
 import { NEON_DISTRICT } from "./neon.ts";
@@ -25,9 +32,15 @@ import { type MapDef, type MapId, SHOOT_THROUGH, TALL_SOLIDS } from "./types.ts"
 import { URBAN_WARFARE } from "./urban.ts";
 import { HALVORSEN_WORKS } from "./works.ts";
 
+export * from "./challenges.ts";
+export * from "./island.ts";
+export * from "./maze.ts";
 export * from "./types.ts";
 
-const BASE_MAPS: Record<MapId, MapDef> = {
+const BASE_MAPS: Record<
+  Exclude<MapId, `maze-${string}` | `parkour-${string}` | `escape-${string}`>,
+  MapDef
+> = {
   industrial: INDUSTRIAL_ARENA,
   neon: NEON_DISTRICT,
   desert: DESERT_OUTPOST,
@@ -45,14 +58,65 @@ const BASE_MAPS: Record<MapId, MapDef> = {
   outskirts: KESSLER_ROAD,
   blacksite: BLACK_SITE,
   breach: FINAL_BREACH,
+  island: buildIsland(2026),
 };
 
-/** Every map, with its loot chests added to the pickups. */
-export const MAPS: Record<MapId, MapDef> = Object.fromEntries(
-  Object.entries(BASE_MAPS).map(([id, m]) => [id, withChests(m)]),
-) as Record<MapId, MapDef>;
+/** Arenas grown to about twice their surface (see expand.ts); party and PvE maps stay as built. */
+const EXPANDED = new Set([
+  "industrial",
+  "neon",
+  "desert",
+  "urban",
+  "airbase",
+  "harbor",
+  "downtown",
+  "mountain",
+  "facility",
+]);
 
-export const MAP_IDS = Object.keys(MAPS) as MapId[];
+const LISTED: Record<string, MapDef> = Object.fromEntries([
+  ...Object.entries(BASE_MAPS).map(([id, m]) => [
+    id,
+    EXPANDED.has(id) ? expandArena(withChests(m)) : withChests(m),
+  ]),
+  ...MAZE_DEFAULT_IDS.map((id) => {
+    const p = parseMazeId(id)!;
+    return [id, buildMaze(p.size, p.seed)];
+  }),
+  ...CHALLENGE_DEFAULT_IDS.map((id) => {
+    const p = parseChallengeId(id)!;
+    return [id, buildChallenge(p.kind, p.seed)];
+  }),
+]);
+const generated = new Map<string, MapDef>();
+
+/**
+ * Every map, with its loot chests added to the pickups. Maze ids of any seed resolve too: the map
+ * is generated on first use and cached, identically on every machine. Listing MAPS (MAP_IDS)
+ * gives the authored maps and one maze per size.
+ */
+export const MAPS: Record<MapId, MapDef> = new Proxy(LISTED, {
+  get(target, key) {
+    if (typeof key !== "string") return undefined;
+    const hit = target[key] ?? generated.get(key);
+    if (hit) return hit;
+    const maze = parseMazeId(key);
+    const ch = maze ? null : parseChallengeId(key);
+    if (!maze && !ch) return undefined;
+    const map = maze ? buildMaze(maze.size, maze.seed) : buildChallenge(ch!.kind, ch!.seed);
+    if (generated.size > 64) generated.clear();
+    generated.set(key, map);
+    return map;
+  },
+  has(target, key) {
+    return (
+      typeof key === "string" &&
+      (key in target || parseMazeId(key) !== null || parseChallengeId(key) !== null)
+    );
+  },
+}) as Record<MapId, MapDef>;
+
+export const MAP_IDS = Object.keys(LISTED) as MapId[];
 /** Maps offered to competitive modes (PvE maps excluded). */
 export const PVP_MAP_IDS = MAP_IDS.filter((id) => !MAPS[id].pve);
 export const DEFAULT_MAP: MapId = "industrial";
@@ -73,8 +137,8 @@ export function mapModes(map: MapDef): GameMode[] {
   const out: GameMode[] = ["deathmatch", "tdm", "dom", "ctf", "chaos", "bounty"];
   if (map.vehicleSpawns?.length) out.push("mayhem");
   // Pursuit and Convoy need ground vehicles to drive.
-  if (map.vehicleSpawns?.some((v) => v.kind !== "heli")) out.push("pursuit", "convoy");
-  if (!map.large) out.push("gungame", "hideseek", "infection", "sabotage");
+  if (map.vehicleSpawns?.some((v) => v.kind !== "heli")) out.push("pursuit", "convoy", "racing");
+  if (!map.large) out.push("gungame", "hideseek", "infection", "sabotage", "hotpotato");
   if (map.party?.props.length) out.push("prophunt");
   return out;
 }

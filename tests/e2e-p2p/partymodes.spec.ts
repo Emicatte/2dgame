@@ -52,7 +52,7 @@ async function onboard(page: Page, name: string) {
   await page.goto("/");
   await page.fill("#nick", name);
   await page.click("button[type=submit]");
-  await expect(page.getByTestId("create-room")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("hero-play")).toBeVisible({ timeout: 10_000 });
   await page.waitForFunction(() => !!(window as unknown as { __scrapline?: unknown }).__scrapline);
 }
 
@@ -88,13 +88,12 @@ async function twoPlayers() {
   return { a, b };
 }
 
-/** A opens the Play screen and creates an arena already set to `mode`; B joins with the code. */
+/** A picks the experience in Discover and creates an arena already set to `mode`; B joins with the code. */
 async function arenaFor(a: Page, b: Page, mode: string) {
-  await a.getByTestId("open-play").click();
-  await expect(a.getByTestId("play-screen")).toBeVisible();
-  const tab = mode === "gungame" ? "competitive" : "party";
-  await a.getByTestId(`play-tab-${tab}`).click();
-  await a.getByTestId(`play-private-${mode}`).click();
+  await a.getByTestId("nav-discover").click();
+  await a.getByTestId("discover-all").click();
+  await a.getByTestId(`xp-${mode}`).click();
+  await a.getByTestId("xp-create").click();
   await expect(a.getByTestId("host-hint")).toBeVisible({ timeout: 15_000 });
   await expect(a.getByTestId(`mode-${mode}`)).toHaveAttribute("aria-pressed", "true");
   const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
@@ -113,21 +112,22 @@ async function startMatch(a: Page, b: Page) {
   await phaseIs(b, "playing");
 }
 
-test("Play screen: categories, every mode playable; Gun Game ladder over WebRTC", async () => {
+test("Discover: categories by keyboard, party modes playable; Gun Game ladder over WebRTC", async () => {
   const { a, b } = await twoPlayers();
-  await a.getByTestId("open-play").click();
-  await expect(a.getByTestId("play-screen")).toBeVisible();
-  // Keyboard navigation between categories.
-  await a.getByTestId("play-tab-competitive").focus();
-  await a.keyboard.press("ArrowRight");
-  await expect(a.getByTestId("play-tab-party")).toHaveAttribute("aria-selected", "true");
-  await expect(a.getByTestId("play-card-prophunt")).toBeVisible();
-  // Nothing is left as "planned": every card has a button that starts it.
-  await expect(a.getByTestId("play-card-infection")).toContainText("Available");
-  await expect(a.getByTestId("play-private-infection")).toBeEnabled();
-  await expect(a.locator(".play-card.is-planned")).toHaveCount(0);
-  await shot(a, "play-party");
-  await a.getByRole("button", { name: "Back" }).click();
+  await a.getByTestId("nav-discover").click();
+  // Keyboard navigation between categories: All → Action → Survival → Horror → Party.
+  await a.getByTestId("discover-all").focus();
+  for (let i = 0; i < 4; i++) await a.keyboard.press("ArrowRight");
+  await expect(a.getByTestId("discover-party")).toHaveAttribute("aria-selected", "true");
+  await expect(a.getByTestId("xp-prophunt")).toBeVisible();
+  await expect(a.getByTestId("xp-deathmatch")).toHaveCount(0);
+  // Party modes are playable: their card opens with a working create button.
+  await a.getByTestId("xp-prophunt").click();
+  await expect(a.getByTestId("xp-create")).toBeEnabled();
+  await shot(a, "discover-party");
+  await a.keyboard.press("Escape");
+  await expect(a.getByTestId("xp-dialog")).toHaveCount(0);
+  await a.getByTestId("nav-play").click();
 
   const { aId, bId } = await arenaFor(a, b, "gungame");
   await startMatch(a, b);

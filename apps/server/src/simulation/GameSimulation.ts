@@ -1188,7 +1188,7 @@ export class GameSimulation {
         continue;
       }
       for (const p of this.players.values()) {
-        if (!p.alive || p.vehicle || p.pve.downed) continue;
+        if (!p.alive || p.vehicle || p.pve.downed || p.sim.alt > 0) continue;
         const reach =
           pk.def.kind === "weapon" || pk.def.kind === "chest" ? PLAYER.interactRadius : PICKUP_RADIUS;
         if (distSq(p.sim.x, p.sim.y, pk.def.x, pk.def.y) > reach * reach) continue;
@@ -1262,7 +1262,7 @@ export class GameSimulation {
     for (const [id, d] of this.drops) if (this.tick >= d.expiresTick) this.drops.delete(id);
     if (this.drops.size === 0) return;
     for (const p of this.players.values()) {
-      if (!p.alive || p.vehicle || p.pve.downed) continue;
+      if (!p.alive || p.vehicle || p.pve.downed || p.sim.alt > 0) continue;
       let nearest: string | null = null;
       let nearestD = PLAYER.interactRadius * PLAYER.interactRadius;
       for (const [id, d] of this.drops) {

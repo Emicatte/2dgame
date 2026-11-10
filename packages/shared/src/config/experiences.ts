@@ -1,0 +1,301 @@
+/**
+ * Experience catalog: everything a player can pick on the home screen, by platform category.
+ *
+ * An experience is what the player chooses (a card); a mode (MODES) is how a room runs it. Most
+ * experiences are one mode; co-op operations are an Outbreak mission with a card of their own.
+ * The catalog is derived from the mode registry, so a new mode becomes a card by adding it to
+ * MODES and to EXPERIENCE_CATEGORY_OF below; an experience that is not built yet goes in
+ * PLANNED_EXPERIENCES (shown as planned, never startable).
+ *
+ * The map is not part of an experience choice: the lobby picks it (MatchState is the only
+ * authority for mode, map and rules). `maps` here is what the lobby will offer.
+ */
+import { MAPS, type MapId, mapsForMode } from "../maps/index.ts";
+import { MISSIONS, missionById, SURVIVAL_MAPS } from "../pve/missions.ts";
+import { COOP_OPERATIONS, GAME_MODES, type GameMode, MODES, type ModeStatus } from "./modes.ts";
+
+export type ExperienceCategory =
+  | "action"
+  | "survival"
+  | "horror"
+  | "party"
+  | "adventure"
+  | "challenge"
+  | "racing"
+  | "social";
+
+export const EXPERIENCE_CATEGORIES: readonly { id: ExperienceCategory; name: string; blurb: string }[] = [
+  { id: "action", name: "Action", blurb: "Shooters, objectives and team fights." },
+  { id: "survival", name: "Survival", blurb: "Hold out against the infected." },
+  { id: "horror", name: "Horror", blurb: "Dark places and things that hunt you." },
+  { id: "party", name: "Party", blurb: "Hide, transform, cause chaos with friends." },
+  { id: "adventure", name: "Adventure", blurb: "Co-op operations with a goal." },
+  { id: "challenge", name: "Challenge", blurb: "Mazes, obstacle courses and time trials." },
+  { id: "racing", name: "Racing", blurb: "Checkpoints, pursuits and convoys." },
+  { id: "social", name: "Social", blurb: "Hang out and explore, no pressure." },
+];
+
+/** Gameplay systems an experience relies on (what the engine must provide for it to run). */
+export type ExperienceSystem =
+  | "weapons"
+  | "vehicles"
+  | "teams"
+  | "roles"
+  | "rounds"
+  | "objectives"
+  | "ai"
+  | "missions"
+  | "secrecy";
+
+export interface ExperienceDef {
+  id: string;
+  name: string;
+  category: ExperienceCategory;
+  blurb: string;
+  /** Map rendered as the card image (the real map, drawn from game data); null: none yet. */
+  thumbnail: MapId | null;
+  /** Humans needed to start and room capacity (planned: the design target, not a promise). */
+  players: { min: number; max: number };
+  /** Weapons and eliminations are part of it ("combat") or not needed at all ("noncombat"). */
+  gameplay: "combat" | "noncombat";
+  /** Maps the lobby offers for it (empty for planned experiences). */
+  maps: readonly MapId[];
+  rules: readonly string[];
+  durationLabel: string;
+  /** What the lobby opens with: the room mode and, for co-op operations, the mission or variant. */
+  launch: { mode: GameMode; mission?: string; variant?: string } | null;
+  /** A matchmaking queue exists for it (dedicated server only; host mode always opens a lobby). */
+  quick: boolean;
+  /** What a finished match earns (XP and career stats are kept per mode). */
+  progression: string;
+  systems: readonly ExperienceSystem[];
+  status: ModeStatus;
+  /** Planned / in development: what has to exist before it can be played. */
+  needs?: string;
+}
+
+/** Platform category of every room mode. */
+export const EXPERIENCE_CATEGORY_OF: Record<GameMode, ExperienceCategory> = {
+  deathmatch: "action",
+  tdm: "action",
+  gungame: "action",
+  dom: "action",
+  ctf: "action",
+  sabotage: "action",
+  bounty: "action",
+  mayhem: "action",
+  outbreak: "survival",
+  survival: "survival",
+  infection: "survival",
+  hideseek: "party",
+  prophunt: "party",
+  chaos: "party",
+  pursuit: "racing",
+  convoy: "racing",
+  maze: "challenge",
+  battleroyale: "action",
+  parkour: "challenge",
+  escape: "adventure",
+  nighthunt: "horror",
+  puzzlerace: "challenge",
+  hotpotato: "party",
+  freeroam: "social",
+  racing: "racing",
+};
+
+/** Built in later phases of the platform roadmap (PROGRESS.md). Never startable. */
+export const PLANNED_EXPERIENCES: readonly Omit<
+  ExperienceDef,
+  "thumbnail" | "maps" | "launch" | "quick" | "durationLabel" | "progression"
+>[] = [];
+
+function systemsOf(mode: GameMode): ExperienceSystem[] {
+  const def = MODES[mode];
+  const out: ExperienceSystem[] = def.weapons === "None" ? [] : ["weapons"];
+  if (def.vehicles) out.push("vehicles");
+  if (def.structure === "teams") out.push("teams");
+  if (def.structure === "roles") out.push("roles", "rounds", "secrecy");
+  if (def.hud === "objectives") out.push("objectives");
+  if (def.structure === "coop") out.push("ai");
+  if (mode === "outbreak") out.push("missions");
+  return out;
+}
+
+const CAMPAIGN_MAPS: readonly MapId[] = [
+  ...new Set(
+    MISSIONS.filter((m) => !COOP_OPERATIONS.some((op) => op.mission === m.id)).map((m) => m.map as MapId),
+  ),
+];
+
+function mapsOf(mode: GameMode): readonly MapId[] {
+  if (mode === "outbreak") return CAMPAIGN_MAPS;
+  if (mode === "survival") return SURVIVAL_MAPS;
+  return mapsForMode(mode);
+}
+
+/** Card image per mode, so the catalog does not show the same map twelve times (must be a map of the mode). */
+const CARD_MAP: Partial<Record<GameMode, MapId>> = {
+  deathmatch: "industrial",
+  tdm: "harbor",
+  dom: "urban",
+  ctf: "desert",
+  mayhem: "airbase",
+  gungame: "neon",
+  hideseek: "motel",
+  prophunt: "depot",
+  infection: "market",
+  chaos: "facility",
+  bounty: "mountain",
+  sabotage: "industrial",
+  pursuit: "downtown",
+  convoy: "urban",
+  maze: "maze-m-4721",
+  battleroyale: "island",
+  parkour: "parkour-101",
+  escape: "escape-202",
+  nighthunt: "maze-m-4721",
+  puzzlerace: "maze-s-1207",
+  hotpotato: "motel",
+  freeroam: "island",
+  racing: "airbase",
+};
+
+function fromMode(mode: GameMode): ExperienceDef {
+  const def = MODES[mode];
+  const maps = mapsOf(mode);
+  const preferred = CARD_MAP[mode];
+  const thumb =
+    (preferred && maps.includes(preferred) ? preferred : undefined) ??
+    maps.find((m) => MAPS[m].party && def.category === "party") ??
+    maps[0] ??
+    null;
+  return {
+    id: mode,
+    name: def.name,
+    category: EXPERIENCE_CATEGORY_OF[mode],
+    blurb: def.blurb,
+    thumbnail: thumb,
+    players: def.players,
+    gameplay: def.weapons === "None" ? "noncombat" : "combat",
+    maps,
+    rules: def.rules,
+    durationLabel: def.durationLabel,
+    launch: { mode },
+    quick: def.quick,
+    progression: def.rewards,
+    systems: systemsOf(mode),
+    status: def.status,
+  };
+}
+
+function fromOperation(op: (typeof COOP_OPERATIONS)[number]): ExperienceDef {
+  const mission = missionById(op.mission);
+  const map = (mission?.map ?? "works") as MapId;
+  return {
+    id: op.id,
+    name: op.name,
+    category: "adventure",
+    blurb: op.blurb,
+    thumbnail: map,
+    players: op.players,
+    gameplay: "combat",
+    maps: [map],
+    rules: mission?.brief ? [mission.brief] : [],
+    durationLabel: MODES.outbreak.durationLabel,
+    launch: { mode: "outbreak", mission: op.mission },
+    quick: false,
+    progression: MODES.outbreak.rewards,
+    systems: ["weapons", "ai", "missions", "objectives"],
+    status: "available",
+  };
+}
+
+/** Haunted Facility: the Escape Room's dark variant, with a creature in the rooms. */
+const HAUNTED: ExperienceDef = {
+  ...fromMode("escape"),
+  id: "haunted",
+  name: "Haunted Facility",
+  category: "horror",
+  blurb: "The escape rooms with the lights out and something walking the halls. Puzzles first, then run.",
+  rules: ["Same puzzles: key, plates, code", "No weapons: avoid it", "Caught: back to your checkpoint"],
+  launch: { mode: "escape", variant: "horror" },
+  systems: ["ai", "objectives"],
+};
+
+/** Horror Maze: the maze mode's horror variant, with a card of its own in Horror. */
+const HORROR_MAZE: ExperienceDef = {
+  ...fromMode("maze"),
+  id: "horrormaze",
+  name: "Horror Maze",
+  category: "horror",
+  blurb: "Lights out in the labyrinth. Something hunts by sight and sound; your flashlight is all you have.",
+  players: { min: 1, max: 4 },
+  rules: [
+    "No weapons: avoid it, do not fight it",
+    "Running and dashing are heard; gates and traps are loud",
+    "Caught: back to your last checkpoint",
+  ],
+  launch: { mode: "maze", variant: "horror" },
+  systems: ["ai", "objectives"],
+};
+
+export const EXPERIENCES: readonly ExperienceDef[] = [
+  ...GAME_MODES.map(fromMode),
+  HORROR_MAZE,
+  HAUNTED,
+  ...COOP_OPERATIONS.map(fromOperation),
+  ...PLANNED_EXPERIENCES.map(
+    (p): ExperienceDef => ({
+      ...p,
+      thumbnail: null,
+      maps: [],
+      launch: null,
+      quick: false,
+      durationLabel: "",
+      progression: "",
+    }),
+  ),
+];
+
+export function experienceById(id: string): ExperienceDef | undefined {
+  return EXPERIENCES.find((e) => e.id === id);
+}
+
+/** The card a running room belongs to (an Outbreak room on an operation's mission is that operation). */
+export function experienceForRoom(
+  mode: string,
+  mission?: string,
+  variant?: string,
+): ExperienceDef | undefined {
+  if (variant) {
+    const v = EXPERIENCES.find((e) => e.launch?.mode === mode && e.launch.variant === variant);
+    if (v) return v;
+  }
+  if (mode === "outbreak" && mission) {
+    const op = EXPERIENCES.find((e) => e.launch?.mode === "outbreak" && e.launch.mission === mission);
+    if (op) return op;
+  }
+  return experienceById(mode);
+}
+
+/**
+ * Experiences a player can start in this build: available, with their mode switched on by the
+ * feature flags (see modeFlags).
+ */
+export function playableExperience(e: ExperienceDef, flags: ReadonlySet<GameMode>): boolean {
+  return e.status === "available" && !!e.launch && flags.has(e.launch.mode);
+}
+
+/** Shown first on the home screen (curated; only the playable ones are shown). */
+export const FEATURED_EXPERIENCES: readonly string[] = [
+  "deathmatch",
+  "battleroyale",
+  "outbreak",
+  "prophunt",
+  "infection",
+  "tdm",
+  "chaos",
+  "maze",
+  "hideseek",
+  "pursuit",
+];

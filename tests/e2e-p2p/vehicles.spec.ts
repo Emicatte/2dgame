@@ -42,7 +42,7 @@ async function onboard(page: Page, name: string) {
   await page.goto("/");
   await page.fill("#nick", name);
   await page.click("button[type=submit]");
-  await expect(page.getByTestId("create-room")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("hero-play")).toBeVisible({ timeout: 10_000 });
   await page.waitForFunction(() => !!(window as unknown as { __scrapline?: unknown }).__scrapline);
 }
 

@@ -26,7 +26,16 @@ export type GameMode =
   | "pursuit"
   | "convoy"
   | "outbreak"
-  | "survival";
+  | "survival"
+  | "maze"
+  | "battleroyale"
+  | "parkour"
+  | "escape"
+  | "nighthunt"
+  | "hotpotato"
+  | "freeroam"
+  | "racing"
+  | "puzzlerace";
 
 export const GAME_MODES: readonly GameMode[] = [
   "deathmatch",
@@ -45,9 +54,18 @@ export const GAME_MODES: readonly GameMode[] = [
   "convoy",
   "outbreak",
   "survival",
+  "maze",
+  "battleroyale",
+  "parkour",
+  "escape",
+  "nighthunt",
+  "hotpotato",
+  "freeroam",
+  "racing",
+  "puzzlerace",
 ];
 
-export type ModeCategory = "competitive" | "party" | "coop" | "vehicles";
+export type ModeCategory = "competitive" | "party" | "coop" | "vehicles" | "challenge";
 /** "available": playable. "development": being built, visible but cannot start. "planned": roadmap only. */
 export type ModeStatus = "available" | "development" | "planned";
 /**
@@ -93,6 +111,50 @@ export interface ModeDef {
 }
 
 const rotateRoles = "Sides are assigned when the match starts and rotate every round";
+
+/** Compact definition for the platform's newer modes (same registry, fewer repeated defaults). */
+function lite(
+  id: GameMode,
+  name: string,
+  blurb: string,
+  category: ModeCategory,
+  players: { min: number; max: number },
+  durationLabel: string,
+  rules: readonly string[],
+  o: {
+    weapons?: string;
+    vehicles?: boolean;
+    structure?: ModeStructure;
+    victory: string;
+    scoring: string;
+    quick?: boolean;
+  },
+): ModeDef {
+  return {
+    id,
+    name,
+    blurb,
+    category,
+    structure: o.structure ?? "ffa",
+    players,
+    durationLabel,
+    rules,
+    respawn: "checkpoint",
+    victory: o.victory,
+    scoring: o.scoring,
+    weapons: o.weapons ?? "None",
+    vehicles: o.vehicles ?? false,
+    abilities: ["Dash"],
+    hud: "objectives",
+    rewards: "Completion, placement",
+    events: [],
+    joinInProgress: "next-round",
+    disconnect: "Seat held 20 s",
+    quick: o.quick ?? false,
+    status: "available",
+    flag: id,
+  };
+}
 
 export const MODES: Record<GameMode, ModeDef> = {
   deathmatch: {
@@ -529,6 +591,149 @@ export const MODES: Record<GameMode, ModeDef> = {
     status: "available",
     flag: "survival",
   },
+  battleroyale: {
+    id: "battleroyale",
+    name: "Battle Royale",
+    blurb: "Jump from the flying bus, loot, outlast the storm. Last one standing wins.",
+    category: "competitive",
+    structure: "ffa",
+    players: { min: 1, max: 16 },
+    durationLabel: "8–12 min",
+    rules: [
+      "Press SPACE (or dash) to jump; again to open the parachute",
+      "Land unarmed: open chests and pick up weapons (E)",
+      "Stay inside the safe zone: the storm closes in and hurts",
+      "No respawns: last one standing wins",
+    ],
+    respawn: "round",
+    victory: "Last player alive",
+    scoring: "Placement, eliminations",
+    weapons: "Looted: chests and pickups",
+    vehicles: false,
+    abilities: ["Dash", "Parachute"],
+    hud: "standard",
+    rewards: "Placement, eliminations, victory",
+    events: ["Storm phases"],
+    joinInProgress: "next-round",
+    disconnect: "Seat held 20 s, then eliminated",
+    quick: true,
+    status: "available",
+    flag: "battleroyale",
+  },
+  parkour: lite(
+    "parkour",
+    "Parkour Challenge",
+    "A three-lane obstacle course: time the traps, dash over the gaps, slip past the moving bars.",
+    "challenge",
+    { min: 1, max: 8 },
+    "3–5 min",
+    ["Dash (SPACE / Shift) over the gaps", "Live traps and moving bars send you back", "Fastest time wins"],
+    { victory: "Fastest time to the finish", scoring: "Finish time" },
+  ),
+  escape: lite(
+    "escape",
+    "Escape Room",
+    "Three locked rooms: find the key, hold the plates together, enter the code. Out together.",
+    "challenge",
+    { min: 2, max: 4 },
+    "5–10 min",
+    [
+      "Find the key for the first door",
+      "Two plates must be held at the same time",
+      "Press the switches in the order of the code",
+    ],
+    { structure: "coop", victory: "Everyone out", scoring: "Team time" },
+  ),
+  nighthunt: lite(
+    "nighthunt",
+    "Night Hunt",
+    "One player is the monster. The others cross the dark maze, open the gates and get out.",
+    "party",
+    { min: 2, max: 8 },
+    "5 min",
+    [
+      "The monster is faster and catches by touch",
+      "Survivors: key, switch, exit",
+      "Caught survivors watch the rest",
+    ],
+    {
+      structure: "roles",
+      victory: "Survivors escape, or the monster catches them all",
+      scoring: "Escapes, catches",
+    },
+  ),
+  hotpotato: lite(
+    "hotpotato",
+    "Hot Potato",
+    "Someone holds a ticking charge. Touch another player to pass it on before it goes off.",
+    "party",
+    { min: 2, max: 8 },
+    "3–6 min",
+    ["Touch to pass the charge", "It goes off at zero: the holder is out", "Last one standing wins"],
+    { victory: "Last player standing", scoring: "Rounds survived" },
+  ),
+  freeroam: lite(
+    "freeroam",
+    "Free Roam",
+    "The island with no rules: drive, explore, meet friends. Nobody can hurt anybody.",
+    "competitive",
+    { min: 1, max: 16 },
+    "Open",
+    ["No damage between players", "Vehicles on the roads", "Explore the districts"],
+    { vehicles: true, victory: "None", scoring: "None" },
+  ),
+  puzzlerace: lite(
+    "puzzlerace",
+    "Puzzle Race",
+    "Four switches hide in the maze. Press them in the order of the code before anyone else.",
+    "challenge",
+    { min: 1, max: 8 },
+    "6 min",
+    [
+      "Every player solves the same code on their own",
+      "A wrong switch resets your code",
+      "First to solve scores; a new code follows",
+    ],
+    { victory: "First to the puzzle count", scoring: "Puzzles solved" },
+  ),
+  racing: lite(
+    "racing",
+    "Vehicle Racing",
+    "Everyone gets a car. Three laps through the checkpoints on the airfield; first over the line wins.",
+    "vehicles",
+    { min: 1, max: 6 },
+    "3–5 min",
+    ["Your car is parked at the start grid (E to get in)", "Checkpoints in order, three laps", "No weapons"],
+    { vehicles: true, victory: "First to finish the laps", scoring: "Finish time" },
+  ),
+  maze: {
+    id: "maze",
+    name: "Classic Maze",
+    blurb: "A seeded labyrinth. Find the key, hit the switch, dodge the traps, reach the exit first.",
+    category: "challenge",
+    structure: "ffa",
+    players: { min: 1, max: 8 },
+    durationLabel: "5 min",
+    rules: [
+      "No weapons: fastest to the exit wins",
+      "Carry the key to the amber gate, press E on the switch for the cyan gate",
+      "Floor traps send you back to your last checkpoint",
+    ],
+    respawn: "checkpoint",
+    victory: "Fastest time to the exit",
+    scoring: "Finish time",
+    weapons: "None",
+    vehicles: false,
+    abilities: ["Dash"],
+    hud: "objectives",
+    rewards: "Completion, finish placement",
+    events: ["Gates opening", "Traps"],
+    joinInProgress: "checkpoint",
+    disconnect: "Seat held 20 s",
+    quick: false,
+    status: "available",
+    flag: "maze",
+  },
 };
 
 /**
@@ -586,6 +791,7 @@ export const MODE_CATEGORIES: readonly { id: ModeCategory; name: string; modes: 
   { id: "party", name: "Party", modes: ["hideseek", "prophunt", "infection", "chaos"] },
   { id: "coop", name: "Co-op", modes: ["outbreak", "survival", "extraction", "bossrush"] },
   { id: "vehicles", name: "Vehicles", modes: ["mayhem", "pursuit", "convoy"] },
+  { id: "challenge", name: "Challenge", modes: ["maze"] },
 ];
 
 /**
@@ -667,6 +873,15 @@ export const MODE_SCORE_UNIT: Record<GameMode, string> = {
   convoy: "rounds",
   outbreak: "objectives",
   survival: "waves",
+  maze: "finishes",
+  battleroyale: "eliminations",
+  parkour: "finishes",
+  escape: "finishes",
+  nighthunt: "escapes",
+  hotpotato: "rounds",
+  freeroam: "points",
+  racing: "laps",
+  puzzlerace: "puzzles",
 };
 
 /** Modes that only make sense on maps with vehicles. */
@@ -906,6 +1121,78 @@ export const MODE_DEFAULTS: Record<GameMode, ModeRules> = {
     scoreLimit: 0,
     friendlyFire: false,
   },
+  maze: {
+    mode: "maze",
+    teamSize: 0,
+    maxPlayers: 8,
+    durationSec: 5 * 60,
+    scoreLimit: 0,
+    friendlyFire: false,
+  },
+  battleroyale: {
+    mode: "battleroyale",
+    teamSize: 0,
+    maxPlayers: 16,
+    durationSec: 15 * 60,
+    scoreLimit: 0,
+    friendlyFire: false,
+  },
+  parkour: {
+    mode: "parkour",
+    teamSize: 0,
+    maxPlayers: 8,
+    durationSec: 5 * 60,
+    scoreLimit: 0,
+    friendlyFire: false,
+  },
+  escape: {
+    mode: "escape",
+    teamSize: 0,
+    maxPlayers: 4,
+    durationSec: 10 * 60,
+    scoreLimit: 0,
+    friendlyFire: false,
+  },
+  nighthunt: {
+    mode: "nighthunt",
+    teamSize: 0,
+    maxPlayers: 8,
+    durationSec: 5 * 60,
+    scoreLimit: 0,
+    friendlyFire: false,
+  },
+  hotpotato: {
+    mode: "hotpotato",
+    teamSize: 0,
+    maxPlayers: 8,
+    durationSec: 6 * 60,
+    scoreLimit: 0,
+    friendlyFire: false,
+  },
+  freeroam: {
+    mode: "freeroam",
+    teamSize: 0,
+    maxPlayers: 16,
+    durationSec: 30 * 60,
+    scoreLimit: 0,
+    friendlyFire: false,
+  },
+  puzzlerace: {
+    mode: "puzzlerace",
+    teamSize: 0,
+    maxPlayers: 8,
+    durationSec: 6 * 60,
+    scoreLimit: 3,
+    friendlyFire: false,
+  },
+  racing: {
+    mode: "racing",
+    teamSize: 0,
+    maxPlayers: 6,
+    durationSec: 6 * 60,
+    scoreLimit: 3,
+    friendlyFire: false,
+  },
 };
 
 /** 1v1 … 4v4. */
@@ -923,8 +1210,25 @@ export const MODE_VARIANTS: Partial<
       name: "Blackout",
       blurb: "The lights go out periodically; the seeker has a flashlight.",
     },
+    {
+      id: "closing",
+      name: "Closing zone",
+      blurb: "A safe zone shrinks during the hunt: hiders caught outside it are revealed.",
+    },
   ],
   prophunt: [{ id: "classic", name: "Classic", blurb: "Props vs hunters, sides swap every round." }],
+  escape: [
+    { id: "classic", name: "Classic", blurb: "Lights on: the puzzles and the clock." },
+    { id: "horror", name: "Haunted", blurb: "Lights out, something in the rooms with you." },
+  ],
+  maze: [
+    { id: "classic", name: "Classic", blurb: "Lights on: keys, switches, traps, fastest out wins." },
+    {
+      id: "horror",
+      name: "Horror",
+      blurb: "Lights out, flashlights on. Something hunts by sight and sound: getting caught sends you back.",
+    },
+  ],
 };
 
 export function defaultVariant(mode: string): string {
