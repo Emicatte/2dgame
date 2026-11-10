@@ -102,9 +102,10 @@ their features (`mapModes`).
 
 ## Modes
 
-Competitive: Deathmatch, Team Deathmatch, Gun Game, Domination, Capture the Flag. Party: Hide &
-Seek (Classic, Infection, Blackout), Prop Hunt. Co-op: Outbreak, Survival. Vehicles: Vehicle
-Mayhem. Rules, numbers and the planned modes: [v4/MODES.md](v4/MODES.md); Domination, CTF and
+Competitive: Deathmatch, Team Deathmatch, Gun Game, Domination, Capture the Flag, Sabotage, Bounty
+Hunt. Party: Hide & Seek (Classic, Infection, Blackout), Prop Hunt, Infection, Chaos Arena. Co-op:
+Outbreak (campaign, plus the Extraction and Boss Rush operations), Survival. Vehicles: Vehicle
+Mayhem, Vehicle Pursuit, Convoy. Rules and numbers: [v4/MODES.md](v4/MODES.md); Domination, CTF and
 Mayhem: [v2/SYSTEMS.md](v2/SYSTEMS.md); Outbreak: [v3/OUTBREAK.md](v3/OUTBREAK.md).
 
 ## Match rules (configurable per private room)

@@ -48,6 +48,19 @@ describe("weapon visual families", () => {
       battlerifle: "rifle",
       minigun: "mounted",
       rpg: "mounted",
+      revolver: "pistol",
+      machinepistol: "smg",
+      lancer: "rifle",
+      dmr: "sniper",
+      pdw: "smg",
+      lmg: "rifle",
+      doublebarrel: "shotgun",
+      autoshotgun: "shotgun",
+      heavysniper: "sniper",
+      grenadelauncher: "mounted",
+      railgun: "sniper",
+      flamethrower: "shotgun",
+      claws: "pistol",
     };
     for (const w of WEAPON_LIST) {
       expect(weaponCategory(w)).toBe(expected[w.id]);

@@ -1,5 +1,5 @@
 import type { StateView } from "@colyseus/schema";
-import { AllyState, DisguiseState, type MatchState } from "@scrapline/shared";
+import { AllyState, DisguiseState, MarkState, type MatchState } from "@scrapline/shared";
 import type { GameSimulation } from "../simulation/GameSimulation.ts";
 
 /** Entries of the filtered collections a view currently holds ("a:<id>", "d:<id>"). */
@@ -39,6 +39,29 @@ export function syncModeState(
     }
   }
   if (state.pings.size > 0 && ctl?.mode !== "prophunt") state.pings.clear();
+
+  const text = ctl?.statusText() ?? "";
+  if (state.modeText !== text) state.modeText = text;
+  const marks = ctl?.markEntries() ?? new Map();
+  for (const id of [...state.marks.keys()]) if (!marks.has(id)) state.marks.delete(id);
+  for (const [id, m] of marks) {
+    let s = state.marks.get(id);
+    if (!s) {
+      s = new MarkState();
+      state.marks.set(id, s);
+    }
+    const x = Math.round(m.x);
+    const y = Math.round(m.y);
+    const p = Math.max(0, Math.min(100, Math.round(m.p)));
+    if (s.k !== m.k) s.k = m.k;
+    if (s.x !== x) s.x = x;
+    if (s.y !== y) s.y = y;
+    if (s.r !== m.r) s.r = m.r;
+    if (s.c !== m.c) s.c = m.c;
+    if (s.p !== p) s.p = p;
+    if (s.l !== m.l) s.l = m.l;
+    if (s.a !== m.a) s.a = m.a;
+  }
 
   const allies = ctl?.allyEntries() ?? new Map();
   for (const id of [...state.allies.keys()]) if (!allies.has(id)) state.allies.delete(id);

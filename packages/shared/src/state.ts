@@ -295,6 +295,29 @@ export const PingState = schema(
 );
 export type PingState = SchemaType<typeof PingState>;
 
+/**
+ * A mode's objective marker (Sabotage sites and device, Pursuit checkpoints and destination, the
+ * Convoy truck, the Bounty target's area). Drawn as a ring with a label, with an arrow at the
+ * screen edge when off screen. Players of team `c` within `r` see the prompt `a` (hold interact).
+ */
+export const MarkState = schema(
+  {
+    /** "site" | "device" | "checkpoint" | "goal" | "truck" | "target". */
+    k: t.string().default(""),
+    x: t.int16().default(0),
+    y: t.int16().default(0),
+    r: t.uint16().default(0),
+    /** Team colour (0 neutral) and, with `a`, the team that may act on it. */
+    c: t.uint8().default(0),
+    /** Progress or health 0..100 (shown as an arc). */
+    p: t.uint8().default(0),
+    l: t.string().default(""),
+    a: t.string().default(""),
+  },
+  "MarkState",
+);
+export type MarkState = SchemaType<typeof MarkState>;
+
 /** Round modes: current stage, its end, the round number and the variant. */
 export const RoundState = schema(
   {
@@ -405,6 +428,10 @@ export const MatchState = schema(
     disguises: t.map(DisguiseState).view(),
     /** Prop Hunt hints: approximate areas. */
     pings: t.map(PingState),
+    /** Mode objective markers (see MarkState). */
+    marks: t.map(MarkState),
+    /** One status line of the running mode ("Device planted at A", "Rule: Rocket party"). */
+    modeText: t.string().default(""),
     /** Results: map ids offered for the next match, comma separated ("" = no vote). */
     voteMaps: t.string().default(""),
   },

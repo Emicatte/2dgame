@@ -1,4 +1,4 @@
-import { GUN_GAME, gunGameWeapon, MODE_VARIANTS, ROLE, WEAPONS } from "@scrapline/shared";
+import { GUN_GAME, gunGameWeapon, MODE_VARIANTS, ROLE, roleText, WEAPONS } from "@scrapline/shared";
 import { useEffect, useState } from "react";
 import { formatClock } from "../components/ui.tsx";
 import { PROP_KEYS_HELP } from "../game/modes/ModeLayer.ts";
@@ -56,14 +56,14 @@ function GunGameHud() {
 }
 
 function roleLabel(mode: string, role: number): string {
-  if (role === ROLE.SEEKER) return mode === "prophunt" ? "Hunter" : "Seeker";
-  if (role === ROLE.HIDER) return mode === "prophunt" ? "Prop" : "Hider";
+  if (role === ROLE.SEEKER) return roleText(mode).seeker;
+  if (role === ROLE.HIDER) return roleText(mode).hider;
   return "Spectator";
 }
 
 function stageLabel(mode: string, stage: string): string {
-  if (stage === "prep") return mode === "prophunt" ? "Props hide" : "Hiding time";
-  if (stage === "hunt") return mode === "prophunt" ? "Hunt" : "Search";
+  if (stage === "prep") return roleText(mode).prep;
+  if (stage === "hunt") return roleText(mode).hunt;
   if (stage === "break") return "Round over";
   return "";
 }
@@ -141,7 +141,7 @@ function PropPicker() {
 function RoundHud() {
   const m = useStore(modeHudStore);
   const s = useStore(sessionStore);
-  const blind = m.role === ROLE.SEEKER && m.stage === "prep";
+  const blind = m.role === ROLE.SEEKER && m.stage === "prep" && roleText(s.mode).blind;
   const now = useNow(true);
   const spotted = now - m.spottedAt < 1800;
   const penalty = now - m.penaltyAt < 500;
@@ -168,7 +168,7 @@ function RoundHud() {
           <b className="mono">
             {m.hiders} / {m.seekers}
           </b>
-          <small>{s.mode === "prophunt" ? "Props / hunters" : "Hiders / seekers"}</small>
+          <small>{roleText(s.mode).sides}</small>
         </div>
       </div>
       <div className={`role-chip role-chip--${m.role}`} data-testid="role-chip">

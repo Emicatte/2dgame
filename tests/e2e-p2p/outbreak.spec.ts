@@ -112,12 +112,9 @@ test("Outbreak: two browsers complete co-op objectives of First Contact together
   await a.getByTestId("mode-outbreak").click();
   await expect(a.getByTestId("pve-settings")).toBeVisible();
   await expect(a.getByTestId("mission-first-contact")).toHaveAttribute("aria-pressed", "true");
-  // Later chapters stay locked until the previous one is completed; unbuilt ones are listed as
-  // in development, not playable.
-  await expect(a.getByTestId("mission-dead-district")).toBeDisabled();
-  await expect(a.getByTestId("mission-the-convoy")).toBeDisabled();
-  await expect(a.getByTestId("mission-black-site")).toBeDisabled();
-  await expect(a.getByTestId("mission-final-breach")).toBeDisabled();
+  // Every chapter and both operations can be picked from the start (no campaign lock).
+  for (const id of ["dead-district", "the-convoy", "black-site", "final-breach", "extraction", "boss-rush"])
+    await expect(a.getByTestId(`mission-${id}`)).toBeEnabled();
   await a.getByTestId("difficulty-recruit").click();
   const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
   expect(code).toMatch(/^[A-Z0-9]{5}$/);

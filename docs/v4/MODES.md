@@ -218,13 +218,13 @@ claiming 60 FPS.
 
 | Phase | Mode / work | Reuses | What it needs first | Status |
 |---|---|---|---|---|
-| 5 | **Infection** (survivors vs infected, dynamic sides) | RoundMode sides and conversion (already used by the Hide & Seek Infection variant), event filtering | Infected movement profile and melee against players (a melee weapon path in the shared sim), supply drops, shrinking safe zones | Planned |
-| 6 | **Sabotage 2v2** (rounds, no respawn, plant / defuse on two sites) | RoundMode rounds and side swap, Domination capture holds for plant/defuse | Compact symmetric maps with two sites; round economy kept off (no pay-to-win) | Planned |
-| 6 | **Bounty Hunt** (marked target, periodic approximate pings) | Prop Hunt hint pings (approximate, never centred), FFA standings | Ping cadence and target rotation rules | Planned |
-| 7 | **Extraction** (PvE first, then PvP) | Outbreak missions (carried objective, extraction steps, vehicles), WaveDirector | A carried-object mechanic for players (drop/pick up) | Planned |
-| 7 | **Chaos Arena** (timed modifiers) | Mode controller hooks (body, frozen, loadout) | A modifier system with a compatibility matrix and guaranteed reset of every modified state | Planned |
-| 8 | **Vehicle Pursuit / Convoy** | Vehicle system (complete, tested), The Convoy's escorted truck | Checkpoints and road routes on the large maps; helicopter balance rules | Planned |
-| 8 | **Boss Rush** | The Warden and Subject Zero (Outbreak), PvE runtime | An arena sequence and between-fight supply rules; no second AI system | Planned |
+| 5 | **Infection** (survivors vs infected, dynamic sides) | RoundMode sides and conversion (already used by the Hide & Seek Infection variant), event filtering | Infected movement profile and melee against players (a melee weapon path in the shared sim), supply drops, shrinking safe zones | Built in 0.8.0 (§8): claws as a short-range weapon; no supply drops or safe zones |
+| 6 | **Sabotage 2v2** (rounds, no respawn, plant / defuse on two sites) | RoundMode rounds and side swap, Domination capture holds for plant/defuse | Compact symmetric maps with two sites; round economy kept off (no pay-to-win) | Built in 0.8.0 (§8) |
+| 6 | **Bounty Hunt** (marked target, periodic approximate pings) | Prop Hunt hint pings (approximate, never centred), FFA standings | Ping cadence and target rotation rules | Built in 0.8.0 (§8) |
+| 7 | **Extraction** (PvE first, then PvP) | Outbreak missions (carried objective, extraction steps, vehicles), WaveDirector | A carried-object mechanic for players (drop/pick up) | Built in 0.8.0 (§8) |
+| 7 | **Chaos Arena** (timed modifiers) | Mode controller hooks (body, frozen, loadout) | A modifier system with a compatibility matrix and guaranteed reset of every modified state | Built in 0.8.0 (§8) |
+| 8 | **Vehicle Pursuit / Convoy** | Vehicle system (complete, tested), The Convoy's escorted truck | Checkpoints and road routes on the large maps; helicopter balance rules | Built in 0.8.0 (§8) |
+| 8 | **Boss Rush** | The Warden and Subject Zero (Outbreak), PvE runtime | An arena sequence and between-fight supply rules; no second AI system | Built in 0.8.0 (§8) |
 | 9 | More party maps, effects, balance passes | Salvage Depot pattern (`MapDef.party`) | Real playtests with 4–8 people | Open |
 | 10 | Release: benchmarks on real GPUs, security review, deploy | `/bench.html`, `modebench.ts` | Your hardware and your approval to deploy | Open |
 
@@ -243,3 +243,31 @@ to make readable and verifiable, not recommended).
   spawn as the pen.
 - Balance (hider health, hint timings, penalty, points) is untested with real players.
 - Host mode: the host can read secrets with developer tools (§3).
+
+## 8. The 0.8 modes (Infection, Chaos Arena, Bounty Hunt, Sabotage, Vehicle Pursuit, Convoy)
+
+First, deliberately simple versions on the existing machinery. Tuning in
+`packages/shared/src/config/extraModes.ts`; controllers in `apps/server/src/modes/`.
+
+| Mode | Controller | Rules as built |
+|---|---|---|
+| Infection | `Infection.ts` (extends `RoundMode`) | 1 infected per 8 players (rotates), claws only (`claws`: 3 short rays, 72 px, +12 % speed via the weapon's move multiplier, so prediction stays exact); survivors: loadout + sidearm, endless reserve; fallen survivor → infected after 2 s; infected cannot be hurt in the pen; the round goes on while anybody is infected; last survivor pinged every 4 s; prep 8 s, round 150 s |
+| Chaos Arena | `Chaos.ts` | Free-for-all to the elimination limit; one of 11 rules every 30–45 s (damage ×2/×3, a weapon for everyone, vampire 50 %, regeneration, full shields); pickups of weapons and chests off during weapon rules; weapons carried before a weapon rule are given back |
+| Bounty Hunt | `Bounty.ts` | Target = the leader standing (first player at the start); +1 / 2 s alive, +5 for the bounty, +1 per other elimination; ping every 5 s, 220 px ring offset from the target; first to the point limit (default 60) |
+| Sabotage | `Sabotage.ts` (extends `TeamRounds.ts`) | Sites = the map's Domination A and C points; plant 3 s, defuse 5 s, fuse 35 s, round 100 s; no respawns in a round; elimination wins a round (after a plant the defenders must still defuse); sides swap at half; a team with more than half the rounds wins early |
+| Vehicle Pursuit / Convoy | `Pursuit.ts` (extends `TeamRounds.ts`) | Route from the attackers' flag stand: centre point, far point, destination at the defenders' flag stand; Pursuit counts any runner (on foot or driving), Convoy only the truck (the parked ground vehicle nearest the escorts' base, made armored when it fits); respawn 4 s; round 150 s (Convoy 180 s); sides swap every round |
+
+Shared additions: `MatchState.marks` (objective markers: kind, position, radius, team colour,
+progress, label, and a "hold E" prompt shown to one team inside the radius), `MatchState.modeText`
+(one status line), the `announce` event (banner for everybody), controller hooks `damageScale`,
+`onDamage`, `markEntries`, `statusText`, `vehicleSpawns`; `TeamRounds` for round-based team modes
+(round clock and number in the team HUD, rounds won as the team score).
+
+Co-op operations are Outbreak missions (`chapter: 0`) with their own Play card: **Extraction**
+(three cargo cases, then the helipad under a horde) and **Boss Rush** (the three bosses as wave
+leaders in the Final Breach atrium, a supply drop after each). Both are played through in
+`apps/server/test/operations.test.ts`.
+
+Not done, stated plainly: no balance from real playtests; bots do not plant, defuse, drive the
+truck or chase the bounty (they only fight); Pursuit routes are derived from the map's objective
+points, not hand-authored roads; the infected have no special vision or abilities.

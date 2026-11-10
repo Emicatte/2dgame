@@ -981,9 +981,11 @@ export class GameSimulation {
   ): void {
     if (!target.alive) return;
     const shielded = target.protectedUntil > this.tick;
-    const dmg = shielded ? 0 : Math.max(1, Math.round(raw));
+    const scale = this.ctl ? this.ctl.damageScale(attacker, target) : 1;
+    const dmg = shielded || scale <= 0 ? 0 : Math.max(1, Math.round(raw * scale));
     this.applyDamage(target, dmg);
     if (attacker && attacker !== target) attacker.stats.damageDealt += dmg;
+    if (dmg > 0) this.ctl?.onDamage(target, attacker, dmg);
     const lethal = target.hp === 0;
     this.events.push({
       t: "hit",
@@ -1297,11 +1299,12 @@ export class GameSimulation {
     this.resetVehicles();
   }
 
-  private resetVehicles(): void {
+  /** Parks every vehicle again (match start, a new round of a vehicle mode). */
+  resetVehicles(): void {
     this.vehicles.clear();
     // Modes without vehicles (Gun Game, the round modes) leave the parked vehicles out.
     if (this.ctl && !this.ctl.vehicles) return;
-    for (const spawn of this.vehicleOverride ?? this.map.vehicleSpawns ?? []) {
+    for (const spawn of this.vehicleOverride ?? this.ctl?.vehicleSpawns() ?? this.map.vehicleSpawns ?? []) {
       const def = VEHICLES[spawn.kind];
       this.vehicles.set(spawn.id, {
         id: spawn.id,

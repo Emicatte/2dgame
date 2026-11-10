@@ -1,6 +1,7 @@
 import {
   GUN_GAME,
   isPveMode,
+  isRoundMode,
   isTeamMode,
   KILL_BY_EXPLOSION,
   KILL_BY_VEHICLE,
@@ -15,6 +16,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Button, formatClock, Panel } from "../components/ui.tsx";
 import { type HudObjective, type HudVehicle, hudStore, uiStore } from "../game/hudStore.ts";
+import { modeHudStore } from "../game/modes/modeHud.ts";
 import { pveHudStore } from "../game/pve/pveHud.ts";
 import { keyLabel, settingsStore } from "../lib/settings.ts";
 import { useStore } from "../lib/store.ts";
@@ -366,6 +368,7 @@ function PauseMenu({ onClose, onSettings }: { onClose: () => void; onSettings: (
 
 export function InGame({ onSettings }: { onSettings: () => void }) {
   const hud = useStore(hudStore);
+  const mode = useStore(modeHudStore);
   const ui = useStore(uiStore);
   const s = useStore(sessionStore);
   const settings = useStore(settingsStore);
@@ -389,8 +392,13 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
     };
   }, []);
 
-  const leader = [...s.players].sort((a, b) => b.kills - a.kills)[0];
+  const bounty = s.mode === "bounty";
+  const leader = [...s.players].sort((a, b) => (bounty ? b.pts - a.pts : b.kills - a.kills))[0];
+  const myPts = s.players.find((p) => p.id === s.selfId)?.pts ?? 0;
   const teams = isTeamMode(s.mode);
+  // Team round modes (Sabotage, Pursuit, Convoy): the clock shows the round, not the match cap.
+  const roundClock = isRoundMode(s.mode) && !!mode.stage;
+  const clock = roundClock ? mode.stageLeftSec : hud.timeLeftSec;
   const myTeam = s.players.find((p) => p.id === s.selfId)?.team ?? 0;
   const hpFrac = hud.hp / PLAYER.maxHealth;
   const statusClass = s.status === "reconnecting" || hud.stalled ? "is-bad" : hud.ping > 150 ? "is-warn" : "";
@@ -449,7 +457,8 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
                 style={{ order: i === 0 ? 0 : 2, borderColor: TEAMS[t].css }}
               >
                 <b className={`mono team-tag--${t}`} data-testid={`team-score-${t}`}>
-                  {t === 1 ? s.scoreA : s.scoreB}/{s.killLimit}
+                  {t === 1 ? s.scoreA : s.scoreB}
+                  {roundClock ? "" : `/${s.killLimit}`}
                 </b>
                 <small>
                   {TEAMS[t].name}
@@ -458,19 +467,24 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
               </div>
             ))}
             <div
-              className={`hud-box hud__timer ${hud.timeLeftSec < 30 && s.phase === "playing" ? "is-low" : ""}`}
+              className={`hud-box hud__timer ${clock < 30 && s.phase === "playing" ? "is-low" : ""}`}
               style={{ order: 1 }}
             >
-              {formatClock(hud.timeLeftSec)}
+              {formatClock(clock)}
+              {roundClock && (
+                <small className="hud__timer-sub">
+                  Round {mode.round}/{mode.rounds}
+                </small>
+              )}
             </div>
           </div>
         ) : (
           <div className="hud__top">
             <div className="hud-box hud__score">
               <b className="mono" data-testid="hud-kills">
-                {hud.kills}
+                {bounty ? myPts : hud.kills}
               </b>
-              <small>Your elims</small>
+              <small>{bounty ? "Your points" : "Your elims"}</small>
             </div>
             <div
               className={`hud-box hud__timer ${hud.timeLeftSec < 30 && s.phase === "playing" ? "is-low" : ""}`}
@@ -487,7 +501,7 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
             ) : (
               <div className="hud-box hud__score">
                 <b className="mono">
-                  {leader?.kills ?? 0}/{s.killLimit}
+                  {(bounty ? leader?.pts : leader?.kills) ?? 0}/{s.killLimit}
                 </b>
                 <small>Leader</small>
               </div>
@@ -495,6 +509,11 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
           </div>
         )}
 
+        {s.modeText && s.phase === "playing" && (
+          <div className="mode-status" data-testid="mode-status">
+            {s.modeText}
+          </div>
+        )}
         <KillFeed />
 
         {hud.alive && (

@@ -33,7 +33,7 @@ export interface RoundTiming {
  * kill feed work unchanged.
  */
 export abstract class RoundMode extends BaseMode {
-  override readonly hiddenInfo = true;
+  override readonly hiddenInfo: boolean = true;
   protected abstract readonly timing: RoundTiming;
   protected abstract readonly seekerShare: number;
   protected abstract readonly seekerWeapons: readonly WeaponId[];
@@ -185,6 +185,11 @@ export abstract class RoundMode extends BaseMode {
     this.beginStage("break", this.sim.tick + this.stageLength("break"));
   }
 
+  /** The seeking side can no longer win the round (Infection: only when nobody is infected). */
+  protected seekersOut(): boolean {
+    return this.aliveSide(ROLE.SEEKER).length === 0;
+  }
+
   protected abstract readonly surviveBonus: number;
   protected onRoundStart(): void {}
   protected onRoundEnd(_winner: RoleId): void {}
@@ -205,7 +210,7 @@ export abstract class RoundMode extends BaseMode {
       case "hunt": {
         this.huntTick();
         if (this.aliveSide(ROLE.HIDER).length === 0) this.endRound(ROLE.SEEKER);
-        else if (this.aliveSide(ROLE.SEEKER).length === 0) this.endRound(ROLE.HIDER);
+        else if (this.seekersOut()) this.endRound(ROLE.HIDER);
         else if (tick >= this.stageEnd) this.endRound(ROLE.HIDER);
         break;
       }

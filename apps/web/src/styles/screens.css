@@ -2125,6 +2125,21 @@
   box-shadow: 0 0 6px rgba(79, 216, 255, 0.6);
 }
 
+.mode-status {
+  position: absolute;
+  top: 86px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border: 1px solid var(--line-2);
+  background: rgba(11, 12, 14, 0.72);
+  color: var(--text);
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .shield-cells {
   display: flex;
   align-items: center;

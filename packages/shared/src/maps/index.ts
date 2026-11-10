@@ -16,6 +16,8 @@ import { DOWNTOWN } from "./downtown.ts";
 import { TACTICAL_FACILITY } from "./facility.ts";
 import { HARBOR_CONFLICT } from "./harbor.ts";
 import { INDUSTRIAL_ARENA } from "./industrial.ts";
+import { NIGHT_MARKET } from "./market.ts";
+import { MOTEL_STRIP } from "./motel.ts";
 import { MOUNTAIN_OUTPOST } from "./mountain.ts";
 import { NEON_DISTRICT } from "./neon.ts";
 import { KESSLER_ROAD } from "./outskirts.ts";
@@ -36,6 +38,8 @@ const BASE_MAPS: Record<MapId, MapDef> = {
   mountain: MOUNTAIN_OUTPOST,
   facility: TACTICAL_FACILITY,
   depot: SALVAGE_DEPOT,
+  motel: MOTEL_STRIP,
+  market: NIGHT_MARKET,
   works: HALVORSEN_WORKS,
   district: DEAD_DISTRICT,
   outskirts: KESSLER_ROAD,
@@ -66,9 +70,11 @@ export function isMapId(v: unknown): v is MapId {
 export function mapModes(map: MapDef): GameMode[] {
   if (map.modes) return [...map.modes];
   if (map.pve) return [];
-  const out: GameMode[] = ["deathmatch", "tdm", "dom", "ctf"];
+  const out: GameMode[] = ["deathmatch", "tdm", "dom", "ctf", "chaos", "bounty"];
   if (map.vehicleSpawns?.length) out.push("mayhem");
-  if (!map.large) out.push("gungame", "hideseek");
+  // Pursuit and Convoy need ground vehicles to drive.
+  if (map.vehicleSpawns?.some((v) => v.kind !== "heli")) out.push("pursuit", "convoy");
+  if (!map.large) out.push("gungame", "hideseek", "infection", "sabotage");
   if (map.party?.props.length) out.push("prophunt");
   return out;
 }

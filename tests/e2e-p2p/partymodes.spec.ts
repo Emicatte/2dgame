@@ -110,7 +110,7 @@ async function startMatch(a: Page, b: Page) {
   await phaseIs(b, "playing");
 }
 
-test("Play screen: categories, explicit status for planned modes; Gun Game ladder over WebRTC", async () => {
+test("Play screen: categories, every mode playable; Gun Game ladder over WebRTC", async () => {
   const { a, b } = await twoPlayers();
   await a.getByTestId("open-play").click();
   await expect(a.getByTestId("play-screen")).toBeVisible();
@@ -119,9 +119,10 @@ test("Play screen: categories, explicit status for planned modes; Gun Game ladde
   await a.keyboard.press("ArrowRight");
   await expect(a.getByTestId("play-tab-party")).toHaveAttribute("aria-selected", "true");
   await expect(a.getByTestId("play-card-prophunt")).toBeVisible();
-  // A planned mode has its status and no button that pretends to start it.
-  await expect(a.getByTestId("play-card-infection")).toContainText("Planned");
-  await expect(a.getByTestId("play-card-infection").getByRole("button")).toHaveCount(0);
+  // Nothing is left as "planned": every card has a button that starts it.
+  await expect(a.getByTestId("play-card-infection")).toContainText("Available");
+  await expect(a.getByTestId("play-private-infection")).toBeEnabled();
+  await expect(a.locator(".play-card.is-planned")).toHaveCount(0);
   await shot(a, "play-party");
   await a.getByRole("button", { name: "Back" }).click();
 

@@ -190,7 +190,7 @@ export const SALVAGE_DEPOT: MapDef = {
   lights,
   spawns,
   pickups,
-  modes: ["deathmatch", "gungame", "hideseek", "prophunt"],
+  modes: ["deathmatch", "gungame", "hideseek", "prophunt", "infection", "chaos", "bounty"],
   players: { min: 2, max: 8 },
   party: {
     seekerPen: [

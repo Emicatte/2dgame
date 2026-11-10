@@ -15,6 +15,7 @@ import {
   type MatchSettings,
   MatchState,
   mapsForMode,
+  missionById,
   type NetEvent,
   type NoticeMessage,
   type ResultsMessage,
@@ -117,6 +118,8 @@ export interface SessionState {
   voteMaps: string[];
   /** This player left the running match and waits in the room for the next one. */
   away: boolean;
+  /** Status line of the running mode (MatchState.modeText). */
+  modeText: string;
 }
 
 const initialState: SessionState = {
@@ -150,6 +153,7 @@ const initialState: SessionState = {
   round: { stage: "", end: 0, num: 0, of: 0, variant: "", dark: false, seekers: 0, hiders: 0, winner: 0 },
   voteMaps: [],
   away: false,
+  modeText: "",
 };
 
 export const sessionStore = createStore<SessionState>({ ...initialState });
@@ -217,9 +221,12 @@ class GameSession {
     if (HOST_MODE) this.updateSettings({ mode });
   }
 
-  async createCoop(loadout: Loadout): Promise<void> {
-    await this.createPrivate(loadout, "works", HOST_MODE ? {} : { mode: "outbreak" });
+  /** Co-op room on a mission (the first campaign chapter by default, or a co-op operation). */
+  async createCoop(loadout: Loadout, mission?: string): Promise<void> {
+    const def = mission ? missionById(mission) : undefined;
+    await this.createPrivate(loadout, def?.map ?? "works", HOST_MODE ? {} : { mode: "outbreak" });
     if (HOST_MODE) this.updateSettings({ mode: "outbreak" });
+    if (def) this.updateSettings({ mission: def.id });
   }
 
   async createPrivate(loadout: Loadout, map: MapId, extra: Record<string, unknown> = {}): Promise<void> {
@@ -410,6 +417,7 @@ class GameSession {
       round: roundOf(state, s.round),
       voteMaps: state.voteMaps ? state.voteMaps.split(",") : [],
       away: !!this.room && !!state.players.get(this.room.sessionId)?.away,
+      modeText: state.modeText ?? "",
     });
   }
 

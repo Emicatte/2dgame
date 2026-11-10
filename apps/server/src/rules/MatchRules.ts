@@ -6,6 +6,7 @@ import {
   isDifficulty,
   isPveMode,
   isRoleMode,
+  isRoundMode,
   isTeamMode,
   MAPS,
   MATCH_LIMITS,
@@ -176,7 +177,7 @@ export class MatchRules {
 
   /** Round modes: number of rounds (stored in the score limit). */
   setRounds(n: number): boolean {
-    if (!this.roleMode || n < ROUND_LIMITS.min || n > ROUND_LIMITS.max) return false;
+    if (!isRoundMode(this.state.mode) || n < ROUND_LIMITS.min || n > ROUND_LIMITS.max) return false;
     this.state.killLimit = n;
     return true;
   }

@@ -1,9 +1,14 @@
 import type { GameMode } from "@scrapline/shared";
 import type { GameSimulation } from "../simulation/GameSimulation.ts";
+import { BountyMode } from "./Bounty.ts";
+import { ChaosMode } from "./Chaos.ts";
 import { GunGameMode } from "./GunGame.ts";
 import { HideSeekMode } from "./HideSeek.ts";
+import { InfectionMode } from "./Infection.ts";
 import type { ModeController } from "./ModeController.ts";
 import { PropHuntMode } from "./PropHunt.ts";
+import { PursuitMode } from "./Pursuit.ts";
+import { SabotageMode } from "./Sabotage.ts";
 
 export type { ModeController } from "./ModeController.ts";
 
@@ -19,6 +24,17 @@ export function createModeController(mode: GameMode, sim: GameSimulation): ModeC
       return new HideSeekMode(sim);
     case "prophunt":
       return new PropHuntMode(sim);
+    case "infection":
+      return new InfectionMode(sim);
+    case "chaos":
+      return new ChaosMode(sim);
+    case "bounty":
+      return new BountyMode(sim);
+    case "sabotage":
+      return new SabotageMode(sim);
+    case "pursuit":
+    case "convoy":
+      return new PursuitMode(sim, mode);
     default:
       return null;
   }

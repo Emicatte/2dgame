@@ -185,6 +185,19 @@ export const WEAPON_SHAPES: Readonly<Record<string, { len: number; h: number }>>
   battlerifle: { len: 38, h: 7 },
   minigun: { len: 40, h: 10 },
   rpg: { len: 44, h: 8 },
+  revolver: { len: 19, h: 7 },
+  machinepistol: { len: 18, h: 6 },
+  lancer: { len: 36, h: 8 },
+  dmr: { len: 42, h: 7 },
+  pdw: { len: 26, h: 7 },
+  lmg: { len: 40, h: 9 },
+  doublebarrel: { len: 34, h: 8 },
+  autoshotgun: { len: 32, h: 9 },
+  heavysniper: { len: 52, h: 8 },
+  grenadelauncher: { len: 32, h: 10 },
+  railgun: { len: 48, h: 8 },
+  flamethrower: { len: 36, h: 9 },
+  claws: { len: 12, h: 10 },
 };
 
 export function weaponShape(def: Pick<WeaponDef, "id">): { len: number; h: number } {

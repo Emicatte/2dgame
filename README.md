@@ -36,7 +36,8 @@ unlocks and daily challenges, and private rooms you can share with a link.
 | Salvage Depot party map, Play screen, next-map vote, mode career stats | Done (0.7.0) |
 | Loot chests (random weapon, shield, ammo), Talon Carbine, Vanguard BR, Grinder minigun, Hammer RPG, shields | Done (0.7.0): unit tests (chest, shield, rocket splash) and a browser test (open a chest with E) |
 | Chest loot on the ground: choose the weapon, swapped weapon stays on the ground, shield cells carried and used with X | Done (0.7.1): unit tests (drops, swap, cells) and a browser test (chest → take weapon → cell → X) |
-| Infection, Sabotage, Bounty Hunt, Extraction, Chaos Arena, Vehicle Pursuit / Convoy, Boss Rush | Designed and planned (shown as "Planned" on the Play screen), not built: [docs/v4/MODES.md §6](docs/v4/MODES.md) |
+| Infection, Chaos Arena, Bounty Hunt, Sabotage, Vehicle Pursuit, Convoy; co-op operations Extraction and Boss Rush | Done (0.8.0): simulation tests per mode, operations played through in the co-op runtime, two-browser WebRTC E2E per mode family; balance not playtested ([docs/v4/MODES.md §8](docs/v4/MODES.md)) |
+| 13 more weapons (incl. grenade launcher, railgun, flamethrower), Motel Strip and Night Market party maps, every Outbreak chapter unlocked | Done (0.8.0); maps validated (spawns, objects, reachability) |
 | Performance | CPU cost per frame measured (small); server tick cost per mode measured (`scripts/modebench.ts`); **60 FPS on a real GPU not yet verified**: run `/bench.html` on target hardware |
 
 Details and the test record: [docs/TESTING.md](docs/TESTING.md). Open items: [docs/ROADMAP.md](docs/ROADMAP.md).

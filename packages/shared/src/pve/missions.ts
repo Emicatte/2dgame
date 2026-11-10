@@ -1284,12 +1284,167 @@ export const FINAL_BREACH: MissionDef = {
   requires: "black-site",
 };
 
+// ------------------------------------------------------------------ Operations (chapter 0)
+// Stand-alone co-op operations with their own card on the Play screen. They reuse the campaign
+// maps and spawn zones; none of their doors exist (every passage is open).
+
+export const EXTRACTION: MissionDef = {
+  id: "extraction",
+  chapter: 0,
+  name: "Extraction",
+  setting: "Halvorsen Works · cargo recovery",
+  brief:
+    "Three cargo cases are still somewhere in the Halvorsen plant. Recover all three, then carry them to the north-east helipad and hold it until the bird lands.",
+  map: "works",
+  doors: [],
+  props: [
+    { id: "cargo-gen", kind: "intel", label: "Cargo case", x: 470, y: 400, holdSec: 1.5, noise: 500 },
+    { id: "cargo-court", kind: "intel", label: "Cargo case", x: 1600, y: 1080, holdSec: 1.5, noise: 500 },
+    { id: "cargo-office", kind: "intel", label: "Cargo case", x: 2780, y: 1640, holdSec: 1.5, noise: 500 },
+  ],
+  groups: [
+    {
+      id: "gen",
+      enemies: [
+        { kind: "walker", x: 700, y: 390, state: "idle" },
+        { kind: "walker", x: 260, y: 300, state: "idle" },
+        { kind: "runner", x: 560, y: 520, state: "idle" },
+        { kind: "walker", x: 820, y: 1040, state: "wander" },
+      ],
+    },
+    {
+      id: "court",
+      enemies: [
+        { kind: "walker", x: 1500, y: 680, state: "wander" },
+        { kind: "walker", x: 1820, y: 1160, state: "wander" },
+        { kind: "spitter", x: 1360, y: 1040, state: "idle" },
+        { kind: "runner", x: 1700, y: 900, state: "idle" },
+      ],
+    },
+    {
+      id: "office",
+      enemies: [
+        { kind: "brute", x: 2780, y: 1400, state: "idle" },
+        { kind: "walker", x: 2360, y: 1500, state: "idle" },
+        { kind: "walker", x: 2720, y: 1700, state: "idle" },
+        { kind: "runner", x: 2860, y: 1560, state: "idle" },
+      ],
+    },
+  ],
+  spawnZones: FIRST_CONTACT.spawnZones,
+  steps: [
+    {
+      kind: "collect",
+      props: ["cargo-gen"],
+      text: "Recover the cargo case by the generator",
+      hint: "Hold E on a cargo case to pick it up. It makes noise.",
+      marker: { x: 470, y: 400 },
+      onStart: [{ spawn: "gen" }],
+    },
+    {
+      kind: "collect",
+      props: ["cargo-court"],
+      text: "Recover the cargo case in the courtyard",
+      marker: { x: 1600, y: 1080 },
+      onStart: [{ spawn: "court" }, { checkpoint: { x: 900, y: 1100 } }],
+      onDone: [{ supply: { x: 1500, y: 1150 } }],
+    },
+    {
+      kind: "collect",
+      props: ["cargo-office"],
+      text: "Recover the last cargo case in the offices",
+      hint: "Brute: dodge its charge.",
+      marker: { x: 2780, y: 1640 },
+      onStart: [{ spawn: "office" }, { checkpoint: { x: 2050, y: 1450 } }],
+    },
+    {
+      kind: "extract",
+      area: FC_EXTRACT,
+      holdSec: 20,
+      text: "Carry the cargo to the helipad and hold until extraction",
+      hint: "Everyone still standing must be on the pad.",
+      marker: { x: 2910, y: 380 },
+      onStart: [{ alarm: true }, { checkpoint: { x: 2640, y: 1080 } }],
+      horde: {
+        enemies: { walker: 16, runner: 5, exploder: 2, spitter: 1 },
+        zones: ["east", "south-east", "storage", "north-2"],
+        label: "They followed the cargo!",
+      },
+    },
+  ],
+  ambient: {
+    everySec: 12,
+    maxAlive: 5,
+    kinds: ["walker", "walker", "runner"],
+    zones: ["south", "storage", "south-east", "west"],
+  },
+  xp: 800,
+  title: "Cargo Runner",
+};
+
+export const BOSS_RUSH: MissionDef = {
+  id: "boss-rush",
+  chapter: 0,
+  name: "Boss Rush",
+  setting: "Halvorsen research complex · atrium",
+  brief:
+    "Everything the outbreak made, one after another, in the atrium of the research complex: the Abomination, the Warden, then Subject Zero. One supply drop between each fight. No running.",
+  map: "breach",
+  doors: [],
+  props: [],
+  groups: [],
+  spawnZones: FINAL_BREACH.spawnZones,
+  steps: [
+    {
+      kind: "reach",
+      text: "Get to the atrium",
+      area: FB_ATRIUM,
+      marker: { x: 2800, y: 1100 },
+      onStart: [{ power: true }],
+    },
+    {
+      kind: "waves",
+      text: "Defeat every boss",
+      hint: "Each boss leads its wave. A supply crate drops after each fight.",
+      marker: { x: 2800, y: 1100 },
+      intermissionSec: 12,
+      onStart: [{ checkpoint: { x: 2400, y: 1100 } }],
+      waves: [
+        {
+          boss: "abomination",
+          enemies: { walker: 6, runner: 2 },
+          zones: ["atrium-nw", "atrium-ne", "atrium-sw", "atrium-se"],
+          supply: true,
+          label: "Boss 1 · The Abomination",
+        },
+        {
+          boss: "warden",
+          enemies: { walker: 6, stalker: 2 },
+          zones: ["atrium-nw", "atrium-ne", "atrium-sw", "atrium-se"],
+          supply: true,
+          label: "Boss 2 · The Warden",
+        },
+        {
+          boss: "subject-zero",
+          enemies: { runner: 4, spitter: 2 },
+          zones: ["atrium-nw", "atrium-ne", "atrium-sw", "atrium-se"],
+          label: "Boss 3 · Subject Zero",
+        },
+      ],
+    },
+  ],
+  xp: 1200,
+  title: "Boss Breaker",
+};
+
 export const MISSIONS: readonly MissionDef[] = [
   FIRST_CONTACT,
   DEAD_DISTRICT,
   THE_CONVOY,
   BLACK_SITE,
   FINAL_BREACH,
+  EXTRACTION,
+  BOSS_RUSH,
 ];
 
 /**

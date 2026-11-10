@@ -62,6 +62,18 @@ const CHEST_SPOTS: Partial<Record<MapId, Vec2[]>> = {
     { x: 1360, y: 1120 },
     { x: 736, y: 112 },
   ],
+  motel: [
+    { x: 60, y: 150 },
+    { x: 1960, y: 220 },
+    { x: 1330, y: 1240 },
+    { x: 1100, y: 760 },
+  ],
+  market: [
+    { x: 1000, y: 175 },
+    { x: 2080, y: 560 },
+    { x: 80, y: 1360 },
+    { x: 1360, y: 1300 },
+  ],
 };
 
 export function withChests(map: MapDef): MapDef {

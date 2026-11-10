@@ -44,6 +44,12 @@ export const MODE_STAT_KEYS = [
   "propsFound",
   /** Matches won in vehicle modes. */
   "vehicleWins",
+  /** Infection: survivors infected, rounds survived as a survivor. */
+  "infections",
+  "infectionRounds",
+  /** Sabotage: devices planted and defused. */
+  "plants",
+  "defuses",
 ] as const;
 export type ModeStatKey = (typeof MODE_STAT_KEYS)[number];
 
@@ -57,6 +63,10 @@ export const MODE_STAT_LABELS: Record<ModeStatKey, string> = {
   propRounds: "Prop Hunt rounds survived",
   propsFound: "Props found",
   vehicleWins: "Vehicle mode wins",
+  infections: "Survivors infected",
+  infectionRounds: "Infection rounds survived",
+  plants: "Devices planted",
+  defuses: "Devices defused",
 };
 
 export interface ModeStats {

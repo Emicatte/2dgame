@@ -1,10 +1,13 @@
 import {
+  COOP_OPERATIONS,
+  type CoopOperation,
   type GameMode,
   MAPS,
   MODE_CATEGORIES,
   MODES,
   type ModeDef,
   mapsForMode,
+  missionById,
   modeEnabled,
   PLANNED_MODES,
   type PlannedMode,
@@ -17,7 +20,10 @@ import { HOST_MODE } from "../net/api.ts";
 import { session } from "../net/session.ts";
 import { currentLoadout } from "../state/profile.ts";
 
-type Card = { kind: "mode"; def: ModeDef } | { kind: "planned"; def: PlannedMode };
+type Card =
+  | { kind: "mode"; def: ModeDef }
+  | { kind: "op"; def: CoopOperation }
+  | { kind: "planned"; def: PlannedMode };
 
 function cardsFor(categoryModes: readonly string[]): Card[] {
   const out: Card[] = [];
@@ -28,6 +34,8 @@ function cardsFor(categoryModes: readonly string[]): Card[] {
       if (def.status === "available" && !modeEnabled(def.id, MODE_FLAGS)) continue;
       out.push({ kind: "mode", def });
     } else {
+      const op = COOP_OPERATIONS.find((o) => o.id === id);
+      if (op && modeEnabled("outbreak", MODE_FLAGS)) out.push({ kind: "op", def: op });
       const planned = PLANNED_MODES.find((p) => p.id === id);
       if (planned) out.push({ kind: "planned", def: planned });
     }
@@ -165,6 +173,35 @@ export function PlayScreen({ onBack }: { onBack: () => void }) {
                             ? session.createCoop(currentLoadout())
                             : session.createWithMode(currentLoadout(), c.def.id),
                         )
+                      }
+                      data-testid={`play-private-${c.def.id}`}
+                    >
+                      {busy === `p-${c.def.id}` ? "Creating…" : HOST_MODE ? "Create arena" : "Private room"}
+                    </Button>
+                  </div>
+                </article>
+              ) : c.kind === "op" ? (
+                <article key={c.def.id} className="play-card" data-testid={`play-card-${c.def.id}`}>
+                  <header className="play-card__head">
+                    <h3>{c.def.name}</h3>
+                    <span className="badge badge--good">Available</span>
+                  </header>
+                  <p className="play-card__blurb">{c.def.blurb}</p>
+                  <dl className="play-card__facts">
+                    <dt>Players</dt>
+                    <dd>
+                      {c.def.players.min}–{c.def.players.max}
+                    </dd>
+                    <dt>Map</dt>
+                    <dd>{MAPS[missionById(c.def.mission)?.map ?? "works"].name}</dd>
+                  </dl>
+                  <p className="play-card__blurb">{missionById(c.def.mission)?.brief}</p>
+                  <div className="play-card__actions">
+                    <Button
+                      variant="primary"
+                      disabled={!!busy}
+                      onClick={() =>
+                        void run(`p-${c.def.id}`, () => session.createCoop(currentLoadout(), c.def.mission))
                       }
                       data-testid={`play-private-${c.def.id}`}
                     >

@@ -1,7 +1,7 @@
 import {
   type GameMode,
   isPveMode,
-  isRoleMode,
+  isRoundMode,
   isTeamMode,
   MAPS,
   MATCH_LIMITS,
@@ -41,6 +41,12 @@ const SCORE_LIMITS: Record<GameMode, number[]> = {
   gungame: [],
   hideseek: [],
   prophunt: [],
+  infection: [],
+  chaos: [15, 25, 40],
+  bounty: [30, 60, 100],
+  sabotage: [],
+  pursuit: [],
+  convoy: [],
   outbreak: [],
   survival: [],
 };
@@ -118,9 +124,11 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
 
   const humans = s.players.filter((p) => !p.id.startsWith("bot:"));
   const def = MODES[s.mode];
-  const roles = isRoleMode(s.mode);
+  /** Rounds (count picked here, no duration): the role modes and the team round modes. */
+  const rounds = isRoundMode(s.mode);
+  const variants = MODE_VARIANTS[s.mode] ?? [];
   /** The mode has its own end rule (ladder, rounds): no score limit to pick. */
-  const ownEnd = s.mode === "gungame" || roles;
+  const ownEnd = s.mode === "gungame" || rounds;
   const tooFew = humans.length < def.players.min;
   /** Modes a host can pick here, by category (co-op last). */
   const pickable = MODE_CATEGORIES.map((c) => ({
@@ -296,12 +304,14 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                         {s.teamSize}v{s.teamSize}
                       </span>
                     )}
-                    {roles ? (
+                    {rounds ? (
                       <>
                         <span className="badge">{s.killLimit} rounds</span>
-                        <span className="badge" data-testid="variant-badge">
-                          {MODE_VARIANTS[s.mode]?.find((v) => v.id === s.round.variant)?.name ?? "Classic"}
-                        </span>
+                        {variants.length > 0 && (
+                          <span className="badge" data-testid="variant-badge">
+                            {variants.find((v) => v.id === s.round.variant)?.name ?? "Classic"}
+                          </span>
+                        )}
                       </>
                     ) : (
                       <>
@@ -342,23 +352,25 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                       </select>
                     </div>
                   )}
-                  {roles && (
+                  {rounds && (
                     <>
-                      <div className="setting-row">
-                        <span>Variant</span>
-                        <select
-                          className="input"
-                          value={s.round.variant}
-                          onChange={(e) => session.updateSettings({ variant: e.target.value })}
-                          data-testid="variant"
-                        >
-                          {(MODE_VARIANTS[s.mode] ?? []).map((v) => (
-                            <option key={v.id} value={v.id} title={v.blurb}>
-                              {v.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      {variants.length > 0 && (
+                        <div className="setting-row">
+                          <span>Variant</span>
+                          <select
+                            className="input"
+                            value={s.round.variant}
+                            onChange={(e) => session.updateSettings({ variant: e.target.value })}
+                            data-testid="variant"
+                          >
+                            {variants.map((v) => (
+                              <option key={v.id} value={v.id} title={v.blurb}>
+                                {v.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                       <div className="setting-row">
                         <span>Rounds</span>
                         <select
@@ -379,7 +391,7 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                       </div>
                     </>
                   )}
-                  {!roles && (
+                  {!rounds && (
                     <div className="setting-row">
                       <span>Duration</span>
                       <select
