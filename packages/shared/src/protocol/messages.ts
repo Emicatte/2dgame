@@ -4,7 +4,7 @@ import { GAME_MODES, type GameMode, ROUND_LIMITS, TEAM_SIZE } from "../config/mo
 import { DISGUISES } from "../config/party.ts";
 import { PRIMARY_WEAPONS, type WeaponId } from "../config/weapons.ts";
 import { DIFFICULTIES, type Difficulty } from "../config/zombies.ts";
-import { MAP_IDS, type MapId } from "../maps/index.ts";
+import { isMapId, type MapId } from "../maps/index.ts";
 import type { MatchPhase } from "../state.ts";
 
 export const ROOM_NAME = "arena";
@@ -39,7 +39,8 @@ export const S2C = {
 export type RoomKind = "quick" | "private";
 
 const weaponIdSchema = z.enum(PRIMARY_WEAPONS as [WeaponId, ...WeaponId[]]);
-const mapIdSchema = z.enum(MAP_IDS as [MapId, ...MapId[]]);
+/** Authored maps, and mazes of any seed (generated from the id). */
+const mapIdSchema = z.custom<MapId>((v) => typeof v === "string" && v.length <= 32 && isMapId(v));
 const modeSchema = z.enum(GAME_MODES as [GameMode, ...GameMode[]]);
 export const teamIdSchema = z.union([z.literal(1), z.literal(2)]);
 

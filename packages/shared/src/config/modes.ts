@@ -26,7 +26,8 @@ export type GameMode =
   | "pursuit"
   | "convoy"
   | "outbreak"
-  | "survival";
+  | "survival"
+  | "maze";
 
 export const GAME_MODES: readonly GameMode[] = [
   "deathmatch",
@@ -45,9 +46,10 @@ export const GAME_MODES: readonly GameMode[] = [
   "convoy",
   "outbreak",
   "survival",
+  "maze",
 ];
 
-export type ModeCategory = "competitive" | "party" | "coop" | "vehicles";
+export type ModeCategory = "competitive" | "party" | "coop" | "vehicles" | "challenge";
 /** "available": playable. "development": being built, visible but cannot start. "planned": roadmap only. */
 export type ModeStatus = "available" | "development" | "planned";
 /**
@@ -529,6 +531,34 @@ export const MODES: Record<GameMode, ModeDef> = {
     status: "available",
     flag: "survival",
   },
+  maze: {
+    id: "maze",
+    name: "Classic Maze",
+    blurb: "A seeded labyrinth. Find the key, hit the switch, dodge the traps, reach the exit first.",
+    category: "challenge",
+    structure: "ffa",
+    players: { min: 1, max: 8 },
+    durationLabel: "5 min",
+    rules: [
+      "No weapons: fastest to the exit wins",
+      "Carry the key to the amber gate, press E on the switch for the cyan gate",
+      "Floor traps send you back to your last checkpoint",
+    ],
+    respawn: "checkpoint",
+    victory: "Fastest time to the exit",
+    scoring: "Finish time",
+    weapons: "None",
+    vehicles: false,
+    abilities: ["Dash"],
+    hud: "objectives",
+    rewards: "Completion, finish placement",
+    events: ["Gates opening", "Traps"],
+    joinInProgress: "checkpoint",
+    disconnect: "Seat held 20 s",
+    quick: false,
+    status: "available",
+    flag: "maze",
+  },
 };
 
 /**
@@ -586,6 +616,7 @@ export const MODE_CATEGORIES: readonly { id: ModeCategory; name: string; modes: 
   { id: "party", name: "Party", modes: ["hideseek", "prophunt", "infection", "chaos"] },
   { id: "coop", name: "Co-op", modes: ["outbreak", "survival", "extraction", "bossrush"] },
   { id: "vehicles", name: "Vehicles", modes: ["mayhem", "pursuit", "convoy"] },
+  { id: "challenge", name: "Challenge", modes: ["maze"] },
 ];
 
 /**
@@ -667,6 +698,7 @@ export const MODE_SCORE_UNIT: Record<GameMode, string> = {
   convoy: "rounds",
   outbreak: "objectives",
   survival: "waves",
+  maze: "finishes",
 };
 
 /** Modes that only make sense on maps with vehicles. */
@@ -903,6 +935,14 @@ export const MODE_DEFAULTS: Record<GameMode, ModeRules> = {
     teamSize: 0,
     maxPlayers: 4,
     durationSec: 90 * 60,
+    scoreLimit: 0,
+    friendlyFire: false,
+  },
+  maze: {
+    mode: "maze",
+    teamSize: 0,
+    maxPlayers: 8,
+    durationSec: 5 * 60,
     scoreLimit: 0,
     friendlyFire: false,
   },

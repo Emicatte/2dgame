@@ -175,6 +175,8 @@ export class ArenaScene extends Phaser.Scene {
   private pve!: PveLayer;
   /** Collision worlds with the current mission doors (null outside PvE maps with doors). */
   private doorWorlds: { world: CollisionWorld; shotWorld: CollisionWorld } | null = null;
+  /** Maze gates applied to the prediction world ("<map>|<open gates>"), "" = not yet. */
+  private mazeDoorKey = "";
   private pickupViews = new Map<string, PickupView>();
   /** Items on the ground (MatchState.drops); weapon drops carry their weapon index. */
   private dropViews = new Map<string, PickupView & { w: number | null }>();
@@ -341,6 +343,8 @@ export class ArenaScene extends Phaser.Scene {
           })(),
           disguises: st.disguises.size,
           pings: st.pings.size,
+          mapId: st.mapId,
+          doors: st.pve.doors,
           players,
           body: this.predictor.body,
           modeText: st.modeText,
@@ -354,10 +358,18 @@ export class ArenaScene extends Phaser.Scene {
           abl: st.players.get(this.room?.sessionId ?? "")?.abl ?? 0,
           tick: st.tick,
           marks: (() => {
-            const out: { id: string; k: string; x: number; y: number; l: string; a: string; c: number }[] =
-              [];
+            const out: {
+              id: string;
+              k: string;
+              x: number;
+              y: number;
+              l: string;
+              a: string;
+              c: number;
+              p: number;
+            }[] = [];
             st.marks.forEach((m, id) => {
-              out.push({ id, k: m.k, x: m.x, y: m.y, l: m.l, a: m.a, c: m.c });
+              out.push({ id, k: m.k, x: m.x, y: m.y, l: m.l, a: m.a, c: m.c, p: m.p });
             });
             return out;
           })(),
@@ -777,6 +789,7 @@ export class ArenaScene extends Phaser.Scene {
     this.pve.clear();
     pveHud.reset();
     this.doorWorlds = null;
+    this.mazeDoorKey = "";
     this.buffer.clear();
     this.clock.reset();
     this.eventQueue = [];
@@ -922,6 +935,14 @@ export class ArenaScene extends Phaser.Scene {
         if (this.pve.active) this.updateSight(state);
       }
       if (this.pve.active && this.pve.doorsChanged(state)) this.applyDoors(state);
+      // Maze gates: the same doors mechanism on a generated map (closed gates are solids).
+      if (this.map.maze) {
+        const key = `${this.map.id}|${state.pve.doors}`;
+        if (key !== this.mazeDoorKey) {
+          this.mazeDoorKey = key;
+          this.applyDoors(state);
+        }
+      }
       const scoreOn = this.pve.active && inMatch;
       if (scoreOn !== this.scoreOn) {
         this.scoreOn = scoreOn;
@@ -1144,7 +1165,7 @@ export class ArenaScene extends Phaser.Scene {
   /** Mission doors changed: every machine rebuilds the same collision worlds (exact prediction). */
   private applyDoors(state: MatchState) {
     const mission = state.mode === "outbreak" ? missionById(state.pve.mission) : undefined;
-    const doors = mission?.doors ?? [];
+    const doors = mission?.doors ?? this.map.maze?.gates ?? [];
     const open = state.mode === "survival" ? new Set(doors.map((d) => d.id)) : parseIdList(state.pve.doors);
     this.doorWorlds = doors.length > 0 ? pveWorlds(this.map, doors, open) : null;
     this.predictor.setWorld(this.doorWorlds?.world ?? collisionWorldFor(this.map), airWorldFor(this.map));

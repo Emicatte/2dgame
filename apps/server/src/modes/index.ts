@@ -5,6 +5,7 @@ import { ChaosMode } from "./Chaos.ts";
 import { GunGameMode } from "./GunGame.ts";
 import { HideSeekMode } from "./HideSeek.ts";
 import { InfectionMode } from "./Infection.ts";
+import { MazeMode } from "./Maze.ts";
 import type { ModeController } from "./ModeController.ts";
 import { PropHuntMode } from "./PropHunt.ts";
 import { PursuitMode } from "./Pursuit.ts";
@@ -35,6 +36,8 @@ export function createModeController(mode: GameMode, sim: GameSimulation): ModeC
     case "pursuit":
     case "convoy":
       return new PursuitMode(sim, mode);
+    case "maze":
+      return new MazeMode(sim);
     default:
       return null;
   }

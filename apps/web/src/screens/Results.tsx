@@ -44,8 +44,24 @@ export function Results() {
   }, [r]);
 
   if (r?.pve) return <PveResults r={r.pve} />;
-  const pointsLabel =
-    s.mode === "gungame" ? "Level" : s.mode === "hideseek" || s.mode === "prophunt" ? "Points" : null;
+  const timed = s.mode === "maze";
+  /** No weapons in the mode: no elimination, death or accuracy columns. */
+  const combat = !timed;
+  const pointsLabel = timed
+    ? "Time"
+    : s.mode === "gungame"
+      ? "Level"
+      : s.mode === "hideseek" || s.mode === "prophunt"
+        ? "Points"
+        : null;
+  const pointsText = (v: number | undefined) =>
+    v === undefined
+      ? "—"
+      : timed
+        ? v > 0
+          ? `${Math.floor(v / 600)}:${((v % 600) / 10).toFixed(1).padStart(4, "0")}`
+          : "DNF"
+        : v;
 
   return (
     <div className="screen screen--dim">
@@ -75,9 +91,9 @@ export function Results() {
                   <th>#</th>
                   <th>Player</th>
                   {pointsLabel && <th className="num">{pointsLabel}</th>}
-                  <th className="num">Elims</th>
-                  <th className="num">Deaths</th>
-                  <th className="num">Accuracy</th>
+                  {combat && <th className="num">Elims</th>}
+                  {combat && <th className="num">Deaths</th>}
+                  {combat && <th className="num">Accuracy</th>}
                 </tr>
               </thead>
               <tbody>
@@ -87,14 +103,16 @@ export function Results() {
                     <td className={teams && row.team ? `team-tag--${row.team}` : undefined}>{row.name}</td>
                     {pointsLabel && (
                       <td className="num" data-testid="result-points">
-                        {"points" in row ? (row.points ?? "—") : "—"}
+                        {"points" in row ? pointsText(row.points) : "—"}
                       </td>
                     )}
-                    <td className="num">{row.kills}</td>
-                    <td className="num">{row.deaths}</td>
-                    <td className="num">
-                      {row.accuracy === null ? "—" : `${Math.round(row.accuracy * 100)}%`}
-                    </td>
+                    {combat && <td className="num">{row.kills}</td>}
+                    {combat && <td className="num">{row.deaths}</td>}
+                    {combat && (
+                      <td className="num">
+                        {row.accuracy === null ? "—" : `${Math.round(row.accuracy * 100)}%`}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

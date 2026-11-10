@@ -480,18 +480,20 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
           </div>
         ) : (
           <div className="hud__top">
-            <div className="hud-box hud__score">
-              <b className="mono" data-testid="hud-kills">
-                {bounty ? myPts : hud.kills}
-              </b>
-              <small>{bounty ? "Your points" : "Your elims"}</small>
-            </div>
+            {s.mode !== "maze" && (
+              <div className="hud-box hud__score">
+                <b className="mono" data-testid="hud-kills">
+                  {bounty ? myPts : hud.kills}
+                </b>
+                <small>{bounty ? "Your points" : "Your elims"}</small>
+              </div>
+            )}
             <div
               className={`hud-box hud__timer ${hud.timeLeftSec < 30 && s.phase === "playing" ? "is-low" : ""}`}
             >
               {formatClock(hud.timeLeftSec)}
             </div>
-            {s.mode === "gungame" ? (
+            {s.mode === "maze" ? null : s.mode === "gungame" ? (
               <div className="hud-box hud__score">
                 <b className="mono">
                   {Math.max(0, ...s.players.map((p) => p.gg)) + 1}/{GUN_GAME.ladder.length}

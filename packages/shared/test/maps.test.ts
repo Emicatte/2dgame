@@ -4,6 +4,7 @@ import {
   isFreeSpot,
   MAP_IDS,
   MAPS,
+  MAZE_DEFAULT_IDS,
   mapModes,
   mapSupportsMode,
   mapsForMode,
@@ -13,13 +14,22 @@ import {
 
 describe("maps", () => {
   it("ships the three arena maps unchanged, plus the vehicle maps (competitive list), and the PvE maps", () => {
-    expect(MAP_IDS).toEqual([...PVP_MAP_IDS, "works", "district", "outskirts", "blacksite", "breach"]);
+    const authored = PVP_MAP_IDS.filter((id) => !MAPS[id].maze);
+    expect(MAP_IDS).toEqual([
+      ...authored,
+      "works",
+      "district",
+      "outskirts",
+      "blacksite",
+      "breach",
+      ...MAZE_DEFAULT_IDS,
+    ]);
     expect(MAPS.works.pve).toBe(true);
     expect(MAPS.district.pve).toBe(true);
     expect(MAPS.outskirts.pve).toBe(true);
     expect(MAPS.blacksite.pve).toBe(true);
     expect(MAPS.breach.pve).toBe(true);
-    expect(PVP_MAP_IDS).toEqual([
+    expect(authored).toEqual([
       "industrial",
       "neon",
       "desert",
@@ -48,7 +58,8 @@ describe("maps", () => {
     expect(validateMap(MAPS.breach)).toEqual([]);
   });
 
-  for (const id of PVP_MAP_IDS) {
+  // Arena invariants; generated mazes have their own tests (maze.test.ts).
+  for (const id of PVP_MAP_IDS.filter((x) => !MAPS[x].maze)) {
     const map = MAPS[id];
     describe(map.name, () => {
       it("has valid, reachable spawns and pickups", () => {

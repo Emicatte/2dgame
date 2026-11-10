@@ -17,6 +17,7 @@ import { TACTICAL_FACILITY } from "./facility.ts";
 import { HARBOR_CONFLICT } from "./harbor.ts";
 import { INDUSTRIAL_ARENA } from "./industrial.ts";
 import { NIGHT_MARKET } from "./market.ts";
+import { buildMaze, MAZE_DEFAULT_IDS, parseMazeId } from "./maze.ts";
 import { MOTEL_STRIP } from "./motel.ts";
 import { MOUNTAIN_OUTPOST } from "./mountain.ts";
 import { NEON_DISTRICT } from "./neon.ts";
@@ -25,9 +26,10 @@ import { type MapDef, type MapId, SHOOT_THROUGH, TALL_SOLIDS } from "./types.ts"
 import { URBAN_WARFARE } from "./urban.ts";
 import { HALVORSEN_WORKS } from "./works.ts";
 
+export * from "./maze.ts";
 export * from "./types.ts";
 
-const BASE_MAPS: Record<MapId, MapDef> = {
+const BASE_MAPS: Record<Exclude<MapId, `maze-${string}`>, MapDef> = {
   industrial: INDUSTRIAL_ARENA,
   neon: NEON_DISTRICT,
   desert: DESERT_OUTPOST,
@@ -47,12 +49,38 @@ const BASE_MAPS: Record<MapId, MapDef> = {
   breach: FINAL_BREACH,
 };
 
-/** Every map, with its loot chests added to the pickups. */
-export const MAPS: Record<MapId, MapDef> = Object.fromEntries(
-  Object.entries(BASE_MAPS).map(([id, m]) => [id, withChests(m)]),
-) as Record<MapId, MapDef>;
+const LISTED: Record<string, MapDef> = Object.fromEntries([
+  ...Object.entries(BASE_MAPS).map(([id, m]) => [id, withChests(m)]),
+  ...MAZE_DEFAULT_IDS.map((id) => {
+    const p = parseMazeId(id)!;
+    return [id, buildMaze(p.size, p.seed)];
+  }),
+]);
+const generated = new Map<string, MapDef>();
 
-export const MAP_IDS = Object.keys(MAPS) as MapId[];
+/**
+ * Every map, with its loot chests added to the pickups. Maze ids of any seed resolve too: the map
+ * is generated on first use and cached, identically on every machine. Listing MAPS (MAP_IDS)
+ * gives the authored maps and one maze per size.
+ */
+export const MAPS: Record<MapId, MapDef> = new Proxy(LISTED, {
+  get(target, key) {
+    if (typeof key !== "string") return undefined;
+    const hit = target[key] ?? generated.get(key);
+    if (hit) return hit;
+    const maze = parseMazeId(key);
+    if (!maze) return undefined;
+    const map = buildMaze(maze.size, maze.seed);
+    if (generated.size > 64) generated.clear();
+    generated.set(key, map);
+    return map;
+  },
+  has(target, key) {
+    return typeof key === "string" && (key in target || parseMazeId(key) !== null);
+  },
+}) as Record<MapId, MapDef>;
+
+export const MAP_IDS = Object.keys(LISTED) as MapId[];
 /** Maps offered to competitive modes (PvE maps excluded). */
 export const PVP_MAP_IDS = MAP_IDS.filter((id) => !MAPS[id].pve);
 export const DEFAULT_MAP: MapId = "industrial";

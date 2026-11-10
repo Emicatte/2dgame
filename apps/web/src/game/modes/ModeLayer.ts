@@ -5,9 +5,11 @@ import {
   disguiseDef,
   GUN_GAME,
   gunGameWeapon,
+  isMapId,
   MAPS,
   type MapDef,
   type MatchState,
+  type MazeDef,
   type NetEvent,
   PROP_HUNT,
   ROLE,
@@ -50,6 +52,9 @@ const roleName = (mode: string, role: number) =>
   role === ROLE.SEEKER ? roleText(mode).seeker : role === ROLE.HIDER ? roleText(mode).hider : "Spectator";
 
 /** Ring colour of a mode marker: its team, or amber for neutral ones. */
+/** Marks the maze draws itself (no ring). */
+const MAZE_KINDS = new Set(["trap", "door", "key", "switch"]);
+
 const markColor = (c: number) => (c === 1 || c === 2 ? TEAMS[c].color : 0xffc53d);
 
 const MARK_LABEL: Phaser.Types.GameObjects.Text.TextStyle = {
@@ -377,15 +382,23 @@ export class ModeLayer {
     const seen = new Set<string>();
     const view = cam.worldView;
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 220);
+    const maze = isMapId(state.mapId) ? MAPS[state.mapId].maze : undefined;
     state.marks.forEach((m, id) => {
       seen.add(id);
+      if (maze && this.drawMazeMark(g, m, id, maze, pulse)) {
+        this.objLabels.get(id)?.setVisible(m.l !== "");
+        if (m.l === "") return;
+      }
       const color = markColor(m.c);
       const dim = m.k === "checkpoint" && m.p < 100;
       const alpha = dim ? 0.35 : 0.85;
-      g.lineStyle(m.k === "target" ? 3 : 4, color, alpha * (m.k === "device" ? 0.6 + pulse * 0.4 : 1));
-      g.strokeCircle(m.x, m.y, m.r);
-      g.fillStyle(color, m.k === "target" ? 0.05 + pulse * 0.05 : 0.08);
-      g.fillCircle(m.x, m.y, m.r);
+      const own = maze && MAZE_KINDS.has(m.k);
+      if (!own) {
+        g.lineStyle(m.k === "target" ? 3 : 4, color, alpha * (m.k === "device" ? 0.6 + pulse * 0.4 : 1));
+        g.strokeCircle(m.x, m.y, m.r);
+        g.fillStyle(color, m.k === "target" ? 0.05 + pulse * 0.05 : 0.08);
+        g.fillCircle(m.x, m.y, m.r);
+      }
       if (m.p > 0 && m.p < 100) {
         g.lineStyle(6, 0xffffff, 0.9);
         g.beginPath();
@@ -399,9 +412,9 @@ export class ModeLayer {
       }
       if (label.text !== m.l) label.setText(m.l);
       label.setPosition(m.x, m.y - m.r - 6).setAlpha(dim ? 0.6 : 1);
-      // Off screen: an arrow at the edge pointing to it.
+      // Off screen: an arrow at the edge pointing to it (never in a maze: finding the way is the game).
       const inView = view.contains(m.x, m.y);
-      if (!inView && !dim) {
+      if (!inView && !dim && !maze) {
         const cx = view.centerX;
         const cy = view.centerY;
         const a = Math.atan2(m.y - cy, m.x - cx);
@@ -437,6 +450,79 @@ export class ModeLayer {
         g.lineStyle(2, 0xff4d4d, 0.8);
         g.strokeCircle(p.x, p.y, 30);
       });
+  }
+
+  /**
+   * Maze pieces drawn from their marks: closed gates (from the map's gate rects), keys on the floor
+   * or carried, switches, floor traps (live: red). Returns true when the mark was drawn here.
+   */
+  private drawMazeMark(
+    g: Phaser.GameObjects.Graphics,
+    m: { k: string; x: number; y: number; r: number; p: number },
+    id: string,
+    maze: MazeDef,
+    pulse: number,
+  ): boolean {
+    if (m.k === "trap") {
+      const live = m.p >= 100;
+      g.fillStyle(0xff3b30, live ? 0.32 + pulse * 0.18 : 0.06);
+      g.fillRect(m.x - m.r, m.y - m.r, m.r * 2, m.r * 2);
+      g.lineStyle(live ? 3 : 2, 0xff5a52, live ? 0.95 : 0.35);
+      g.strokeRect(m.x - m.r, m.y - m.r, m.r * 2, m.r * 2);
+      // Spikes: a grid of small triangles, raised when live.
+      const n = 4;
+      const step = (m.r * 2) / n;
+      g.fillStyle(live ? 0xffd2cc : 0x5a2b28, live ? 0.9 : 0.6);
+      for (let i = 0; i < n; i++)
+        for (let j = 0; j < n; j++) {
+          const cx = m.x - m.r + step * (i + 0.5);
+          const cy = m.y - m.r + step * (j + 0.5);
+          const h = live ? step * 0.32 : step * 0.14;
+          g.fillTriangle(cx - h, cy + h, cx + h, cy + h, cx, cy - h);
+        }
+      return true;
+    }
+    const gateId = id.replace(/-(key|switch)$/, "");
+    const gate = maze.gates.find((x) => x.id === gateId);
+    if (!gate) return false;
+    if (m.k === "door") {
+      g.fillStyle(gate.color, 0.85);
+      g.fillRect(gate.x, gate.y, gate.w, gate.h);
+      g.lineStyle(2, 0x111214, 0.9);
+      const horizontal = gate.w > gate.h;
+      for (let t = 10; t < (horizontal ? gate.w : gate.h); t += 18) {
+        if (horizontal) g.lineBetween(gate.x + t, gate.y, gate.x + t - 8, gate.y + gate.h);
+        else g.lineBetween(gate.x, gate.y + t, gate.x + gate.w, gate.y + t - 8);
+      }
+      g.lineStyle(3, gate.color, 1);
+      g.strokeRect(gate.x, gate.y, gate.w, gate.h);
+      return true;
+    }
+    if (m.k === "key") {
+      const s = m.p >= 100 ? 0.7 : 1 + pulse * 0.12;
+      if (m.p < 100) {
+        g.fillStyle(gate.color, 0.12 + pulse * 0.1);
+        g.fillCircle(m.x, m.y, m.r + 10);
+      }
+      g.lineStyle(4 * s, gate.color, 1);
+      g.strokeCircle(m.x - 10 * s, m.y, 8 * s);
+      g.lineBetween(m.x - 2 * s, m.y, m.x + 18 * s, m.y);
+      g.lineBetween(m.x + 12 * s, m.y, m.x + 12 * s, m.y + 7 * s);
+      g.lineBetween(m.x + 18 * s, m.y, m.x + 18 * s, m.y + 9 * s);
+      return true;
+    }
+    if (m.k === "switch") {
+      g.fillStyle(0x1b1d21, 1);
+      g.fillRect(m.x - 18, m.y - 18, 36, 36);
+      g.lineStyle(3, gate.color, 0.6 + pulse * 0.4);
+      g.strokeRect(m.x - 18, m.y - 18, 36, 36);
+      g.lineStyle(5, gate.color, 1);
+      g.lineBetween(m.x, m.y + 8, m.x + 10, m.y - 12);
+      g.lineStyle(2, gate.color, 0.25);
+      g.strokeCircle(m.x, m.y, m.r);
+      return true;
+    }
+    return false;
   }
 
   /** "Hold E" prompt of the marker the local player stands in (Sabotage plant / defuse). */

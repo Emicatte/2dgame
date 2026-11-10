@@ -2,6 +2,16 @@
 
 ## 0.9.0 — unreleased (branch `platform-home`)
 
+### Added (Classic Maze)
+- **Classic Maze** (Challenge, 1–8 players, no weapons): a labyrinth generated from a seed in three
+  sizes (8×8, 12×12, 16×16 cells). Find the amber key and carry it to the amber gate, press E on
+  the switch of the cyan gate, cross the timed floor traps (a live trap sends you back to your
+  last checkpoint and drops the key you carried), reach the exit. Fastest time wins; the match
+  ends when everyone is out or the clock runs out. Results show times. The lobby has one card
+  per size and a **New maze** button (new seed); host and guests build the same maze from the id.
+- Gates use the same door mechanism as Outbreak (closed gates are solids, predicted identically on
+  every machine); keys, switches, checkpoints, traps and the exit are mode markers.
+
 ### Changed
 - **New home.** One entry per destination in a top bar: **Play** (spotlight on the last
   experience played, or a featured one, over its live map; one-click Play; recently played;

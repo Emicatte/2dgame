@@ -92,6 +92,7 @@ export const EXPERIENCE_CATEGORY_OF: Record<GameMode, ExperienceCategory> = {
   chaos: "party",
   pursuit: "racing",
   convoy: "racing",
+  maze: "challenge",
 };
 
 /** Built in later phases of the platform roadmap (PROGRESS.md). Never startable. */
@@ -136,18 +137,6 @@ export const PLANNED_EXPERIENCES: readonly Omit<
     needs: "The horror lighting and audio, monster abilities",
   },
   {
-    id: "maze",
-    name: "Classic Maze",
-    category: "challenge",
-    blurb: "A seeded labyrinth with keys, switches and traps. Fastest to the exit.",
-    players: { min: 1, max: 8 },
-    gameplay: "noncombat",
-    rules: ["Always at least one path", "Checkpoints", "Best times board"],
-    systems: ["objectives"],
-    status: "planned",
-    needs: "The maze generator and the shared interaction system (doors, keys, switches)",
-  },
-  {
     id: "horrormaze",
     name: "Horror Maze",
     category: "horror",
@@ -157,7 +146,7 @@ export const PLANNED_EXPERIENCES: readonly Omit<
     rules: ["Flashlight only", "Collect items", "Reach the exit"],
     systems: ["ai", "objectives"],
     status: "planned",
-    needs: "Classic Maze and the monster AI",
+    needs: "The monster AI and the 2D lighting",
   },
   {
     id: "parkour",
@@ -223,7 +212,7 @@ export const PLANNED_EXPERIENCES: readonly Omit<
 
 function systemsOf(mode: GameMode): ExperienceSystem[] {
   const def = MODES[mode];
-  const out: ExperienceSystem[] = ["weapons"];
+  const out: ExperienceSystem[] = def.weapons === "None" ? [] : ["weapons"];
   if (def.vehicles) out.push("vehicles");
   if (def.structure === "teams") out.push("teams");
   if (def.structure === "roles") out.push("roles", "rounds", "secrecy");
@@ -261,6 +250,7 @@ const CARD_MAP: Partial<Record<GameMode, MapId>> = {
   sabotage: "industrial",
   pursuit: "downtown",
   convoy: "urban",
+  maze: "maze-m-4721",
 };
 
 function fromMode(mode: GameMode): ExperienceDef {
@@ -279,7 +269,7 @@ function fromMode(mode: GameMode): ExperienceDef {
     blurb: def.blurb,
     thumbnail: thumb,
     players: def.players,
-    gameplay: "combat",
+    gameplay: def.weapons === "None" ? "noncombat" : "combat",
     maps,
     rules: def.rules,
     durationLabel: def.durationLabel,
@@ -358,6 +348,7 @@ export const FEATURED_EXPERIENCES: readonly string[] = [
   "infection",
   "tdm",
   "chaos",
+  "maze",
   "hideseek",
   "pursuit",
 ];

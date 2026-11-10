@@ -2,7 +2,8 @@
 
 Platform roadmap (multiplayer 2D browser platform). Short on purpose: update at checkpoints only.
 
-**Current phase:** 1 done (home + navigation + catalog). Next: 2 (platform architecture).
+**Current phase:** 2 + 6a done (shared interactions + Classic Maze). Next: 7 (horror: darkness,
+monster AI, director) with Horror Maze as its first consumer.
 **Branch:** `platform-home` (base `main` 0.8.1). Not deployed; production untouched.
 
 ## Phase 0 · audit (2026-11-10)
@@ -32,6 +33,21 @@ Platform roadmap (multiplayer 2D browser platform). Short on purpose: update at 
 - Tests: `tests/e2e-p2p/home.spec.ts` (nav, no map before lobby, back, dialog, continue);
   catalog unit tests; all e2e specs moved to the new testids. Results in `docs/TESTING.md`.
 
+## Phase 2 + 6a · interactions + Classic Maze (done)
+- Architecture already there and kept: `MODES` registry, one `ModeController` per mode with a
+  standard lifecycle (reset → spawn → step → over → standings/facts), same code in host mode.
+- Shared interaction pieces, generic instead of mission-only: map doors (`pveWorlds` + the
+  open-door list in `PveState.doors`, used by Outbreak and now by maze gates; the client predicts
+  with the same doors), objective marks (`MatchState.marks`) for keys, switches, checkpoints,
+  traps, exit; interact (E) prompts.
+- Seeded maps: `maps/maze.ts` generates a perfect maze from `maze-<s|m|l>-<seed>`; any seed is a
+  valid map id (lazy `MAPS`), the lobby shows one card per size and "New maze" draws a seed.
+  Amber gate (key in a branch before it), cyan gate (switch between the gates), checkpoint after
+  each gate, timed floor traps, exit = farthest cell. Solvability tested over 30 seeds.
+- `MazeMode` (server, shared by host mode): no weapons, no practice bots, key carry, switch (E),
+  traps → last checkpoint (carried key dropped), finish times, match ends when everyone is out.
+  Results show times (DNF), no combat columns; HUD hides elims/leader.
+
 ## Open issues
 - Lobby map grid still renders its thumbnails synchronously (pre-existing; cache is warmed by
   the home cards).
@@ -42,11 +58,11 @@ Platform roadmap (multiplayer 2D browser platform). Short on purpose: update at 
 |---|---|---|
 | 0 | Audit | done |
 | 1 | Home, navigation, catalog | done |
-| 2 | Experience registry wiring, lifecycle, shared interaction system | next |
+| 2 | Experience registry wiring, lifecycle, shared interaction system | done (with 6a) |
 | 3 | Arena maps ×2 surface | — |
 | 4 | Bot AI 2.0 (perception, memory, utility AI) | — |
 | 5 | Graphics overhaul + LOW/MEDIUM/HIGH | — |
-| 6 | Non-combat: Classic Maze, Horror Maze, Parkour, Escape Room | — |
+| 6 | Non-combat: Classic Maze ✓, Horror Maze (with 7), Parkour, Escape Room | in progress |
 | 7 | Horror overhaul (lighting, audio, monster AI, director) | — |
 | 8–10 | Battle Royale foundation, gameplay, scaling 8→50 (measured) | — |
 | 11 | Racing, Hide & Seek+, Hot Potato, Puzzle Race, Free Roam | — |

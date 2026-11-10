@@ -7,6 +7,7 @@ import {
   isTeamMode,
   MAPS,
   MATCH_LIMITS,
+  type MapId,
   MODE_BLURBS,
   MODE_NAMES,
   MODE_SCORE_UNIT,
@@ -15,7 +16,10 @@ import {
   mapSupportsMode,
   modeEnabled,
   PVP_MAP_IDS,
+  parseMazeId,
   ROUND_LIMITS,
+  randomMazeId,
+  sameMapFamily,
   skinById,
   TEAM_SIZE,
   TEAMS,
@@ -50,6 +54,7 @@ const SCORE_LIMITS: Record<GameMode, number[]> = {
   convoy: [],
   outbreak: [],
   survival: [],
+  maze: [],
 };
 
 export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
@@ -130,7 +135,8 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
   const rounds = isRoundMode(s.mode);
   const variants = MODE_VARIANTS[s.mode] ?? [];
   /** The mode has its own end rule (ladder, rounds): no score limit to pick. */
-  const ownEnd = s.mode === "gungame" || rounds;
+  const ownEnd = s.mode === "gungame" || s.mode === "maze" || rounds;
+  const maze = parseMazeId(s.mapId);
   const tooFew = humans.length < def.players.min;
   /** Modes a host can switch to here, by platform category (same grouping as the home catalog). */
   const pickable = EXPERIENCE_CATEGORIES.map((c) => ({
@@ -294,9 +300,15 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                           key={id}
                           type="button"
                           className="map-card"
-                          aria-pressed={s.mapId === id}
+                          aria-pressed={sameMapFamily(s.mapId, id)}
                           disabled={!canHost}
-                          onClick={() => session.updateSettings({ map: id })}
+                          onClick={() => {
+                            // Mazes: one card per size; picking one draws a fresh seed.
+                            const m = parseMazeId(id);
+                            if (m && !sameMapFamily(s.mapId, id))
+                              session.updateSettings({ map: randomMazeId(m.size) });
+                            else if (!m) session.updateSettings({ map: id });
+                          }}
                           title={
                             MAPS[id].players
                               ? `${MAPS[id].tagline} Best with ${MAPS[id].players!.min}–${MAPS[id].players!.max} players.`
@@ -304,7 +316,11 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                           }
                           data-testid={`map-${id}`}
                         >
-                          <img className="map-card__preview" src={mapThumb(id)} alt="" />
+                          <img
+                            className="map-card__preview"
+                            src={mapThumb(sameMapFamily(s.mapId, id) ? (s.mapId as MapId) : id)}
+                            alt=""
+                          />
                           <span className="map-card__label">
                             {MAPS[id].name}
                             {MAPS[id].vehicleSpawns && def.vehicles && (
@@ -316,6 +332,23 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                       ),
                     )}
                   </div>
+                  {maze && (
+                    <div className="row" data-testid="maze-seed">
+                      <span className="field__hint">
+                        Seed <span className="mono">{maze.seed}</span>: everyone gets the same maze.
+                      </span>
+                      <span className="spacer" />
+                      {canHost && (
+                        <Button
+                          size="sm"
+                          onClick={() => session.updateSettings({ map: randomMazeId(maze.size) })}
+                          data-testid="new-maze"
+                        >
+                          New maze
+                        </Button>
+                      )}
+                    </div>
+                  )}
                   <div className="row" style={{ flexWrap: "wrap" }} data-testid="match-rules">
                     <span className="badge">{MODE_NAMES[s.mode]}</span>
                     {teams && (

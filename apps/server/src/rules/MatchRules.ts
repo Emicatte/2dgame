@@ -59,7 +59,7 @@ export class MatchRules {
 
   /** Practice bots fill a lonely room in this mode (never in co-op or the round modes). */
   get practiceAllowed(): boolean {
-    return !this.pveMode && !this.roleMode;
+    return !this.pveMode && !this.roleMode && MODES[this.state.mode as GameMode]?.weapons !== "None";
   }
 
   humans(): ServerPlayer[] {
