@@ -38,6 +38,7 @@ unlocks and daily challenges, and private rooms you can share with a link.
 | Chest loot on the ground: choose the weapon, swapped weapon stays on the ground, shield cells carried and used with X | Done (0.7.1): unit tests (drops, swap, cells) and a browser test (chest → take weapon → cell → X) |
 | Infection, Chaos Arena, Bounty Hunt, Sabotage, Vehicle Pursuit, Convoy; co-op operations Extraction and Boss Rush | Done (0.8.0): simulation tests per mode, operations played through in the co-op runtime, two-browser WebRTC E2E per mode family; balance not playtested ([docs/v4/MODES.md §8](docs/v4/MODES.md)) |
 | 13 more weapons (incl. grenade launcher, railgun, flamethrower), Motel Strip and Night Market party maps, every Outbreak chapter unlocked | Done (0.8.0); maps validated (spawns, objects, reachability) |
+| Hide & Seek / Prop Hunt mechanics: sonar, noise decoy, swap, lights out, 18 objects to turn into | Done (0.8.1): simulation tests and a two-browser test per mode; balance not playtested |
 | Performance | CPU cost per frame measured (small); server tick cost per mode measured (`scripts/modebench.ts`); **60 FPS on a real GPU not yet verified**: run `/bench.html` on target hardware |
 
 Details and the test record: [docs/TESTING.md](docs/TESTING.md). Open items: [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -78,7 +79,8 @@ pnpm dev:server     # migrations run automatically at boot
 | 1 / 2 / 3 | Primary / sidearm / picked-up weapon |
 | E | Pick up weapon (the one you hold stays on the ground) · open a chest · enter / leave a vehicle · hold: revive a teammate, use mission objects (Outbreak) · Prop Hunt: copy the object in front |
 | X | Use a shield cell |
-| Q / C / T / G | Prop Hunt: choose an object / lock position / taunt / decoy |
+| Q / C / T / V | Prop Hunt props: choose an object / lock position / taunt / swap with a nearby object |
+| G | Party modes role ability: sonar (seekers, hunters) · noise decoy at the crosshair (Hide & Seek hiders) · decoy object (props) |
 | F | Change seat in a vehicle |
 | W / S, A / D (driving) | Throttle / brake-reverse, steer; Shift = handbrake |
 | W A S D, mouse (flying) | Move, nose follows the mouse; Shift = take off / land |

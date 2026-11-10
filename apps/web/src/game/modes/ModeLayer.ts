@@ -205,16 +205,36 @@ export class ModeLayer {
     return out;
   }
 
-  /** Prop Hunt keys: Q picker, E copy what you look at, C lock, T taunt, G decoy. */
-  handleInput(controls: InputManager, state: MatchState, selfId: string): void {
-    if (state.mode !== "prophunt") return;
+  /**
+   * Party mode keys. G is the role ability: sonar for seekers and hunters, a noise decoy (thrown
+   * at the crosshair) for Hide & Seek hiders, a decoy object for props. Props also: Q picker, E
+   * copy what you look at, C lock, T taunt, V swap with a real object.
+   */
+  handleInput(
+    controls: InputManager,
+    state: MatchState,
+    selfId: string,
+    aimAt: () => { x: number; y: number },
+  ): void {
+    if (state.mode !== "prophunt" && state.mode !== "hideseek") return;
     const ps = this.me(state, selfId);
-    const isProp = ps?.role === ROLE.HIDER && ps.alive;
+    const role = ps?.alive ? ps.role : ROLE.NONE;
+    const g = controls.consume("decoy");
+    if (state.mode === "hideseek") {
+      if (g && role === ROLE.SEEKER) session.ability({ a: "sonar" });
+      if (g && role === ROLE.HIDER) {
+        const t = aimAt();
+        session.ability({ a: "noise", x: Math.round(t.x), y: Math.round(t.y) });
+      }
+      return;
+    }
+    const isProp = role === ROLE.HIDER;
     const picker = controls.consume("propMenu");
     const lock = controls.consume("lock");
     const taunt = controls.consume("taunt");
-    const decoy = controls.consume("decoy");
+    const swap = controls.consume("swap");
     const copy = controls.consume("interact");
+    if (g && role === ROLE.SEEKER) session.ability({ a: "sonar" });
     if (!isProp) {
       if (modeHudStore.get().pickerOpen) modeHudStore.patch({ pickerOpen: false });
       return;
@@ -222,7 +242,8 @@ export class ModeLayer {
     if (picker) modeHudStore.patch({ pickerOpen: !modeHudStore.get().pickerOpen });
     if (lock) session.ability({ a: "lock" });
     if (taunt) session.ability({ a: "taunt" });
-    if (decoy) session.ability({ a: "decoy" });
+    if (g) session.ability({ a: "decoy" });
+    if (swap) session.ability({ a: "swap" });
     if (copy) session.ability({ a: "transform" });
   }
 
@@ -464,7 +485,7 @@ export class ModeLayer {
     map: MapDef,
     dtSec: number,
   ): void {
-    const dark = state.mode === "hideseek" && state.round.dark;
+    const dark = (state.mode === "hideseek" || state.mode === "prophunt") && state.round.dark;
     if (dark !== this.darkOn) {
       this.darkOn = dark;
       this.lightmap.setActive(dark);
@@ -553,6 +574,40 @@ export class ModeLayer {
         else showToast(by ? `${by} found ${v}` : `${v} is out`);
         break;
       }
+      case "sonar": {
+        const s = spatial(ev.x, ev.y);
+        sfx.sonar(s.distance, s.pan);
+        const ring = this.scene.add.circle(ev.x, ev.y, 10).setStrokeStyle(4, 0x6bd0ff, 0.9).setDepth(46);
+        this.scene.tweens.add({
+          targets: ring,
+          radius: ev.r,
+          alpha: 0,
+          duration: 900,
+          ease: "Cubic.easeOut",
+          onComplete: () => ring.destroy(),
+        });
+        break;
+      }
+      case "poof": {
+        for (let i = 0; i < 7; i++) {
+          const a = (i / 7) * Math.PI * 2;
+          const puff = this.scene.add
+            .circle(ev.x, ev.y, 9 + (i % 3) * 3, 0xc9c2b4, 0.7)
+            .setDepth(46)
+            .setBlendMode(Phaser.BlendModes.NORMAL);
+          this.scene.tweens.add({
+            targets: puff,
+            x: ev.x + Math.cos(a) * 34,
+            y: ev.y + Math.sin(a) * 34,
+            scale: 1.8,
+            alpha: 0,
+            duration: 650,
+            ease: "Quad.easeOut",
+            onComplete: () => puff.destroy(),
+          });
+        }
+        break;
+      }
       case "taunt": {
         const s = spatial(ev.x, ev.y);
         sfx.taunt(ev.v, s.distance, s.pan);
@@ -636,6 +691,8 @@ export class ModeLayer {
       transformInSec: ally ? left(ally.cdT) : 0,
       tauntInSec: ally ? left(ally.cdS) : 0,
       decoyInSec: ally ? left(ally.cdD) : 0,
+      swapInSec: ally ? left(ally.cdW) : 0,
+      abilityInSec: ps ? left(ps.abl) : 0,
       kinds: sameKinds(prev.kinds, kinds) ? prev.kinds : kinds,
       ...(role !== ROLE.HIDER || state.mode !== "prophunt" ? { pickerOpen: false } : {}),
     });
@@ -677,4 +734,4 @@ function sameKinds(a: { index: number }[], b: { index: number }[]): boolean {
 }
 
 /** Exposed for the HUD: the prop key reminders. */
-export const PROP_KEYS_HELP = `Q choose · E copy · C lock · T taunt · G decoy (${PROP_HUNT.decoySec}s)`;
+export const PROP_KEYS_HELP = `Q choose · E copy · C lock · T taunt · G decoy (${PROP_HUNT.decoySec}s) · V swap with a nearby object`;

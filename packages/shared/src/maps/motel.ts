@@ -19,12 +19,12 @@ const props: PropSpotDef[] = [];
 for (let k = 0; k <= 6; k++) solids.push({ kind: "wall", x: X0 + k * ROOM_W - 12, y: 0, w: 24, h: ROOM_H });
 let wallFrom = X0 - 12;
 const ROOM_PROPS: PropSpotDef["kind"][][] = [
-  ["chair", "plant", "bin", "box"],
-  ["chair", "cooler", "bin", "plant"],
-  ["box", "plant", "chair", "bin"],
-  ["chair", "bin", "cooler", "box"],
-  ["plant", "chair", "box", "bin"],
-  ["cooler", "plant", "bin", "chair"],
+  ["tv", "lamp", "bag", "toolbox"],
+  ["sofa", "cooler", "bin", "plant"],
+  ["chair", "lamp", "bag", "box"],
+  ["tv", "extinguisher", "speaker", "box"],
+  ["sofa", "plant", "bin", "gascan"],
+  ["speaker", "lamp", "bag", "toolbox"],
 ];
 for (let i = 0; i < 6; i++) {
   const rx = X0 + i * ROOM_W;
@@ -88,8 +88,9 @@ props.push(
   // East yard (beside the last room)
   { kind: "tires", x: 1900, y: 80 },
   { kind: "barrel", x: 2020, y: 160 },
-  { kind: "box", x: 1880, y: 300 },
+  { kind: "gascan", x: 1880, y: 300 },
   { kind: "cone", x: 2030, y: 340 },
+  { kind: "vending", x: 1990, y: 260 },
   // Parking lot
   { kind: "cone", x: 160, y: 800 },
   { kind: "cone", x: 640, y: 820 },
@@ -97,7 +98,7 @@ props.push(
   { kind: "barrel", x: 1240, y: 800 },
   { kind: "cone", x: 1560, y: 820 },
   { kind: "tires", x: 1900, y: 720 },
-  { kind: "box", x: 90, y: 960, rot: 30 },
+  { kind: "bag", x: 90, y: 960, rot: 30 },
   { kind: "bin", x: 1980, y: 980 },
   { kind: "crate", x: 1840, y: 930 },
   { kind: "cone", x: 1300, y: 1040 },
@@ -112,12 +113,12 @@ props.push(
   { kind: "bin", x: 200, y: 1170 },
   { kind: "chair", x: 960, y: 1250, rot: 45 },
   // Laundry shed
-  { kind: "box", x: 1170, y: 1160 },
+  { kind: "toolbox", x: 1170, y: 1160 },
   { kind: "box", x: 1210, y: 1210, rot: 25 },
   { kind: "barrel", x: 1300, y: 1170 },
   { kind: "crate", x: 1420, y: 1250 },
   { kind: "bin", x: 1610, y: 1250 },
-  { kind: "box", x: 1520, y: 1300 },
+  { kind: "extinguisher", x: 1520, y: 1300 },
   { kind: "cooler", x: 1240, y: 1295 },
   // Reception
   { kind: "plant", x: 2040, y: 1150 },

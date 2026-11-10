@@ -5,7 +5,9 @@ import {
   hasLineOfSight,
   type MatchState,
   type NetEvent,
+  PARTY_ABILITIES,
   type PickupKind,
+  PingState,
   pointInRect,
   ROLE,
   type RoleId,
@@ -16,6 +18,14 @@ import {
 } from "@scrapline/shared";
 import type { ServerPlayer } from "../simulation/GameSimulation.ts";
 import { type AllyData, BaseMode, type ModeFacts, type PublicPose } from "./ModeController.ts";
+
+/** An approximate area shown to everybody (hints, sonar, noise decoys). */
+export interface Ping {
+  x: number;
+  y: number;
+  r: number;
+  until: number;
+}
 
 /** Round timing of a mode. */
 export interface RoundTiming {
@@ -59,6 +69,18 @@ export abstract class RoundMode extends BaseMode {
   protected readonly exposedUntil = new Map<string, number>();
   /** Last pose the seeking side was allowed to see. */
   protected readonly lastPublic = new Map<string, PublicPose>();
+  /** Pings on the map (MatchState.pings). */
+  readonly pings = new Map<string, Ping>();
+  private pingSeq = 0;
+  /** Tick at which each player's role ability (G) is ready again. */
+  protected readonly cdAbility = new Map<string, number>();
+  /** The seeking side has a sonar (G). */
+  protected readonly sonar: boolean = true;
+  /** The lights go out for a while in the middle of the hunt. */
+  protected readonly lightsOut: boolean = true;
+  /** Lights out right now (Blackout variant cycles, or the mid-hunt moment). */
+  dark = false;
+  protected huntBegan = 0;
 
   override configure(opts: { rounds: number; variant: string }): void {
     this.rounds = Math.max(1, Math.min(8, Math.round(opts.rounds)));
@@ -143,6 +165,11 @@ export abstract class RoundMode extends BaseMode {
   protected beginStage(stage: RoundStage, end: number): void {
     this.stage = stage;
     this.stageEnd = end;
+    if (stage === "prep") {
+      this.pings.clear();
+      this.cdAbility.clear();
+    }
+    if (stage === "hunt") this.huntBegan = this.sim.tick;
     if (stage !== "")
       this.emit({
         t: "round",
@@ -224,6 +251,60 @@ export abstract class RoundMode extends BaseMode {
         break;
     }
     this.updateExposure();
+    for (const [id, ping] of [...this.pings]) if (tick >= ping.until) this.pings.delete(id);
+    const dark = this.stage === "hunt" && this.darkNow();
+    if (dark !== this.dark) {
+      this.dark = dark;
+      if (this.variant !== "blackout")
+        this.emit(
+          dark
+            ? { t: "announce", s: "Lights out", d: "Seekers keep their flashlights", w: ROLE.SEEKER }
+            : { t: "announce", s: "Lights back on", d: "" },
+        );
+    }
+  }
+
+  /** Whether it is dark this hunt tick (the mid-hunt lights-out moment by default). */
+  protected darkNow(): boolean {
+    if (!this.lightsOut) return false;
+    const t = this.sim.tick - this.huntBegan;
+    const from = this.tickOf(PARTY_ABILITIES.lightsOut.atSec);
+    return t >= from && t < from + this.tickOf(PARTY_ABILITIES.lightsOut.durationSec);
+  }
+
+  /** A ping at (x, y) for `sec` seconds. */
+  protected addPing(x: number, y: number, r: number, sec: number): void {
+    this.pings.set(`h${++this.pingSeq}`, { x, y, r, until: this.sim.tick + this.tickOf(sec) });
+  }
+
+  /** An approximate area that contains the player, never centred on them. */
+  protected pingAround(p: ServerPlayer, radius: number, sec: number): void {
+    const a = this.sim.rng() * Math.PI * 2;
+    const off = radius * (0.25 + this.sim.rng() * 0.3);
+    this.addPing(p.sim.x + Math.cos(a) * off, p.sim.y + Math.sin(a) * off, radius, sec);
+  }
+
+  override ability(p: ServerPlayer, msg: AbilityMessage): void {
+    const refused = this.roleAbility(p, msg);
+    if (refused) this.emit({ t: "msg", p: p.id, s: refused });
+  }
+
+  /**
+   * The role abilities shared by the round modes (seekers' sonar); modes add their own. Returns
+   * why it was refused (told to the player), or null.
+   */
+  protected roleAbility(p: ServerPlayer, msg: AbilityMessage): string | null {
+    if (msg.a !== "sonar" || !this.sonar) return null;
+    if (this.sideOf(p.id) !== ROLE.SEEKER || !p.alive || this.stage !== "hunt") return null;
+    const tick = this.sim.tick;
+    if (tick < (this.cdAbility.get(p.id) ?? 0)) return "Sonar is recharging";
+    const s = PARTY_ABILITIES.sonar;
+    this.cdAbility.set(p.id, tick + this.tickOf(s.cooldownSec));
+    this.emit({ t: "sonar", x: Math.round(p.sim.x), y: Math.round(p.sim.y), r: s.rangePx });
+    for (const h of this.aliveSide(ROLE.HIDER))
+      if ((h.sim.x - p.sim.x) ** 2 + (h.sim.y - p.sim.y) ** 2 <= s.rangePx ** 2)
+        this.pingAround(h, s.pingRadius, s.pingSec);
+    return null;
   }
 
   override over(): string | null {
@@ -445,10 +526,9 @@ export abstract class RoundMode extends BaseMode {
       cdT: 0,
       cdS: 0,
       cdD: 0,
+      cdW: 0,
     };
   }
-
-  override ability(_p: ServerPlayer, _msg: AbilityMessage): void {}
 
   // ------------------------------------------------------------------ results
 
@@ -489,9 +569,22 @@ export abstract class RoundMode extends BaseMode {
     if (r.seekers !== seekers) r.seekers = seekers;
     if (r.hiders !== hiders) r.hiders = hiders;
     if (r.winner !== this.lastWinner) r.winner = this.lastWinner;
+    if (r.dark !== this.dark) r.dark = this.dark;
+    for (const id of [...state.pings.keys()]) if (!this.pings.has(id)) state.pings.delete(id);
+    for (const [id, ping] of this.pings) {
+      if (state.pings.has(id)) continue;
+      const ps = new PingState();
+      ps.x = Math.round(ping.x);
+      ps.y = Math.round(ping.y);
+      ps.r = Math.round(ping.r);
+      ps.until = ping.until;
+      state.pings.set(id, ps);
+    }
     for (const [id, p] of this.sim.players) {
       const ps = state.players.get(id);
       if (!ps) continue;
+      const abl = this.cdAbility.get(id) ?? 0;
+      if (ps.abl !== abl) ps.abl = abl;
       const role = this.side.get(id) ?? ROLE.NONE;
       if (ps.role !== role) ps.role = role;
       const pts = Math.min(65535, this.pointsOf(id));

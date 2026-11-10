@@ -38,6 +38,9 @@ export interface ModeHudState {
   transformInSec: number;
   tauntInSec: number;
   decoyInSec: number;
+  swapInSec: number;
+  /** Role ability (G) of the seeking side and of Hide & Seek hiders: seconds until ready. */
+  abilityInSec: number;
   kinds: { index: number; name: string; kind: string }[];
   pickerOpen: boolean;
   banner: ModeBanner | null;
@@ -67,6 +70,8 @@ export const modeHudStore = createStore<ModeHudState>({
   transformInSec: 0,
   tauntInSec: 0,
   decoyInSec: 0,
+  swapInSec: 0,
+  abilityInSec: 0,
   kinds: [],
   pickerOpen: false,
   banner: null,

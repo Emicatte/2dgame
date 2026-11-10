@@ -11,8 +11,6 @@ export const INFECTION = {
   /** One infected per this many players at the start of a round. */
   playersPerInfected: 8,
   respawnSec: 2,
-  /** The last survivor is pinged to everyone this often (seconds). */
-  lastSurvivorPingSec: 4,
   points: { aliveEverySec: 10, alive: 1, survive: 5, infect: 3 },
 } as const;
 

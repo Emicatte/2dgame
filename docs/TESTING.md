@@ -137,7 +137,16 @@ pnpm --filter @scrapline/shared exec vitest run test/maps.test.ts   # validates 
 pnpm test:e2e:p2p newmodes.spec                   # one two-browser match per new mode family
 ```
 
-## Results (last run: 2026-11-10, v0.8.0, branch `more-content`)
+## Results (last run: 2026-11-10, v0.8.1, branch `party-dynamics`)
+
+| Suite | Count | Result |
+|---|---|---|
+| Lint, typecheck (incl. E2E sources), production build | — | clean (the one older warning) |
+| `packages/shared` / `apps/web` unit | 118 + 3 skipped / 145 | pass |
+| `apps/server` unit + integration (+ 8 in `partydynamics.test.ts`: sonar range, offset and recharge; hiders cannot sonar; noise decoy clamped and fading; seekers cannot noise; lights out announced and back; Blackout cycle unannounced; swap keeps ids, places and kinds while ownership moves, recharge, refusal with nothing in range; hunters' sonar; new objects on every party map; transform into a new object) | 243 + 8 skipped | pass. Two co-op tick-cost budget tests failed once while two Chrome processes ran the E2E suite on the same machine; they pass with the machine idle |
+| E2E host mode (`partymodes.spec`, `newmodes.spec`, two Chrome processes over WebRTC), incl. the 2 new ones: picker with 18 objects, swap (V) moves the prop's object id to the nearest object, the hunter's sonar starts its recharge; Hide & Seek seeker sonar and hider noise decoy (a ping reaches the seeker) | 11 | pass |
+
+## Results (2026-11-10, v0.8.0, branch `more-content`)
 
 | Suite | Count | Result |
 |---|---|---|

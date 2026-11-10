@@ -337,6 +337,15 @@ export class ArenaScene extends Phaser.Scene {
           players,
           body: this.predictor.body,
           modeText: st.modeText,
+          objects: (() => {
+            const out: { id: string; x: number; y: number; k: number }[] = [];
+            st.disguises.forEach((d, id) => {
+              out.push({ id, x: d.x, y: d.y, k: d.k });
+            });
+            return out;
+          })(),
+          abl: st.players.get(this.room?.sessionId ?? "")?.abl ?? 0,
+          tick: st.tick,
           marks: (() => {
             const out: { id: string; k: string; x: number; y: number; l: string; a: string; c: number }[] =
               [];
@@ -1474,7 +1483,10 @@ export class ArenaScene extends Phaser.Scene {
     if (!this.clock.ready) return;
 
     this.sampleEdgeInputs();
-    this.modes.handleInput(this.controls, state, this.room.sessionId);
+    this.modes.handleInput(this.controls, state, this.room.sessionId, () => {
+      const p = this.input_pointer();
+      return { x: p.worldX, y: p.worldY };
+    });
     const stalled = this.netMetrics.updateStall(now, this.predictor.pendingCount, NET.inputStallMs, dt);
     if (stalled || sessionStore.get().status === "reconnecting") {
       // Connection interrupted: hold the local player instead of predicting ever further ahead of

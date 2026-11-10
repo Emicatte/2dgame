@@ -8,9 +8,8 @@ import {
   disguiseDef,
   type HitTarget,
   isFreeSpot,
-  type MatchState,
   type NetEvent,
-  PingState,
+  PARTY_ABILITIES,
   PLAYER,
   PROP_HUNT,
   ROLE,
@@ -33,19 +32,13 @@ export interface PropObject {
   decoyUntil: number;
 }
 
-interface Ping {
-  x: number;
-  y: number;
-  r: number;
-  until: number;
-}
-
 /**
  * Prop Hunt. Props turn into objects present on the map; hunters wait blindfolded, then search
  * with shotguns. Real objects and disguised players are the same kind of entity on the wire,
  * with random ids rebuilt (and reshuffled) when the hunt starts; a prop's player body is never
  * published. Hunters lose health for every shot that only hits innocent objects. Hints narrow
  * down the last props; a prop that stands still too long gets its own approximate ping.
+ * Props can swap with a real object (V); hunters have a sonar (G); the lights go out mid-hunt.
  */
 export class PropHuntMode extends RoundMode {
   readonly mode = "prophunt" as const;
@@ -62,13 +55,12 @@ export class PropHuntMode extends RoundMode {
   private readonly cdTransform = new Map<string, number>();
   private readonly cdTaunt = new Map<string, number>();
   private readonly cdDecoy = new Map<string, number>();
+  private readonly cdSwap = new Map<string, number>();
   private readonly lastMove = new Map<string, { x: number; y: number; tick: number }>();
   private readonly aliveTicks = new Map<string, number>();
   private readonly alivePaid = new Map<string, number>();
-  private readonly pings = new Map<string, Ping>();
   private hintsDone = 0;
   private huntStart = 0;
-  private pingSeq = 0;
 
   /** Kinds a prop may turn into: those present on this map. */
   get kinds(): DisguiseDef[] {
@@ -111,8 +103,8 @@ export class PropHuntMode extends RoundMode {
     this.cdTransform.clear();
     this.cdTaunt.clear();
     this.cdDecoy.clear();
+    this.cdSwap.clear();
     this.lastMove.clear();
-    this.pings.clear();
     this.hintsDone = 0;
     // Most spots get a real object, slightly moved and turned: a round never looks exactly like
     // the map file, so an object "off its spot" is not proof of a player.
@@ -222,7 +214,6 @@ export class PropHuntMode extends RoundMode {
     }
     for (const o of [...this.objects.values()])
       if (o.decoyUntil > 0 && tick >= o.decoyUntil) this.objects.delete(o.id);
-    for (const [id, ping] of [...this.pings]) if (tick >= ping.until) this.pings.delete(id);
   }
 
   override step(): void {
@@ -268,6 +259,11 @@ export class PropHuntMode extends RoundMode {
   }
 
   override ability(p: ServerPlayer, msg: AbilityMessage): void {
+    // Hunters: the shared sonar.
+    if (this.sideOf(p.id) === ROLE.SEEKER) {
+      super.ability(p, msg);
+      return;
+    }
     const refused = this.useAbility(p, msg);
     if (refused) this.deny(p, refused);
   }
@@ -334,7 +330,51 @@ export class PropHuntMode extends RoundMode {
         });
         return null;
       }
+      case "swap":
+        return hunting ? this.swap(p) : null;
     }
+    return null;
+  }
+
+  /**
+   * Swap: the prop becomes the nearest real object within range (its kind, its spot) and its own
+   * object stays where it was as a real one. No object moves on the hunters' screens and no id
+   * changes hands in the open: only a puff of dust at both spots.
+   */
+  private swap(p: ServerPlayer): string | null {
+    const tick = this.sim.tick;
+    const mine = this.objectOf(p);
+    if (!mine) return "Transform first";
+    if (tick < (this.cdSwap.get(p.id) ?? 0)) return "Swap is recharging";
+    const range = PARTY_ABILITIES.swap.rangePx;
+    let best: PropObject | null = null;
+    let bestD = range * range;
+    for (const o of this.objects.values()) {
+      if (o.owner || o.decoyUntil > 0) continue;
+      const d = (o.x - p.sim.x) ** 2 + (o.y - p.sim.y) ** 2;
+      if (d <= bestD && this.kinds.some((k) => k.index === o.k)) {
+        best = o;
+        bestD = d;
+      }
+    }
+    if (!best) return "No object close enough to swap with";
+    const def = disguiseDef(best.k)!;
+    const prev = disguiseDef(mine.k);
+    if (!isFreeSpot(this.sim.world, { x: best.x, y: best.y }, def.radius)) return "No room there";
+    this.emit({ t: "poof", x: Math.round(mine.x), y: Math.round(mine.y) });
+    this.emit({ t: "poof", x: Math.round(best.x), y: Math.round(best.y) });
+    mine.owner = null;
+    best.owner = p.id;
+    this.disguise.set(p.id, best.id);
+    p.sim.x = best.x;
+    p.sim.y = best.y;
+    p.sim.vx = 0;
+    p.sim.vy = 0;
+    p.hp = Math.max(1, Math.min(255, Math.round((p.hp / (prev?.health ?? PLAYER.maxHealth)) * def.health)));
+    this.locked.delete(p.id);
+    this.lastMove.set(p.id, { x: p.sim.x, y: p.sim.y, tick });
+    this.cdSwap.set(p.id, tick + this.tickOf(PARTY_ABILITIES.swap.cooldownSec));
+    this.bodies.tick = -1;
     return null;
   }
 
@@ -455,28 +495,16 @@ export class PropHuntMode extends RoundMode {
       if (!m || Math.hypot(p.sim.x - m.x, p.sim.y - m.y) > PROP_HUNT.stillPx) {
         this.lastMove.set(p.id, { x: p.sim.x, y: p.sim.y, tick });
       } else if (tick - m.tick >= this.tickOf(PROP_HUNT.stillSec)) {
-        this.ping(p, PROP_HUNT.stillPingRadius);
+        this.pingAround(p, PROP_HUNT.stillPingRadius, PROP_HUNT.hintSec);
         this.lastMove.set(p.id, { x: p.sim.x, y: p.sim.y, tick });
       }
     }
     const next = PROP_HUNT.hints[this.hintsDone];
     if (next && tick - this.huntStart >= this.tickOf(next.atSec)) {
       this.hintsDone++;
-      for (const p of this.aliveSide(ROLE.HIDER)) this.ping(p, next.radius);
+      for (const p of this.aliveSide(ROLE.HIDER)) this.pingAround(p, next.radius, PROP_HUNT.hintSec);
       this.emit({ t: "hint", n: this.hintsDone });
     }
-  }
-
-  /** An approximate area that contains the prop, never centred on it. */
-  private ping(p: ServerPlayer, radius: number): void {
-    const a = this.sim.rng() * Math.PI * 2;
-    const off = radius * (0.25 + this.sim.rng() * 0.3);
-    this.pings.set(`h${++this.pingSeq}`, {
-      x: p.sim.x + Math.cos(a) * off,
-      y: p.sim.y + Math.sin(a) * off,
-      r: radius,
-      until: this.sim.tick + this.tickOf(PROP_HUNT.hintSec),
-    });
   }
 
   // ------------------------------------------------------------------ hidden information
@@ -502,6 +530,7 @@ export class PropHuntMode extends RoundMode {
       cdT: this.stage === "hunt" ? (this.cdTransform.get(p.id) ?? 0) : 0,
       cdS: this.cdTaunt.get(p.id) ?? 0,
       cdD: this.cdDecoy.get(p.id) ?? 0,
+      cdW: this.cdSwap.get(p.id) ?? 0,
     };
   }
 
@@ -519,7 +548,7 @@ export class PropHuntMode extends RoundMode {
       return true;
     }
     if (ev.t === "msg") return viewerId === ev.p;
-    if (ev.t === "dhit" || ev.t === "taunt") return this.canSeeObjects(viewerId);
+    if (ev.t === "dhit" || ev.t === "taunt" || ev.t === "poof") return this.canSeeObjects(viewerId);
     return super.eventVisible(viewerId, ev);
   }
 
@@ -543,19 +572,5 @@ export class PropHuntMode extends RoundMode {
     if (base.finds) extra.propsFound = base.finds;
     if (this.standings()[0]?.id === p.id && this.players().length >= 2) extra.prophuntWins = 1;
     return { ...base, extra };
-  }
-
-  override sync(state: MatchState): void {
-    super.sync(state);
-    for (const id of [...state.pings.keys()]) if (!this.pings.has(id)) state.pings.delete(id);
-    for (const [id, ping] of this.pings) {
-      if (state.pings.has(id)) continue;
-      const s = new PingState();
-      s.x = Math.round(ping.x);
-      s.y = Math.round(ping.y);
-      s.r = Math.round(ping.r);
-      s.until = ping.until;
-      state.pings.set(id, s);
-    }
   }
 }

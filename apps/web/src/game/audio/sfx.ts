@@ -670,6 +670,16 @@ class Sfx {
     this.tone(out, t, "sawtooth", you ? 330 : 1320, you ? 220 : 1760, 0.18, 0.35);
   }
 
+  /** Seeker sonar: a falling ping, positional. */
+  sonar(distance = 0, pan = 0): void {
+    if (!this.ctx) return;
+    const out = this.out(this.sfxBus, pan, Math.max(0.06, 0.5 - distance / 3000));
+    if (!out) return;
+    const t = this.ctx.currentTime;
+    this.tone(out, t, "sine", 1480, 980, 0.5, 0.45);
+    this.tone(out, t + 0.18, "sine", 1480, 980, 0.35, 0.2);
+  }
+
   /** Gun Game: next weapon (up) or one level back (down). */
   levelChange(up: boolean): void {
     if (!this.ctx) return;

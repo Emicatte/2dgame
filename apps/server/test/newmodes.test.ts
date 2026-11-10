@@ -170,9 +170,9 @@ describe("Infection", () => {
     expect(s1!.alive).toBe(true);
     expect(s1!.sim.slots[0]!.id).toBe(WEAPONS.claws.index);
     expect(ctl.pointsOf(inf.id)).toBe(INFECTION.points.infect);
-    // The last survivor is pinged to everybody.
-    ticks(sim, sec(INFECTION.lastSurvivorPingSec) + 1);
-    expect(ctl.markEntries().get("last")?.l).toContain(s2!.name);
+    // The last survivor is announced, but never marked on the map.
+    ticks(sim, sec(4));
+    expect(ctl.markEntries().size).toBe(0);
     eliminate(sim, s2!, inf, WEAPONS.claws.index);
     ticks(sim, 2);
     expect(ctl.stage).toBe("break");
