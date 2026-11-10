@@ -2,8 +2,8 @@
 
 Platform roadmap (multiplayer 2D browser platform). Short on purpose: update at checkpoints only.
 
-**Current phase:** 2, 4, 6a, 7a done (interactions, bot AI 2.0, Classic Maze, Horror Maze).
-Next: 8–9 (Battle Royale foundation and gameplay, small player counts first).
+**Current phase:** 2, 4, 6a, 7a, 8–9 (first scale) done. Next: 10 (Battle Royale scaling:
+interest management, then real-player tests on a dedicated server) and 3 (arena maps ×2).
 **Branch:** `platform-home` (base `main` 0.8.1). Not deployed; production untouched.
 
 ## Phase 0 · audit (2026-11-10)
@@ -71,6 +71,26 @@ Next: 8–9 (Battle Royale foundation and gameplay, small player counts first).
   retreat for cautious, tactical and support.
 - Cost measured: 17 µs per bot per tick (3 bots, 90 s on Industrial, unit test log).
 
+## Phase 8–9 · Battle Royale, first scale (done, up to 16 players)
+- Map: Scrapline Isle (`maps/island.ts`), 4096², 16 named districts (city, houses, yards,
+  docks, fort, lab, farms, woods, villages) with roads, 4 chests + medkit + ammo per district.
+- `BattleRoyaleMode`: flying bus on a random straight line (BrState), jump with SPACE / dash
+  when over the island, forced drop before it leaves; land unarmed, loot chests and pickups;
+  storm in 6 phases (wait → shrink to a new circle inside the old one, 2→20 dps outside);
+  no respawns; last one standing; practice bots ride, jump at random and loot when unarmed.
+- Drop in the shared player sim (`PlayerSim.alt`/`chute`, `stepAir`): freefall 400 px/s,
+  parachute (SPACE or automatic at 300) 230 px/s, no collisions or weapons in the air,
+  landing pushes out of solids; synced and predicted like walking.
+- Client `BrLayer`: bus with rotors on its line, storm (tinted outside, animated edge, next
+  circle), district names, bigger players + ground shadow + canopy in the air, camera widens
+  with altitude, "SPACE: jump / open the parachute" prompts.
+- Measured (simulated random players, server tick + filtered encoding only, `modebench.ts`,
+  90 s): 8 → 0.07 ms/tick, 2.5 KB/s per client; 16 → 0.14 ms, 4.8 KB/s; 32 → 0.22 ms,
+  9.1 KB/s; 50 → 0.39 ms (p99 1.5 ms), 13.9 KB/s. Not a real-player test; no interest
+  management yet (every client receives every player); the room is capped at 16.
+- Hosting note: in host mode the host's browser uploads to every guest (50 × 13.9 KB/s ≈
+  0.7 MB/s before WebRTC overhead): 32–50 players need the dedicated server, not host mode.
+
 ## Open issues
 - Lobby map grid still renders its thumbnails synchronously (pre-existing; cache is warmed by
   the home cards).
@@ -87,6 +107,7 @@ Next: 8–9 (Battle Royale foundation and gameplay, small player counts first).
 | 5 | Graphics overhaul + LOW/MEDIUM/HIGH | — |
 | 6 | Non-combat: Classic Maze ✓, Horror Maze ✓, Parkour, Escape Room | in progress |
 | 7 | Horror overhaul: Horror Maze creature + director ✓; Haunted Facility, Night Hunt | in progress |
-| 8–10 | Battle Royale foundation, gameplay, scaling 8→50 (measured) | — |
+| 8–9 | Battle Royale map, bus, drop, loot, storm, victory (≤16) | done (first scale) |
+| 10 | BR scaling 8→50: interest management, real-player tests, dedicated server | measured sim only |
 | 11 | Racing, Hide & Seek+, Hot Potato, Puzzle Race, Free Roam | — |
 | 12 | Polish & release | — |

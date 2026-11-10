@@ -27,7 +27,8 @@ export type GameMode =
   | "convoy"
   | "outbreak"
   | "survival"
-  | "maze";
+  | "maze"
+  | "battleroyale";
 
 export const GAME_MODES: readonly GameMode[] = [
   "deathmatch",
@@ -47,6 +48,7 @@ export const GAME_MODES: readonly GameMode[] = [
   "outbreak",
   "survival",
   "maze",
+  "battleroyale",
 ];
 
 export type ModeCategory = "competitive" | "party" | "coop" | "vehicles" | "challenge";
@@ -531,6 +533,35 @@ export const MODES: Record<GameMode, ModeDef> = {
     status: "available",
     flag: "survival",
   },
+  battleroyale: {
+    id: "battleroyale",
+    name: "Battle Royale",
+    blurb: "Jump from the flying bus, loot, outlast the storm. Last one standing wins.",
+    category: "competitive",
+    structure: "ffa",
+    players: { min: 1, max: 16 },
+    durationLabel: "8–12 min",
+    rules: [
+      "Press SPACE (or dash) to jump; again to open the parachute",
+      "Land unarmed: open chests and pick up weapons (E)",
+      "Stay inside the safe zone: the storm closes in and hurts",
+      "No respawns: last one standing wins",
+    ],
+    respawn: "round",
+    victory: "Last player alive",
+    scoring: "Placement, eliminations",
+    weapons: "Looted: chests and pickups",
+    vehicles: false,
+    abilities: ["Dash", "Parachute"],
+    hud: "standard",
+    rewards: "Placement, eliminations, victory",
+    events: ["Storm phases"],
+    joinInProgress: "next-round",
+    disconnect: "Seat held 20 s, then eliminated",
+    quick: true,
+    status: "available",
+    flag: "battleroyale",
+  },
   maze: {
     id: "maze",
     name: "Classic Maze",
@@ -699,6 +730,7 @@ export const MODE_SCORE_UNIT: Record<GameMode, string> = {
   outbreak: "objectives",
   survival: "waves",
   maze: "finishes",
+  battleroyale: "eliminations",
 };
 
 /** Modes that only make sense on maps with vehicles. */
@@ -943,6 +975,14 @@ export const MODE_DEFAULTS: Record<GameMode, ModeRules> = {
     teamSize: 0,
     maxPlayers: 8,
     durationSec: 5 * 60,
+    scoreLimit: 0,
+    friendlyFire: false,
+  },
+  battleroyale: {
+    mode: "battleroyale",
+    teamSize: 0,
+    maxPlayers: 16,
+    durationSec: 15 * 60,
     scoreLimit: 0,
     friendlyFire: false,
   },

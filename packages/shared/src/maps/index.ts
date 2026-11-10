@@ -16,6 +16,7 @@ import { DOWNTOWN } from "./downtown.ts";
 import { TACTICAL_FACILITY } from "./facility.ts";
 import { HARBOR_CONFLICT } from "./harbor.ts";
 import { INDUSTRIAL_ARENA } from "./industrial.ts";
+import { buildIsland } from "./island.ts";
 import { NIGHT_MARKET } from "./market.ts";
 import { buildMaze, MAZE_DEFAULT_IDS, parseMazeId } from "./maze.ts";
 import { MOTEL_STRIP } from "./motel.ts";
@@ -26,6 +27,7 @@ import { type MapDef, type MapId, SHOOT_THROUGH, TALL_SOLIDS } from "./types.ts"
 import { URBAN_WARFARE } from "./urban.ts";
 import { HALVORSEN_WORKS } from "./works.ts";
 
+export * from "./island.ts";
 export * from "./maze.ts";
 export * from "./types.ts";
 
@@ -47,6 +49,7 @@ const BASE_MAPS: Record<Exclude<MapId, `maze-${string}`>, MapDef> = {
   outskirts: KESSLER_ROAD,
   blacksite: BLACK_SITE,
   breach: FINAL_BREACH,
+  island: buildIsland(2026),
 };
 
 const LISTED: Record<string, MapDef> = Object.fromEntries([

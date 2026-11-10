@@ -25,8 +25,9 @@ import { MatchRules } from "../src/rules/MatchRules.ts";
 import { GameSimulation } from "../src/simulation/GameSimulation.ts";
 import { syncDrops, syncPlayerState, syncVehicles } from "../src/simulation/stateSync.ts";
 
-const SECONDS = 60;
-const PLAYERS = 8;
+const SECONDS = Number(process.env.BENCH_SECONDS ?? 60);
+/** BENCH_PLAYERS=16 for bigger rooms (Battle Royale scaling: 8, 16, 32, 50). */
+const PLAYERS = Number(process.env.BENCH_PLAYERS ?? 8);
 
 function bench(mode: GameMode, map: MapId) {
   let seed = 12345;
@@ -123,12 +124,15 @@ function bench(mode: GameMode, map: MapId) {
   };
 }
 
-const runs: [GameMode, MapId][] = [
-  ["deathmatch", "industrial"],
-  ["gungame", "industrial"],
-  ["hideseek", "depot"],
-  ["prophunt", "depot"],
-];
+/** BENCH_MODES="battleroyale:island,maze:maze-m-4721" picks the runs. */
+const runs: [GameMode, MapId][] = process.env.BENCH_MODES
+  ? process.env.BENCH_MODES.split(",").map((r) => r.split(":") as [GameMode, MapId])
+  : [
+      ["deathmatch", "industrial"],
+      ["gungame", "industrial"],
+      ["hideseek", "depot"],
+      ["prophunt", "depot"],
+    ];
 // Warm-up (JIT) then the measured runs.
 bench("deathmatch", "industrial");
-for (const [mode, map] of runs) console.log(JSON.stringify(bench(mode, map)));
+for (const [mode, map] of runs) console.log(JSON.stringify({ players: PLAYERS, ...bench(mode, map) }));

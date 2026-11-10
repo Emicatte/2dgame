@@ -10,6 +10,7 @@ import {
   mulberry32,
   type NavGrid,
   NET,
+  NO_WEAPON,
   PLAYER,
   quantizeInput,
   type Vec2,
@@ -331,7 +332,19 @@ export class BotBrain {
     } else {
       // Cover, a medkit, the last place it saw someone, or a wander towards the noise.
       let goal: Vec2 | null = null;
-      if (this.mode === "cover" && this.cover) goal = this.cover;
+      // Unarmed (Battle Royale landing): the nearest weapon, chest or weapon on the ground.
+      const unarmed = me.sim.slots.every((sl) => sl.id === NO_WEAPON);
+      if (unarmed) {
+        const loot = this.nearestLoot(sim, pos);
+        if (loot) {
+          goal = loot;
+          if (Math.hypot(loot.x - pos.x, loot.y - pos.y) < PLAYER.interactRadius && tick % 2 === 0)
+            buttons |= BTN.INTERACT;
+        }
+      }
+      if (goal) {
+        // looting
+      } else if (this.mode === "cover" && this.cover) goal = this.cover;
       else if (hurt) goal = this.nearestHealth(sim, pos);
       // Something to investigate: what it saw, what it heard, what a teammate saw.
       const lead = this.lastSeen ?? this.heard ?? intel;
@@ -478,6 +491,23 @@ export class BotBrain {
       }
       if (best) return best;
     }
+    return best;
+  }
+
+  /** Weapons to pick up: chests and weapon pickups that are there, weapons lying on the ground. */
+  private nearestLoot(sim: GameSimulation, pos: Vec2): Vec2 | null {
+    let best: Vec2 | null = null;
+    let bestD = Number.POSITIVE_INFINITY;
+    const consider = (x: number, y: number) => {
+      const d = Math.hypot(x - pos.x, y - pos.y);
+      if (d < bestD) {
+        bestD = d;
+        best = { x, y };
+      }
+    };
+    for (const pk of sim.pickups.values())
+      if (pk.active && (pk.def.kind === "chest" || pk.def.kind === "weapon")) consider(pk.def.x, pk.def.y);
+    for (const d of sim.drops.values()) if (d.kind === "weapon") consider(d.x, d.y);
     return best;
   }
 

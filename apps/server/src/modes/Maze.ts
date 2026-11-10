@@ -287,7 +287,7 @@ export class MazeMode extends BaseMode {
           c: 0,
           p: 0,
           l: `${g.label} switch`,
-          a: "Press E: open the gate",
+          a: "Open the gate",
         });
       }
     }

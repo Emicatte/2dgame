@@ -493,7 +493,7 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
             >
               {formatClock(hud.timeLeftSec)}
             </div>
-            {s.mode === "maze" ? null : s.mode === "gungame" ? (
+            {s.mode === "maze" || s.mode === "battleroyale" ? null : s.mode === "gungame" ? (
               <div className="hud-box hud__score">
                 <b className="mono">
                   {Math.max(0, ...s.players.map((p) => p.gg)) + 1}/{GUN_GAME.ladder.length}
@@ -595,8 +595,18 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
           !hud.vehicle &&
           !(isPveMode(s.mode) && pveHudStore.get().prompt) && (
             <div className="interact" data-testid="interact-prompt">
-              <kbd>{interactKey}</kbd>
-              {hud.interactPrompt}
+              {/* Prompts that name their own key ("SPACE: jump") show it instead of interact's. */}
+              {/^[A-Z]+: /.test(hud.interactPrompt) ? (
+                <>
+                  <kbd>{hud.interactPrompt.split(":")[0]}</kbd>
+                  {hud.interactPrompt.slice(hud.interactPrompt.indexOf(":") + 2)}
+                </>
+              ) : (
+                <>
+                  <kbd>{interactKey}</kbd>
+                  {hud.interactPrompt}
+                </>
+              )}
             </div>
           )}
 

@@ -55,6 +55,7 @@ const SCORE_LIMITS: Record<GameMode, number[]> = {
   outbreak: [],
   survival: [],
   maze: [],
+  battleroyale: [],
 };
 
 export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
@@ -135,7 +136,7 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
   const rounds = isRoundMode(s.mode);
   const variants = MODE_VARIANTS[s.mode] ?? [];
   /** The mode has its own end rule (ladder, rounds): no score limit to pick. */
-  const ownEnd = s.mode === "gungame" || s.mode === "maze" || rounds;
+  const ownEnd = s.mode === "gungame" || s.mode === "maze" || s.mode === "battleroyale" || rounds;
   const maze = parseMazeId(s.mapId);
   const tooFew = humans.length < def.players.min;
   /** Modes a host can switch to here, by platform category (same grouping as the home catalog). */

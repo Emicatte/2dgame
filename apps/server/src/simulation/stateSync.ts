@@ -32,6 +32,9 @@ export function syncPlayerState(ps: PlayerState, p: ServerPlayer, tick: number, 
   ps.hp = p.hp;
   ps.shield = p.shield;
   ps.cells = p.cells;
+  const alt = Math.round(s.alt);
+  if (ps.alt !== alt) ps.alt = alt;
+  if (ps.chute !== s.chute) ps.chute = s.chute;
   ps.away = p.away;
   ps.kills = p.stats.kills;
   ps.deaths = p.stats.deaths;

@@ -2,6 +2,17 @@
 
 ## 0.9.0 — unreleased (branch `platform-home`)
 
+### Added (Battle Royale, first scale)
+- **Battle Royale** (Action, up to 16 players for now) on **Scrapline Isle**, a 4096×4096 island of
+  16 named districts. Everyone starts on the flying bus, which crosses the island on a different
+  line each match; press SPACE (or dash) to jump, steer the freefall, open the parachute (SPACE,
+  or by itself low down), land where you aimed. You land unarmed: open chests and take weapons.
+  The storm closes in six phases towards a new circle each time and hurts outside it. No
+  respawns; the last one standing wins. Practice bots ride the bus, jump and loot too.
+- Altitude and parachute are part of the shared player simulation (predicted like walking).
+- `modebench.ts` takes `BENCH_PLAYERS` / `BENCH_MODES`; Battle Royale measured with 8–50
+  simulated players (see PROGRESS.md).
+
 ### Changed (practice bots)
 - Bots only see what they face (130° field of view, plus anyone very close, and all around for a
   moment after being hit by someone unseen), hear gunshots and go to investigate, and no longer

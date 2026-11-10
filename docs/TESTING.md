@@ -137,6 +137,15 @@ pnpm --filter @scrapline/shared exec vitest run test/maps.test.ts   # validates 
 pnpm test:e2e:p2p newmodes.spec                   # one two-browser match per new mode family
 ```
 
+## Results (2026-11-10, v0.9.0 platform phases, branch `platform-home`)
+
+| Suite | Count | Result |
+|---|---|---|
+| Lint, typecheck (incl. E2E sources) | — | clean (the one older warning) |
+| Unit: shared (+ maze generator: determinism, validation, solvability over 30 seeds; island validity) / web / server (+ maze controller, Horror Maze creature, bot field of view / hearing / personalities, Battle Royale bus, drop, storm, last standing, bots loot) | 132 + 3 skipped / 147 / 258 + 8 skipped | pass |
+| E2E host mode: `maze.spec` (Classic Maze shared by host and guest, gates, keys, switch, traps; Horror Maze dark with its creature rendered), `battleroyale.spec` (bus, SPACE jump, freefall, parachute, landing, storm), practice bots after the AI changes | 4 | pass |
+| Server benchmark, Battle Royale, simulated random players (tick + filtered encoding, no transport) | 8 / 16 / 32 / 50 | 0.07 / 0.14 / 0.22 / 0.39 ms per tick; 2.5 / 4.8 / 9.1 / 13.9 KB/s per client |
+
 ## Results (last run: 2026-11-10, v0.9.0 home overhaul, branch `platform-home`)
 
 | Suite | Count | Result |

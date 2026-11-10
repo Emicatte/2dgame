@@ -84,6 +84,7 @@ import { PlayerView } from "../entities/PlayerView.ts";
 import { VehicleView } from "../entities/VehicleView.ts";
 import { type HudObjective, type HudVehicle, hudStore, uiStore } from "../hudStore.ts";
 import { InputManager } from "../input/InputManager.ts";
+import { BrLayer } from "../modes/BrLayer.ts";
 import { ModeLayer } from "../modes/ModeLayer.ts";
 import { ServerClock } from "../net/clock.ts";
 import {
@@ -182,6 +183,7 @@ export class ArenaScene extends Phaser.Scene {
   private dropViews = new Map<string, PickupView & { w: number | null }>();
   private views = new Map<string, PlayerView>();
   private modes!: ModeLayer;
+  private br!: BrLayer;
   /** Prop Hunt bakes the map without its objects (they are drawn live): which variant is loaded. */
   private mapProps = true;
   private vehicleViews = new Map<string, VehicleView>();
@@ -242,6 +244,7 @@ export class ArenaScene extends Phaser.Scene {
     this.lightmap.setQuality(settingsStore.get().quality);
     this.pve.lightmap = this.lightmap;
     this.modes = new ModeLayer(this, this.effects, this.lightmap);
+    this.br = new BrLayer(this);
     this.perf = new PerfRecorder(this.game, () => this.children.length);
     this.crosshair = new Crosshair(this);
     this.predictor = new Predictor(collisionWorldFor(this.map), 0, airWorldFor(this.map));
@@ -292,9 +295,21 @@ export class ArenaScene extends Phaser.Scene {
           hp: number;
           kills: number;
           deaths: number;
+          alt: number;
+          frozen: boolean;
         }[] = [];
         this.room?.state?.players.forEach((p, id) => {
-          out.push({ id, x: p.x, y: p.y, alive: p.alive, hp: p.hp, kills: p.kills, deaths: p.deaths });
+          out.push({
+            id,
+            x: p.x,
+            y: p.y,
+            alive: p.alive,
+            hp: p.hp,
+            kills: p.kills,
+            deaths: p.deaths,
+            alt: p.alt,
+            frozen: p.frozen,
+          });
         });
         return out;
       },
@@ -1558,6 +1573,7 @@ export class ArenaScene extends Phaser.Scene {
       const meView = this.views.get(self);
       const local = meView ? { x: meView.root.x, y: meView.root.y, aim: this.predictor.sim.aim } : null;
       this.modes.update(state, self, renderTick, state.tick, dt / 1000, local, this.cameras.main, this.map);
+      this.br.update(state, this.map, this.views, self, this.predictor.sim.alt, renderTick);
     }
     if (this.pve.active) {
       const me = this.views.get(this.room.sessionId);
@@ -1610,7 +1626,8 @@ export class ArenaScene extends Phaser.Scene {
     let buttons = 0;
     if (i.mouseDown) buttons |= BTN.FIRE;
     if (i.isDown("reload")) buttons |= BTN.RELOAD;
-    if (i.isDown("dash")) buttons |= BTN.DASH;
+    // Space also jumps from the Battle Royale bus and opens the parachute (it is the dash key).
+    if (i.isDown("dash") || i.isCodeDown("Space")) buttons |= BTN.DASH;
     if (i.isDown("interact")) buttons |= BTN.INTERACT;
     if (i.isDown("shield")) buttons |= BTN.SHIELD;
     if (this.seatPending) {
@@ -2034,6 +2051,8 @@ export class ArenaScene extends Phaser.Scene {
       cursorLead = 0.6;
       targetZoom = 1 - 0.1 * lead - 0.12 * pose.alt;
     }
+    // In the air (Battle Royale drop) the view widens with the altitude.
+    if (!mount && this.predictor.sim.alt > 0) targetZoom = 1 - 0.35 * BrLayer.altFrac(this.predictor.sim.alt);
     const zk = 1 - Math.exp(-dt / 500);
     this.zoomFactor += (targetZoom - this.zoomFactor) * zk;
     cam.setZoom(this.baseZoom * this.zoomFactor);
@@ -2233,9 +2252,20 @@ export class ArenaScene extends Phaser.Scene {
       this.lastCountdownSec = s;
     }
     const weapon = this.predictor.mount ? null : this.nearbyWeaponPickup();
-    const modePrompt = this.predictorAlive
-      ? this.modes.prompt(state, this.room.sessionId, { x: this.predictor.sim.x, y: this.predictor.sim.y })
-      : null;
+    const meState = state.players.get(this.room.sessionId);
+    const dropPrompt =
+      state.mode !== "battleroyale" || !meState
+        ? null
+        : meState.frozen && meState.alt > 0
+          ? { text: "SPACE: jump from the bus", progress: 0 }
+          : this.predictor.sim.alt > 0 && !this.predictor.sim.chute
+            ? { text: "SPACE: open the parachute", progress: 0 }
+            : null;
+    const modePrompt =
+      dropPrompt ??
+      (this.predictorAlive
+        ? this.modes.prompt(state, this.room.sessionId, { x: this.predictor.sim.x, y: this.predictor.sim.y })
+        : null);
     const interact = this.enterTarget
       ? `Enter ${this.enterTarget.def.name} as ${this.enterTarget.def.seats[this.enterTarget.seat]!.role}`
       : (this.enterBlocked ??

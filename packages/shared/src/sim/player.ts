@@ -64,7 +64,23 @@ export interface PlayerSim {
   /** Extra spread in degrees from sustained fire. */
   bloom: number;
   trigger: boolean;
+  /**
+   * Battle Royale drop: logical altitude (0 = on the ground) and whether the parachute is open.
+   * In the air the player glides over everything, cannot fire, and lands where they steer.
+   */
+  alt: number;
+  chute: boolean;
 }
+
+/** Freefall and parachute (altitude units per second; horizontal px/s). */
+export const DROP = {
+  startAlt: 1000,
+  fallRate: 160,
+  chuteRate: 60,
+  autoChuteAlt: 300,
+  fallSpeed: 400,
+  chuteSpeed: 230,
+} as const;
 
 export interface ShotIntent {
   seq: number;
@@ -136,6 +152,8 @@ export function createPlayerSim(x: number, y: number, primary: WeaponId): Player
     swap: 0,
     bloom: 0,
     trigger: false,
+    alt: 0,
+    chute: false,
   };
 }
 
@@ -168,8 +186,47 @@ export function stepPlayer(s: PlayerSim, input: InputFrame, ctx: StepContext): v
     s.trigger = false;
     return;
   }
+  if (s.alt > 0) {
+    stepAir(s, input, ctx, STEP_DT);
+    return;
+  }
   stepMovement(s, input, ctx, STEP_DT, ctx.body?.speed ?? 1);
   stepWeapons(s, input, ctx, STEP_DT);
+}
+
+/**
+ * Freefall, then the parachute (opened with the dash key, or by itself low down): steerable, over
+ * every obstacle, no weapons. Touching down pushes the player out of whatever they landed on.
+ */
+function stepAir(s: PlayerSim, input: InputFrame, ctx: StepContext, dt: number): void {
+  const dashPressed = (input.buttons & BTN.DASH) !== 0;
+  if (dashPressed && !s.dashHeld && !s.chute) s.chute = true;
+  s.dashHeld = dashPressed;
+  if (s.alt <= DROP.autoChuteAlt) s.chute = true;
+  let mx = input.mx;
+  let my = input.my;
+  const len = Math.sqrt(mx * mx + my * my);
+  if (len > 1) {
+    mx /= len;
+    my /= len;
+  }
+  const speed = s.chute ? DROP.chuteSpeed : DROP.fallSpeed;
+  [s.vx, s.vy] = approach2(s.vx, s.vy, mx * speed, my * speed, 900 * dt);
+  const r = PLAYER.radius;
+  s.x = Math.max(r, Math.min(ctx.world.width - r, s.x + s.vx * dt));
+  s.y = Math.max(r, Math.min(ctx.world.height - r, s.y + s.vy * dt));
+  s.alt = Math.max(0, s.alt - (s.chute ? DROP.chuteRate : DROP.fallRate) * dt);
+  s.trigger = false;
+  if (s.alt === 0) {
+    s.chute = false;
+    s.vx = 0;
+    s.vy = 0;
+    for (let i = 0; i < 2; i++) {
+      const out = resolveCircle(ctx.world, s.x, s.y, r);
+      s.x = out.x;
+      s.y = out.y;
+    }
+  }
 }
 
 function stepMovement(s: PlayerSim, input: InputFrame, ctx: StepContext, dt: number, speedMult = 1): void {

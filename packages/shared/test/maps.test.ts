@@ -14,7 +14,7 @@ import {
 
 describe("maps", () => {
   it("ships the three arena maps unchanged, plus the vehicle maps (competitive list), and the PvE maps", () => {
-    const authored = PVP_MAP_IDS.filter((id) => !MAPS[id].maze);
+    const authored = PVP_MAP_IDS.filter((id) => !MAPS[id].maze && id !== "island");
     expect(MAP_IDS).toEqual([
       ...authored,
       "works",
@@ -22,6 +22,7 @@ describe("maps", () => {
       "outskirts",
       "blacksite",
       "breach",
+      "island",
       ...MAZE_DEFAULT_IDS,
     ]);
     expect(MAPS.works.pve).toBe(true);
@@ -59,7 +60,7 @@ describe("maps", () => {
   });
 
   // Arena invariants; generated mazes have their own tests (maze.test.ts).
-  for (const id of PVP_MAP_IDS.filter((x) => !MAPS[x].maze)) {
+  for (const id of PVP_MAP_IDS.filter((x) => !MAPS[x].maze && x !== "island")) {
     const map = MAPS[id];
     describe(map.name, () => {
       it("has valid, reachable spawns and pickups", () => {

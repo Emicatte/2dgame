@@ -93,6 +93,7 @@ export const EXPERIENCE_CATEGORY_OF: Record<GameMode, ExperienceCategory> = {
   pursuit: "racing",
   convoy: "racing",
   maze: "challenge",
+  battleroyale: "action",
 };
 
 /** Built in later phases of the platform roadmap (PROGRESS.md). Never startable. */
@@ -100,18 +101,6 @@ export const PLANNED_EXPERIENCES: readonly Omit<
   ExperienceDef,
   "thumbnail" | "maps" | "launch" | "quick" | "durationLabel" | "progression"
 >[] = [
-  {
-    id: "battleroyale",
-    name: "Battle Royale",
-    category: "action",
-    blurb: "Drop from the flying bus, loot, outlast the storm. Solo, duos and squads.",
-    players: { min: 2, max: 50 },
-    gameplay: "combat",
-    rules: ["Jump when you want, open the parachute", "Loot chests", "Stay inside the safe zone"],
-    systems: ["weapons", "vehicles", "teams", "ai"],
-    status: "planned",
-    needs: "A large streamed map, the drop, the storm, an inventory and load tests at 8/16/32/50 players",
-  },
   {
     id: "haunted",
     name: "Haunted Facility",
@@ -239,6 +228,7 @@ const CARD_MAP: Partial<Record<GameMode, MapId>> = {
   pursuit: "downtown",
   convoy: "urban",
   maze: "maze-m-4721",
+  battleroyale: "island",
 };
 
 function fromMode(mode: GameMode): ExperienceDef {
@@ -357,6 +347,7 @@ export function playableExperience(e: ExperienceDef, flags: ReadonlySet<GameMode
 /** Shown first on the home screen (curated; only the playable ones are shown). */
 export const FEATURED_EXPERIENCES: readonly string[] = [
   "deathmatch",
+  "battleroyale",
   "outbreak",
   "prophunt",
   "infection",

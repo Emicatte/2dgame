@@ -1,5 +1,6 @@
 import type { GameMode } from "@scrapline/shared";
 import type { GameSimulation } from "../simulation/GameSimulation.ts";
+import { BattleRoyaleMode } from "./BattleRoyale.ts";
 import { BountyMode } from "./Bounty.ts";
 import { ChaosMode } from "./Chaos.ts";
 import { GunGameMode } from "./GunGame.ts";
@@ -38,6 +39,8 @@ export function createModeController(mode: GameMode, sim: GameSimulation): ModeC
       return new PursuitMode(sim, mode);
     case "maze":
       return new MazeMode(sim);
+    case "battleroyale":
+      return new BattleRoyaleMode(sim);
     default:
       return null;
   }

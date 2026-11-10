@@ -3,6 +3,7 @@ import type { DisguiseKind } from "../config/party.ts";
 import type { VehicleKind } from "../config/vehicles.ts";
 import type { WeaponId } from "../config/weapons.ts";
 import type { Rect, Vec2 } from "../sim/math.ts";
+import type { PoiDef } from "./island.ts";
 import type { MazeDef } from "./maze.ts";
 
 export type MapId =
@@ -25,6 +26,8 @@ export type MapId =
   | "market"
   /** PvE (Outbreak) maps: never offered to competitive modes. */
   | "works"
+  /** Battle Royale. */
+  | "island"
   /**
    * The listed maze of each size. Mazes of any other seed ("maze-m-48213") are valid map ids at
    * run time too (generated from the id, see maze.ts); they are typed as MapId by mazeId().
@@ -203,6 +206,8 @@ export interface MapDef {
   party?: PartyMapDef;
   /** Maze data: gates and their openers, checkpoints, floor traps, exit (generated maps). */
   maze?: MazeDef;
+  /** Named places (Battle Royale districts), drawn on the map and the HUD. */
+  pois?: readonly PoiDef[];
   /** Authored objective positions (otherwise derived from the team spawns, see objectivesFor). */
   objectives?: {
     points: { id: string; label: string; x: number; y: number }[];

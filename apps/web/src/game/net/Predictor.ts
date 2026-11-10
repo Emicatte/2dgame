@@ -247,6 +247,8 @@ export class Predictor {
     s.swap = ps.swap;
     s.bloom = ps.bloom;
     s.trigger = ps.trigger;
+    s.alt = ps.alt;
+    s.chute = ps.chute;
 
     if (drivingNow && vs) {
       const v = this.vehicle ?? createVehicleSim(vs.x, vs.y, vs.angle);
