@@ -92,3 +92,37 @@ test("Classic Maze: seeded maze shared by host and guest, gates and traps, nobod
     await b.screenshot({ path: `${SHOTS}/maze-guest.png` });
   }
 });
+
+test("Horror Maze: dark, one creature rendered from the PvE AI, picked from the Horror category", async () => {
+  const a = await player("Alpha");
+  await a.getByTestId("nav-discover").click();
+  await a.getByTestId("discover-horror").click();
+  await a.getByTestId("xp-horrormaze").click();
+  await a.getByTestId("xp-create").click();
+  await expect(a.getByTestId("lobby-mode")).toContainText("Classic Maze", { timeout: 15_000 });
+  await expect(a.getByTestId("variant-badge")).toHaveText("Horror");
+  await a.getByTestId("start-match").click();
+  await a.waitForFunction(
+    () =>
+      (window as unknown as { __scrapline?: { phase(): string | null } }).__scrapline?.phase() === "playing",
+    null,
+    { timeout: 30_000 },
+  );
+  const pve = () =>
+    a.evaluate(() =>
+      (
+        window as unknown as {
+          __scrapline: { pve(): { zombies: number; rendered: number } | null };
+        }
+      ).__scrapline.pve(),
+    );
+  await expect.poll(async () => (await pve())?.zombies ?? 0, { timeout: 10_000 }).toBe(1);
+  await expect.poll(async () => (await pve())?.rendered ?? 0, { timeout: 10_000 }).toBe(1);
+  if (SHOTS) await a.screenshot({ path: `${SHOTS}/horrormaze.png` });
+  // Back home: the card is now the one to continue.
+  await a.keyboard.press("Escape");
+  await a.getByTestId("leave-arena").click();
+  // Back on the page it was started from (Discover); Play now offers to continue it.
+  await a.getByTestId("nav-play").click();
+  await expect(a.locator("#hero-title")).toHaveText("Horror Maze", { timeout: 10_000 });
+});

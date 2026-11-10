@@ -109,6 +109,13 @@ export class MatchRules {
       this.state.maxPlayers = Math.max(d.maxPlayers, humans);
       for (const p of this.sim.players.values()) p.team = 0;
     }
+    // Any other mode with variants (Classic / Horror Maze) starts on its first one.
+    if (
+      !isRoleMode(mode) &&
+      MODE_VARIANTS[mode] &&
+      !MODE_VARIANTS[mode]!.some((v) => v.id === this.state.round.variant)
+    )
+      this.state.round.variant = defaultVariant(mode);
     this.applyCombatRules();
   }
 

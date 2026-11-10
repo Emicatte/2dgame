@@ -1176,7 +1176,8 @@ export class ArenaScene extends Phaser.Scene {
   private updateSight(state: MatchState) {
     const mission = state.mode === "outbreak" ? missionById(state.pve.mission) : undefined;
     const open = parseIdList(state.pve.doors);
-    const closed = state.mode === "survival" ? [] : (mission?.doors ?? []).filter((d) => !open.has(d.id));
+    const doors = mission?.doors ?? this.map.maze?.gates ?? [];
+    const closed = state.mode === "survival" ? [] : doors.filter((d) => !open.has(d.id));
     this.lightmap.setWorld(sightWorld(this.map.solids, closed));
   }
 

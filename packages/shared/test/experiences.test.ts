@@ -53,6 +53,8 @@ describe("experience catalog", () => {
     expect(experienceForRoom("outbreak", "extraction")?.id).toBe("extraction");
     expect(experienceForRoom("outbreak", "first-contact")?.id).toBe("outbreak");
     expect(experienceForRoom("tdm")?.id).toBe("tdm");
+    expect(experienceForRoom("maze", "", "horror")?.id).toBe("horrormaze");
+    expect(experienceForRoom("maze", "", "classic")?.id).toBe("maze");
   });
 
   it("features only playable experiences", () => {

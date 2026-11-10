@@ -1,4 +1,5 @@
 import {
+  AI,
   BTN,
   type InputFrame,
   MAPS,
@@ -19,10 +20,11 @@ import { syncModeState } from "../src/modes/sync.ts";
 import { computeResults } from "../src/players/results.ts";
 import { MatchRules } from "../src/rules/MatchRules.ts";
 import { GameSimulation, type ServerPlayer } from "../src/simulation/GameSimulation.ts";
+import { syncPve } from "../src/simulation/stateSync.ts";
 
 const sec = (s: number) => Math.round(s * NET.serverTickRate);
 
-function setup(map: MapId, ids: string[]) {
+function setup(map: MapId, ids: string[], variant = "classic") {
   const sim = new GameSimulation(MAPS[map], { tickRate: NET.serverTickRate, rng: () => 0.5 });
   const state = new MatchState();
   state.mapId = map;
@@ -42,6 +44,7 @@ function setup(map: MapId, ids: string[]) {
     state.players.set(id, ps);
   }
   rules.setMode("maze");
+  rules.setVariant(variant);
   rules.prepareMatch();
   sim.resetForMatch();
   state.phase = "playing";
@@ -159,5 +162,57 @@ describe("Classic Maze", () => {
       facts: (p) => ctl.facts(p),
     });
     expect(results[0]!.points).toBe(ctl.facts(b).points);
+  });
+});
+
+describe("Horror Maze", () => {
+  const id = mazeId("m", 4721);
+
+  it("one creature, synced as an enemy, starting in its lair and not hunting yet", () => {
+    const { sim, state, ctl, maze } = setup(id, ["a"], "horror");
+    expect(ctl.monster).not.toBeNull();
+    ticks(sim, 2);
+    syncPve(state, sim);
+    expect(state.zombies.size).toBe(1);
+    const c = ctl.monster!.position!;
+    expect(Math.hypot(c.x - maze.lair.x, c.y - maze.lair.y)).toBeLessThan(40);
+    expect(c.state === AI.CHASE || c.state === AI.ATTACK).toBe(false);
+  });
+
+  it("walks, never teleports, and catching someone sends them back to their checkpoint", () => {
+    const { sim, ctl, maze } = setup(id, ["a"], "horror");
+    const a = sim.players.get("a")!;
+    a.protectedUntil = 0;
+    // Stand next to the lair, in plain sight.
+    put(a, maze.lair.x + 20, maze.lair.y);
+    let last = ctl.monster!.position!;
+    let caught = false;
+    const ev = ticks(sim, sec(6), () => {
+      const now = ctl.monster!.position!;
+      expect(Math.hypot(now.x - last.x, now.y - last.y)).toBeLessThan(60);
+      last = now;
+      if (!caught) put(a, maze.lair.x + 20, maze.lair.y);
+      if (ctl.monster!.chasing) a.protectedUntil = 0;
+    });
+    caught = announced(ev, "was caught");
+    expect(caught).toBe(true);
+  });
+
+  it("a gate opening is heard: an idle creature goes to investigate", () => {
+    const { sim, ctl, maze } = setup(id, ["a"], "horror");
+    const a = sim.players.get("a")!;
+    // Out of sight: far from the lair, at the start.
+    ticks(sim, sec(1));
+    const before = ctl.monster!.position!;
+    const g = maze.gates[0]!;
+    put(a, g.opener.x, g.opener.y);
+    ticks(sim, 2);
+    put(a, g.x + g.w / 2, g.y + g.h / 2);
+    ticks(sim, 2);
+    ticks(sim, sec(4));
+    const after = ctl.monster!.position!;
+    const gx = g.x + g.w / 2;
+    const gy = g.y + g.h / 2;
+    expect(Math.hypot(after.x - gx, after.y - gy)).toBeLessThan(Math.hypot(before.x - gx, before.y - gy));
   });
 });

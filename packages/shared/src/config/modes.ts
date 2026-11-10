@@ -965,6 +965,14 @@ export const MODE_VARIANTS: Partial<
     },
   ],
   prophunt: [{ id: "classic", name: "Classic", blurb: "Props vs hunters, sides swap every round." }],
+  maze: [
+    { id: "classic", name: "Classic", blurb: "Lights on: keys, switches, traps, fastest out wins." },
+    {
+      id: "horror",
+      name: "Horror",
+      blurb: "Lights out, flashlights on. Something hunts by sight and sound: getting caught sends you back.",
+    },
+  ],
 };
 
 export function defaultVariant(mode: string): string {

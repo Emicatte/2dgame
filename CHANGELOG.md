@@ -2,6 +2,13 @@
 
 ## 0.9.0 — unreleased (branch `platform-home`)
 
+### Added (Horror Maze)
+- **Horror Maze** (Horror, 1–4 players): the maze in the dark with flashlights, and one creature
+  driven by the Outbreak enemy AI. It sees only with line of sight, hears running, dashes, gates
+  and traps, remembers where it last saw you and searches there. A tension director draws it
+  towards the player furthest ahead after a long quiet spell (a sound near them, never a
+  teleport). Caught: back to your last checkpoint. Lobby: Variant Classic / Horror.
+
 ### Added (Classic Maze)
 - **Classic Maze** (Challenge, 1–8 players, no weapons): a labyrinth generated from a seed in three
   sizes (8×8, 12×12, 16×16 cells). Find the amber key and carry it to the amber gate, press E on

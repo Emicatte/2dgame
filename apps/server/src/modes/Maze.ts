@@ -8,7 +8,9 @@ import {
   PLAYER,
   pveWorlds,
 } from "@scrapline/shared";
+import type { ZombieWorld } from "../pve/ZombieWorld.ts";
 import type { ServerPlayer } from "../simulation/GameSimulation.ts";
+import { MazeMonster } from "./MazeMonster.ts";
 import { BaseMode, type MarkData, type ModeFacts } from "./ModeController.ts";
 
 const REACH = 70;
@@ -34,6 +36,9 @@ export class MazeMode extends BaseMode {
   /** Finish time (ticks since the start) per player. */
   private finished = new Map<string, number>();
   private startTick = 0;
+  private variant = "classic";
+  /** Horror variant: the creature and its director. */
+  monster: MazeMonster | null = null;
 
   /** Ticks per second. */
   private get rate(): number {
@@ -48,6 +53,10 @@ export class MazeMode extends BaseMode {
     return false;
   }
 
+  override configure(opts: { rounds: number; variant: string }): void {
+    this.variant = opts.variant === "horror" ? "horror" : "classic";
+  }
+
   override reset(): void {
     this.open.clear();
     this.carrier.clear();
@@ -55,6 +64,29 @@ export class MazeMode extends BaseMode {
     this.finished.clear();
     this.startTick = this.sim.tick;
     this.applyWorld();
+    const maze = this.maze;
+    this.monster =
+      maze && this.variant === "horror"
+        ? new MazeMonster(
+            this.sim,
+            maze,
+            () => this.players().filter((p) => !this.finished.has(p.id)),
+            (p) => this.sendBack(p, `${p.name} was caught`),
+          )
+        : null;
+    if (maze) this.monster?.spawn(maze.lair);
+  }
+
+  override zombieWorld(): ZombieWorld | null {
+    return this.monster?.zw ?? null;
+  }
+
+  /** Back to the last checkpoint; a carried key goes back to its place. */
+  private sendBack(p: ServerPlayer, text: string): void {
+    for (const [gate, holder] of this.carrier) if (holder === p.id) this.carrier.delete(gate);
+    this.emit({ t: "announce", s: text, d: "", w: 0 });
+    this.sim.spawn(p, false);
+    this.monster?.noise(p.sim.x, p.sim.y, 300);
   }
 
   private applyWorld(): void {
@@ -63,6 +95,7 @@ export class MazeMode extends BaseMode {
     const w = pveWorlds(this.sim.map, maze.gates, this.open);
     this.sim.world = w.world;
     this.sim.shotWorld = w.shotWorld;
+    this.monster?.wallsChanged();
   }
 
   override spawnPoint(p: ServerPlayer): { x: number; y: number } | null {
@@ -104,6 +137,7 @@ export class MazeMode extends BaseMode {
   override step(): void {
     const maze = this.maze;
     if (!maze) return;
+    this.monster?.step();
     for (const p of this.players()) {
       if (!p.alive || this.finished.has(p.id)) continue;
       const { x, y } = p.sim;
@@ -139,10 +173,8 @@ export class MazeMode extends BaseMode {
         const cx = Math.max(t.x, Math.min(x, t.x + t.w));
         const cy = Math.max(t.y, Math.min(y, t.y + t.h));
         if ((cx - x) ** 2 + (cy - y) ** 2 > PLAYER.radius ** 2) continue;
-        // A key carrier drops it: the key goes back to its place.
-        for (const [gate, holder] of this.carrier) if (holder === p.id) this.carrier.delete(gate);
-        this.emit({ t: "announce", s: `${p.name} hit a trap`, d: "", w: 0 });
-        this.sim.spawn(p, false);
+        this.monster?.noise(x, y, 650);
+        this.sendBack(p, `${p.name} hit a trap`);
         break;
       }
 
@@ -165,6 +197,8 @@ export class MazeMode extends BaseMode {
   }
 
   private openGate(g: MazeGate, text: string): void {
+    // Gates are loud: in the dark, everything nearby hears it.
+    this.monster?.noise(g.x + g.w / 2, g.y + g.h / 2, 1200);
     this.open.add(g.id);
     this.carrier.delete(g.id);
     this.applyWorld();

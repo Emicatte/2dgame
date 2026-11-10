@@ -86,8 +86,17 @@ export function App() {
     const key = `${sess.roomId}:${sess.matchIndex}`;
     if (lastRecorded.current === key) return;
     lastRecorded.current = key;
-    recordPlayed(sess.mode, sess.mission);
-  }, [sess.status, sess.phase, sess.away, sess.roomId, sess.matchIndex, sess.mode, sess.mission]);
+    recordPlayed(sess.mode, sess.mission, sess.round.variant);
+  }, [
+    sess.status,
+    sess.phase,
+    sess.away,
+    sess.roomId,
+    sess.matchIndex,
+    sess.mode,
+    sess.mission,
+    sess.round.variant,
+  ]);
 
   const inRoom = sess.status === "connected" || sess.status === "reconnecting";
   const back = () => setView((v) => (v === "loadout" || v === "leaderboard" ? "profile" : "play"));

@@ -56,6 +56,8 @@ export interface MazeDef {
   traps: MazeTrap[];
   /** Cells of the route start → exit (tests, bots later). */
   route: number;
+  /** Horror Maze: where the creature starts (a far dead end on the start side of the first gate). */
+  lair: Vec2;
 }
 
 export function mazeId(size: MazeSize, seed: number): MapId {
@@ -187,6 +189,7 @@ export function buildMaze(size: MazeSize, seed: number): MapDef {
 
   const gates: MazeGate[] = [];
   const checkpoints: Vec2[] = [center(0)];
+  let lairCell = route[Math.floor(route.length / 2)]!;
   const k1 = Math.floor(route.length * 0.35);
   const k2 = Math.floor(route.length * 0.7);
   const gated = route.length >= 10 && k2 > k1 + 2;
@@ -201,6 +204,8 @@ export function buildMaze(size: MazeSize, seed: number): MapDef {
       else if (before2[i]! >= 0) switchCells.push(i);
     }
     const keyAt = keyCells.length ? pick(keyCells) : route[Math.max(1, Math.floor(k1 / 2))]!;
+    const lairs = keyCells.filter((i) => i !== keyAt && dist[i]! >= 5).sort((a, b) => dist[b]! - dist[a]!);
+    lairCell = lairs[0] ?? route[k1]!;
     const switchAt = switchCells.length ? pick(switchCells) : route[k1 + 1 + Math.floor((k2 - k1) / 2)]!;
     gates.push({
       id: "gate-amber",
@@ -310,6 +315,7 @@ export function buildMaze(size: MazeSize, seed: number): MapDef {
     checkpoints,
     traps,
     route: route.length,
+    lair: center(lairCell),
   };
 
   return {

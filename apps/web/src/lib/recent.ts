@@ -18,8 +18,8 @@ export function pushRecent(list: readonly string[], id: string): string[] {
 }
 
 /** Called when a match starts: the card it belongs to moves to the front of "Recently played". */
-export function recordPlayed(mode: string, mission?: string): void {
-  const exp = experienceForRoom(mode, mission);
+export function recordPlayed(mode: string, mission?: string, variant?: string): void {
+  const exp = experienceForRoom(mode, mission, variant);
   if (!exp) return;
   try {
     localStorage.setItem(KEY, JSON.stringify(pushRecent(recentExperiences(), exp.id)));

@@ -367,6 +367,11 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                       </>
                     ) : (
                       <>
+                        {variants.length > 0 && (
+                          <span className="badge" data-testid="variant-badge">
+                            {variants.find((v) => v.id === s.round.variant)?.name ?? variants[0]!.name}
+                          </span>
+                        )}
                         <span className="badge">{formatClock(s.durationSec)} min</span>
                         {!ownEnd && (
                           <span className="badge">
@@ -442,6 +447,23 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                         </select>
                       </div>
                     </>
+                  )}
+                  {!rounds && variants.length > 0 && (
+                    <div className="setting-row">
+                      <span>Variant</span>
+                      <select
+                        className="input"
+                        value={s.round.variant}
+                        onChange={(e) => session.updateSettings({ variant: e.target.value })}
+                        data-testid="variant"
+                      >
+                        {variants.map((v) => (
+                          <option key={v.id} value={v.id} title={v.blurb}>
+                            {v.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                   {!rounds && (
                     <div className="setting-row">

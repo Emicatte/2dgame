@@ -51,7 +51,8 @@ async function start(e: ExperienceDef, how: "quick" | "lobby"): Promise<void> {
   if (!l || !playable(e)) throw new Error("This experience is not playable yet");
   if (how === "quick") return session.quickMatch(currentLoadout(), l.mode);
   if (l.mode === "outbreak") return session.createCoop(currentLoadout(), l.mission);
-  return session.createWithMode(currentLoadout(), l.mode);
+  await session.createWithMode(currentLoadout(), l.mode);
+  if (l.variant) session.updateSettings({ variant: l.variant });
 }
 
 /** Runs one start action at a time and keeps its label / error for the button that fired it. */

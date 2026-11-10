@@ -319,7 +319,11 @@ export class PveLayer {
 
   /** Map / mission changed (or left PvE): rebuild doors and props. */
   setContext(map: MapDef, state: MatchState): void {
-    const pve = state.mode === "outbreak" || state.mode === "survival";
+    // Horror Maze runs a PvE creature in the dark: same enemies, lights and dread.
+    const pve =
+      state.mode === "outbreak" ||
+      state.mode === "survival" ||
+      (state.mode === "maze" && state.round.variant === "horror");
     const mission = state.mode === "outbreak" ? (missionById(state.pve.mission) ?? null) : null;
     if (this.active === pve && this.mapId === map.id && this.mission === mission) return;
     this.clear();

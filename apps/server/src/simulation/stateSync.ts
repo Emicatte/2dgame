@@ -12,6 +12,7 @@ import {
   WEAPONS,
   ZombieState,
 } from "@scrapline/shared";
+import type { ZombieWorld } from "../pve/ZombieWorld.ts";
 import type { GameSimulation, ServerPlayer } from "./GameSimulation.ts";
 
 /**
@@ -155,7 +156,9 @@ export function syncObjectives(state: MatchState, sim: GameSimulation): void {
 export function syncPve(state: MatchState, sim: GameSimulation): void {
   const pve = sim.pve;
   if (!pve) {
-    if (state.zombies.size > 0) state.zombies.clear();
+    const own = sim.ctl?.zombieWorld() ?? null;
+    if (own) syncZombies(state, own, sim.tickRateHz);
+    else if (state.zombies.size > 0) state.zombies.clear();
     if (state.hazards.size > 0) state.hazards.clear();
     if (state.props.size > 0) state.props.clear();
     // The downed flag drives client prediction in every mode: never let it outlive the run.
@@ -167,39 +170,7 @@ export function syncPve(state: MatchState, sim: GameSimulation): void {
     }
     return;
   }
-  const zs = state.zombies;
-  for (const id of [...zs.keys()]) {
-    const z = pve.zw.zombies.get(id);
-    if (!z || z.dead) zs.delete(id);
-  }
-  for (const z of pve.zw.zombies.values()) {
-    if (z.dead) continue;
-    let s = zs.get(z.id);
-    if (!s) {
-      s = new ZombieState();
-      s.k = z.def.index;
-      s.mhp = Math.min(65535, z.maxHp);
-      zs.set(z.id, s);
-    }
-    const x = Math.round(z.x);
-    const y = Math.round(z.y);
-    if (s.x !== x) s.x = x;
-    if (s.y !== y) s.y = y;
-    const a = ((Math.round((z.angle / (Math.PI * 2)) * 256) % 256) + 256) % 256;
-    if (s.a !== a) s.a = a;
-    if (s.hp !== z.hp) s.hp = Math.min(65535, z.hp);
-    if (s.st !== z.state) s.st = z.state;
-    if (s.act !== z.act || s.at !== z.actTick) {
-      s.act = z.act;
-      s.at = z.actTick;
-      s.tx = Math.round(z.actX);
-      s.ty = Math.round(z.actY);
-      const cur = z.cur ?? z.def.attack;
-      s.ak = Math.max(0, ATTACK_KINDS.indexOf(cur.kind));
-      s.aw = Math.min(65535, Math.max(1, Math.round(cur.windupSec * sim.tickRateHz)));
-      s.ar = Math.min(255, Math.round(cur.radius ?? 0));
-    }
-  }
+  syncZombies(state, pve.zw, sim.tickRateHz);
   const hs = state.hazards;
   for (const id of [...hs.keys()]) if (!pve.zw.hazards.has(id)) hs.delete(id);
   for (const h of pve.zw.hazards.values()) {
@@ -281,5 +252,42 @@ export function syncPve(state: MatchState, sim: GameSimulation): void {
     const rv = Math.round(p.pve.reviveProg * 100) / 100;
     if (s.revive !== rv) s.revive = rv;
     if (s.revives !== p.pve.revives) s.revives = Math.min(255, p.pve.revives);
+  }
+}
+
+/** Enemies of a zombie world into the synchronized state (Outbreak, Survival, Horror Maze). */
+function syncZombies(state: MatchState, zw: ZombieWorld, tickRateHz: number): void {
+  const zs = state.zombies;
+  for (const id of [...zs.keys()]) {
+    const z = zw.zombies.get(id);
+    if (!z || z.dead) zs.delete(id);
+  }
+  for (const z of zw.zombies.values()) {
+    if (z.dead) continue;
+    let s = zs.get(z.id);
+    if (!s) {
+      s = new ZombieState();
+      s.k = z.def.index;
+      s.mhp = Math.min(65535, z.maxHp);
+      zs.set(z.id, s);
+    }
+    const x = Math.round(z.x);
+    const y = Math.round(z.y);
+    if (s.x !== x) s.x = x;
+    if (s.y !== y) s.y = y;
+    const a = ((Math.round((z.angle / (Math.PI * 2)) * 256) % 256) + 256) % 256;
+    if (s.a !== a) s.a = a;
+    if (s.hp !== z.hp) s.hp = Math.min(65535, z.hp);
+    if (s.st !== z.state) s.st = z.state;
+    if (s.act !== z.act || s.at !== z.actTick) {
+      s.act = z.act;
+      s.at = z.actTick;
+      s.tx = Math.round(z.actX);
+      s.ty = Math.round(z.actY);
+      const cur = z.cur ?? z.def.attack;
+      s.ak = Math.max(0, ATTACK_KINDS.indexOf(cur.kind));
+      s.aw = Math.min(65535, Math.max(1, Math.round(cur.windupSec * tickRateHz)));
+      s.ar = Math.min(255, Math.round(cur.radius ?? 0));
+    }
   }
 }

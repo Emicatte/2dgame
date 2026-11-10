@@ -2,8 +2,8 @@
 
 Platform roadmap (multiplayer 2D browser platform). Short on purpose: update at checkpoints only.
 
-**Current phase:** 2 + 6a done (shared interactions + Classic Maze). Next: 7 (horror: darkness,
-monster AI, director) with Horror Maze as its first consumer.
+**Current phase:** 2, 6a, 7a done (interactions, Classic Maze, Horror Maze). Next: 4 (bot
+personalities and team behaviour on top of BotBrain).
 **Branch:** `platform-home` (base `main` 0.8.1). Not deployed; production untouched.
 
 ## Phase 0 · audit (2026-11-10)
@@ -48,6 +48,18 @@ monster AI, director) with Horror Maze as its first consumer.
   traps → last checkpoint (carried key dropped), finish times, match ends when everyone is out.
   Results show times (DNF), no combat columns; HUD hides elims/leader.
 
+## Phase 7a · Horror Maze (done)
+- `MazeMonster`: one stalker run by the existing Outbreak enemy AI (`ZombieWorld`: sight with
+  line of sight, hearing, memory of the last position, investigate, wander), outside the PvE
+  runtime through a small `ZombieHost`. Never told where players are; always walks (tested).
+- Director (server, 1 Hz): running/dashing footsteps and gates/traps make noise; after ~28 s
+  without a chase it makes a sound 320–480 px from the player furthest ahead (investigate
+  near them, not on them). Caught → back to the checkpoint.
+- Client: the PvE layer (darkness, flashlight with wall shadows, enemy rendering, dread) turns
+  on for the horror variant; maze gates block light. Card "Horror Maze" in Horror; lobby has a
+  Variant setting for the maze.
+- Known limit: the creature's position is sent to every client (a modified client could see it).
+
 ## Open issues
 - Lobby map grid still renders its thumbnails synchronously (pre-existing; cache is warmed by
   the home cards).
@@ -62,8 +74,8 @@ monster AI, director) with Horror Maze as its first consumer.
 | 3 | Arena maps ×2 surface | — |
 | 4 | Bot AI 2.0 (perception, memory, utility AI) | — |
 | 5 | Graphics overhaul + LOW/MEDIUM/HIGH | — |
-| 6 | Non-combat: Classic Maze ✓, Horror Maze (with 7), Parkour, Escape Room | in progress |
-| 7 | Horror overhaul (lighting, audio, monster AI, director) | — |
+| 6 | Non-combat: Classic Maze ✓, Horror Maze ✓, Parkour, Escape Room | in progress |
+| 7 | Horror overhaul: Horror Maze creature + director ✓; Haunted Facility, Night Hunt | in progress |
 | 8–10 | Battle Royale foundation, gameplay, scaling 8→50 (measured) | — |
 | 11 | Racing, Hide & Seek+, Hot Potato, Puzzle Race, Free Roam | — |
 | 12 | Polish & release | — |

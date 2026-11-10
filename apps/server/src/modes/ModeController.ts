@@ -8,6 +8,7 @@ import type {
   PickupKind,
   VehicleSpawnDef,
 } from "@scrapline/shared";
+import type { ZombieWorld } from "../pve/ZombieWorld.ts";
 import type { GameSimulation, ServerPlayer } from "../simulation/GameSimulation.ts";
 
 /** One shot's hits on mode objects (Prop Hunt), resolved after the pellets were traced. */
@@ -150,6 +151,8 @@ export interface ModeController {
   statusText(): string;
   /** Vehicles parked for this mode (Convoy's truck), or null for the map's own. */
   vehicleSpawns(): readonly VehicleSpawnDef[] | null;
+  /** Enemies run by the PvE AI outside the PvE runtime (Horror Maze), synced like Outbreak's. */
+  zombieWorld(): ZombieWorld | null;
 }
 
 /** Defaults: an open free-for-all with nothing hidden. Modes override what they change. */
@@ -244,6 +247,9 @@ export abstract class BaseMode implements ModeController {
     return "";
   }
   vehicleSpawns(): readonly VehicleSpawnDef[] | null {
+    return null;
+  }
+  zombieWorld(): ZombieWorld | null {
     return null;
   }
 

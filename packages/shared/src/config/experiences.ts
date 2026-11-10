@@ -62,8 +62,8 @@ export interface ExperienceDef {
   maps: readonly MapId[];
   rules: readonly string[];
   durationLabel: string;
-  /** What the lobby opens with: the room mode and, for co-op operations, the mission. */
-  launch: { mode: GameMode; mission?: string } | null;
+  /** What the lobby opens with: the room mode and, for co-op operations, the mission or variant. */
+  launch: { mode: GameMode; mission?: string; variant?: string } | null;
   /** A matchmaking queue exists for it (dedicated server only; host mode always opens a lobby). */
   quick: boolean;
   /** What a finished match earns (XP and career stats are kept per mode). */
@@ -135,18 +135,6 @@ export const PLANNED_EXPERIENCES: readonly Omit<
     systems: ["roles", "objectives", "secrecy"],
     status: "planned",
     needs: "The horror lighting and audio, monster abilities",
-  },
-  {
-    id: "horrormaze",
-    name: "Horror Maze",
-    category: "horror",
-    blurb: "A dark maze, a flashlight and a creature that hears you.",
-    players: { min: 1, max: 4 },
-    gameplay: "noncombat",
-    rules: ["Flashlight only", "Collect items", "Reach the exit"],
-    systems: ["ai", "objectives"],
-    status: "planned",
-    needs: "The monster AI and the 2D lighting",
   },
   {
     id: "parkour",
@@ -303,8 +291,26 @@ function fromOperation(op: (typeof COOP_OPERATIONS)[number]): ExperienceDef {
   };
 }
 
+/** Horror Maze: the maze mode's horror variant, with a card of its own in Horror. */
+const HORROR_MAZE: ExperienceDef = {
+  ...fromMode("maze"),
+  id: "horrormaze",
+  name: "Horror Maze",
+  category: "horror",
+  blurb: "Lights out in the labyrinth. Something hunts by sight and sound; your flashlight is all you have.",
+  players: { min: 1, max: 4 },
+  rules: [
+    "No weapons: avoid it, do not fight it",
+    "Running and dashing are heard; gates and traps are loud",
+    "Caught: back to your last checkpoint",
+  ],
+  launch: { mode: "maze", variant: "horror" },
+  systems: ["ai", "objectives"],
+};
+
 export const EXPERIENCES: readonly ExperienceDef[] = [
   ...GAME_MODES.map(fromMode),
+  HORROR_MAZE,
   ...COOP_OPERATIONS.map(fromOperation),
   ...PLANNED_EXPERIENCES.map(
     (p): ExperienceDef => ({
@@ -324,7 +330,15 @@ export function experienceById(id: string): ExperienceDef | undefined {
 }
 
 /** The card a running room belongs to (an Outbreak room on an operation's mission is that operation). */
-export function experienceForRoom(mode: string, mission?: string): ExperienceDef | undefined {
+export function experienceForRoom(
+  mode: string,
+  mission?: string,
+  variant?: string,
+): ExperienceDef | undefined {
+  if (variant) {
+    const v = EXPERIENCES.find((e) => e.launch?.mode === mode && e.launch.variant === variant);
+    if (v) return v;
+  }
   if (mode === "outbreak" && mission) {
     const op = EXPERIENCES.find((e) => e.launch?.mode === "outbreak" && e.launch.mission === mission);
     if (op) return op;
