@@ -1,0 +1,642 @@
+/* ------------------------------------------------------------------ home shell */
+
+.home {
+  display: flex;
+  flex-direction: column;
+  place-items: stretch;
+  padding: 0;
+  overflow: hidden;
+  /* The live map (GameCanvas) shows through on the right; text sits on the dark side. */
+  background: linear-gradient(
+    90deg,
+    rgba(14, 15, 17, 0.95) 0%,
+    rgba(14, 15, 17, 0.78) 40%,
+    rgba(14, 15, 17, 0.25) 100%
+  );
+}
+
+.xp-card--action,
+.cat-tile--action,
+.xp-thumb--action {
+  --cat: var(--accent);
+}
+.xp-card--survival,
+.cat-tile--survival,
+.xp-thumb--survival {
+  --cat: var(--good);
+}
+.xp-card--horror,
+.cat-tile--horror,
+.xp-thumb--horror {
+  --cat: var(--danger);
+}
+.xp-card--party,
+.cat-tile--party,
+.xp-thumb--party {
+  --cat: var(--warn);
+}
+.xp-card--adventure,
+.cat-tile--adventure,
+.xp-thumb--adventure {
+  --cat: var(--signal);
+}
+.xp-card--challenge,
+.cat-tile--challenge,
+.xp-thumb--challenge {
+  --cat: #c9a7ff;
+}
+.xp-card--racing,
+.cat-tile--racing,
+.xp-thumb--racing {
+  --cat: #ffb26b;
+}
+.xp-card--social,
+.cat-tile--social,
+.xp-thumb--social {
+  --cat: #9fd3c7;
+}
+
+.topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 64px;
+  padding: 0 clamp(16px, 4vw, 48px);
+  background: rgba(14, 15, 17, 0.92);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar__brand {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin-right: clamp(8px, 2vw, 24px);
+}
+
+.topbar__brand span {
+  color: var(--accent);
+}
+
+.topbar__nav {
+  display: flex;
+  gap: 2px;
+  height: 100%;
+}
+
+.topbar__item {
+  height: 100%;
+  min-width: 44px;
+  padding: 0 14px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-2);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    color var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out);
+}
+
+.topbar__item:hover {
+  color: var(--text);
+}
+
+.topbar__item[aria-current="page"] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.topbar__item:focus-visible,
+.topbar__profile:focus-visible {
+  outline-offset: -4px;
+}
+
+.topbar__profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--t-fast) var(--ease-out);
+}
+
+.topbar__profile:hover,
+.topbar__profile[aria-current="page"] {
+  border-color: var(--accent);
+}
+
+.topbar__who {
+  display: grid;
+  line-height: 1.15;
+}
+
+.topbar__name {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.topbar__rank {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.topbar__profile .progress {
+  width: 72px;
+}
+
+.live-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.live-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--good);
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.home__main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  animation: view-in var(--t-med) var(--ease-out);
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* ------------------------------------------------------------------ play (landing) */
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 12px;
+  min-height: clamp(300px, 50vh, 520px);
+  max-width: 760px;
+  padding: clamp(28px, 6vh, 72px) clamp(16px, 6vw, 96px) 32px;
+}
+
+.hero__title {
+  margin: 0;
+  font-size: clamp(44px, 6.5vw, 84px);
+  line-height: 0.92;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.6);
+}
+
+.hero__blurb {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 17px;
+  color: var(--text-2);
+}
+
+.hero__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.hero__facts span + span {
+  padding-left: 18px;
+  border-left: 1px solid var(--line-2);
+}
+
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.hero__play {
+  min-width: 260px;
+  justify-content: space-between;
+}
+
+.hero__play kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  opacity: 0.75;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.home-rows {
+  display: grid;
+  gap: 32px;
+  padding: 24px clamp(16px, 6vw, 96px) 40px;
+  background: linear-gradient(180deg, rgba(14, 15, 17, 0.55), rgba(14, 15, 17, 0.94) 160px);
+}
+
+.home-row__title {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.home-row__title small {
+  margin-left: 10px;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+}
+
+.xp-row,
+.xp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.xp-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding: 0;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  clip-path: polygon(0 0, calc(100% - var(--chamfer)) 0, 100% var(--chamfer), 100% 100%, 0 100%);
+  transition:
+    transform var(--t-med) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out);
+}
+
+.xp-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--cat, var(--text-2));
+}
+
+/* clip-path would cut an outline: the focus ring is drawn inside. */
+.xp-card:focus-visible,
+.cat-tile:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--signal);
+}
+
+.xp-thumb {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--bg-2);
+}
+
+.xp-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.03);
+  transition: transform 1200ms var(--ease-out);
+}
+
+/* Animated preview: the map drifts while the card is pointed at. */
+.xp-card:hover .xp-thumb img,
+.xp-card:focus-visible .xp-thumb img {
+  transform: scale(1.14) translate(-3%, -2%);
+}
+
+.xp-thumb::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: var(--cat, var(--accent));
+}
+
+.xp-thumb__ph {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--bg-2) 0 14px,
+    color-mix(in srgb, var(--cat, var(--line)) 12%, var(--bg-2)) 14px 28px
+  );
+}
+
+/* While the map preview renders: a quiet tint, not the striped "planned" look. */
+.xp-thumb__loading {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--cat, var(--line)) 8%, var(--bg-2));
+}
+
+.xp-card.is-planned .xp-thumb {
+  filter: grayscale(0.6);
+}
+
+.xp-card.is-planned .xp-card__name {
+  color: var(--text-2);
+}
+
+.xp-card__body {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  padding: 10px 12px 12px;
+}
+
+.xp-card__cat {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cat, var(--muted));
+}
+
+.xp-card__name {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.xp-card__meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.xp-card__badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(14, 15, 17, 0.85);
+}
+
+.cat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.cat-tile {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  min-height: 44px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--cat, var(--accent));
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform var(--t-med) var(--ease-out),
+    background var(--t-fast) var(--ease-out);
+}
+
+.cat-tile:hover {
+  background: var(--panel-2);
+  transform: translateY(-2px);
+}
+
+.cat-tile__name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cat-tile__blurb {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.cat-tile__count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--cat, var(--accent));
+}
+
+.home-footer {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ discover / rooms pages */
+
+.home-page {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  min-height: 100%;
+  padding: 28px clamp(16px, 6vw, 96px) 40px;
+  background: rgba(14, 15, 17, 0.92);
+}
+
+.view-head h2 {
+  margin: 0;
+  font-size: 30px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.view-head p {
+  margin: 4px 0 0;
+  max-width: 70ch;
+  color: var(--text-2);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  min-height: 36px;
+  padding: 0 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    color var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out);
+}
+
+.chip:hover {
+  color: var(--text);
+}
+
+.chip[aria-selected="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.home-page .home-row + .home-row {
+  margin-top: 28px;
+}
+
+.rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+/* ------------------------------------------------------------------ experience card (dialog) */
+
+.modal-backdrop > .xp-dialog {
+  width: min(860px, 100%);
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  animation: pop-in var(--t-med) var(--ease-out);
+}
+
+.xp-dialog > .xp-thumb {
+  aspect-ratio: auto;
+  min-height: 280px;
+}
+
+.xp-dialog__body {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 22px;
+}
+
+.xp-dialog__title {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.xp-dialog__blurb {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.xp-dialog__actions {
+  margin-top: 6px;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+}
+
+/* ------------------------------------------------------------------ lobby mode */
+
+.lobby-mode {
+  display: grid;
+  gap: 2px;
+}
+
+.lobby-mode__name {
+  font-size: 22px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.mode-picker > summary {
+  width: fit-content;
+  list-style: none;
+}
+
+.mode-picker > summary::-webkit-details-marker {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .topbar__who,
+  .live-chip {
+    display: none;
+  }
+  .modal-backdrop > .xp-dialog {
+    grid-template-columns: 1fr;
+  }
+  .xp-dialog > .xp-thumb {
+    aspect-ratio: 16 / 9;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .topbar__brand {
+    display: none;
+  }
+  .topbar__item {
+    padding: 0 10px;
+  }
+}

@@ -137,6 +137,18 @@ pnpm --filter @scrapline/shared exec vitest run test/maps.test.ts   # validates 
 pnpm test:e2e:p2p newmodes.spec                   # one two-browser match per new mode family
 ```
 
+## Results (last run: 2026-11-10, v0.9.0 home overhaul, branch `platform-home`)
+
+| Suite | Count | Result |
+|---|---|---|
+| Lint (Biome), typecheck (tsc strict, E2E sources included) | — | clean (the one older warning) |
+| `packages/shared` unit (+ experience catalog: unique ids, every mode has a card, card maps belong to the mode, planned experiences never start, feature flags, operation ↔ room mapping) | 126 + 3 skipped | pass |
+| `apps/web` unit (+ recently played list) | 147 | pass |
+| `apps/server` unit + integration (unchanged) | 235 + 8 skipped | pass |
+| E2E host mode, home (`home.spec.ts`): one entry per destination, no map picker before the lobby (Play, Discover, experience card, Rooms), Escape closes the card and returns focus, category tile → filtered Discover, sheets go back where they came from, one-click Play → lobby, map and mode chosen in the lobby, "Continue" after a real match. Discover with all 18 map images: 4.5 s in this container (software rendering), longest main-thread task 189 ms | 2 | pass |
+| E2E host mode regressions, moved to the new navigation (`hostmode`, `leave`, `loot`, `newmodes`, `partymodes`, `outbreak`, `vehicles`) | 20 | 19 pass. **Outbreak First Contact co-op** fails at the guest's infected count, as it already did on `main` (see 0.8.0 below). The Gun Game test first failed because Discover kept the Party filter between visits (intended); the test now selects "All" |
+| E2E dedicated server, `teams.spec` (server-mode home, create room, change mode, team invite, join) | 1 | navigation steps pass; fails later at the elimination step, as the dedicated-server specs already did in this environment (~5 FPS software rendering, see 0.7.0 below) |
+
 ## Results (last run: 2026-11-10, v0.8.0, branch `more-content`)
 
 | Suite | Count | Result |

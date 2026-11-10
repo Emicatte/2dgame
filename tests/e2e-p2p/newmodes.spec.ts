@@ -45,7 +45,7 @@ async function onboard(page: Page, name: string) {
   await page.goto("/");
   await page.fill("#nick", name);
   await page.click("button[type=submit]");
-  await expect(page.getByTestId("create-room")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("hero-play")).toBeVisible({ timeout: 10_000 });
   await page.waitForFunction(() => !!(window as unknown as { __scrapline?: unknown }).__scrapline);
 }
 
@@ -61,10 +61,11 @@ async function twoPlayers() {
   return { a, b };
 }
 
-async function playMode(a: Page, b: Page, category: string, id: string) {
-  await a.getByTestId("open-play").click();
-  await a.getByTestId(`play-tab-${category}`).click();
-  await a.getByTestId(`play-private-${id}`).click();
+async function playMode(a: Page, b: Page, _category: string, id: string) {
+  await a.getByTestId("nav-discover").click();
+  await a.getByTestId("discover-all").click();
+  await a.getByTestId(`xp-${id}`).click();
+  await a.getByTestId("xp-create").click();
   await expect(a.getByTestId("host-hint")).toBeVisible({ timeout: 15_000 });
   await expect(a.getByTestId(`mode-${id}`)).toHaveAttribute("aria-pressed", "true");
   const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
@@ -83,22 +84,32 @@ async function playMode(a: Page, b: Page, category: string, id: string) {
     );
 }
 
-test("Play screen: every category lists only playable modes", async () => {
+test("Discover: new modes playable, roadmap cards never start", async () => {
   browsers = [await chromium.launch({ executablePath: CHROME, headless: true, args: ARGS })];
   const a = await (await browsers[0]!.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
   await onboard(a, "Alpha");
-  await a.getByTestId("open-play").click();
+  await a.getByTestId("nav-discover").click();
   for (const [tab, ids] of [
-    ["competitive", ["sabotage", "bounty"]],
-    ["party", ["infection", "chaos"]],
-    ["coop", ["extraction", "bossrush"]],
-    ["vehicles", ["pursuit", "convoy"]],
+    ["action", ["sabotage", "bounty"]],
+    ["survival", ["infection"]],
+    ["party", ["chaos"]],
+    ["adventure", ["extraction", "bossrush"]],
+    ["racing", ["pursuit", "convoy"]],
   ] as const) {
-    await a.getByTestId(`play-tab-${tab}`).click();
-    for (const id of ids) await expect(a.getByTestId(`play-private-${id}`)).toBeEnabled();
-    await expect(a.locator(".play-card.is-planned")).toHaveCount(0);
-    await shot(a, `play-${tab}`);
+    await a.getByTestId(`discover-${tab}`).click();
+    for (const id of ids) {
+      await a.getByTestId(`xp-${id}`).click();
+      await expect(a.getByTestId("xp-create")).toBeEnabled();
+      await a.keyboard.press("Escape");
+    }
+    await shot(a, `discover-${tab}`);
   }
+  // Planned experiences are labelled and have no button that would start them.
+  await a.getByTestId("discover-horror").click();
+  await expect(a.getByTestId("xp-haunted")).toContainText("Planned");
+  await a.getByTestId("xp-haunted").click();
+  await expect(a.getByTestId("xp-dialog")).toContainText("Needs:");
+  await expect(a.getByTestId("xp-create")).toHaveCount(0);
 });
 
 test("Infection: one infected with claws, one survivor; both browsers agree on the sides", async () => {

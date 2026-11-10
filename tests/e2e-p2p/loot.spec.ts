@@ -22,8 +22,8 @@ test("chest: loot drops on the ground, weapon taken with E, shield cell kept and
     await page.goto("/");
     await page.fill("#nick", "Looter");
     await page.click("button[type=submit]");
+    await page.getByTestId("nav-rooms").click();
     await page.getByTestId("create-room").click();
-    await page.getByTestId("create-submit").click();
     await expect(page.getByTestId("start-match")).toBeEnabled({ timeout: 15_000 });
     await page.getByTestId("start-match").click();
     await page.waitForFunction(

@@ -36,6 +36,7 @@ test("Team Deathmatch: invite to my team, switch teams, team score on both scree
     );
     const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
     expect(code).toMatch(/^[A-Z0-9]{5}$/);
+    await a.getByTestId("change-mode").click();
     await a.getByTestId("mode-tdm").click();
     await expect(a.getByTestId("match-rules")).toContainText("Team Deathmatch");
     await expect(a.getByTestId("match-rules")).toContainText("2v2");

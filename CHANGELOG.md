@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.9.0 — unreleased (branch `platform-home`)
+
+### Changed
+- **New home.** One entry per destination in a top bar: **Play** (spotlight on the last
+  experience played, or a featured one, over its live map; one-click Play; recently played;
+  featured; categories), **Discover** (the whole catalog by category), **Rooms** (join with a code,
+  create a private room / arena, public rooms on the dedicated server), **Profile** (with Loadout
+  and Leaderboard) and **Settings**. The old menu's duplicate buttons are gone ("Outbreak · co-op",
+  "Team Deathmatch", "Browse rooms", the separate Play screen).
+- **The map is chosen only in the lobby.** "Create arena / private room" no longer asks for a map
+  first. Flow: Play → experience → Create lobby / Quick match → lobby (mode, map, rules, ready) →
+  start. The lobby stays the only authority (server-validated, host only); it shows the current mode
+  with a "Change mode" picker instead of the full grid of every mode, and tells guests the host
+  decides.
+- Card images are the real maps, rendered from game data one per idle slot (no frozen frame while
+  a page of cards appears); the previews drift on hover.
+
+### Added
+- **Experience catalog** (`packages/shared/src/config/experiences.ts`): eight platform categories
+  (Action, Survival, Horror, Party, Adventure, Challenge, Racing, Social) derived from the mode
+  registry and the co-op operations, plus ten planned experiences (Battle Royale, Haunted Facility,
+  Night Hunt, mazes, Parkour, Escape Room, Racing, Hot Potato, Free Roam) shown as "Planned" with
+  what they still need and no way to start them.
+- "Recently played", recorded when a match actually starts. Live "players in public rooms" in the
+  top bar on the dedicated server (host mode has no such data and shows nothing).
+
 ## 0.8.0 — unreleased (branch `more-content`)
 
 ### Added

@@ -105,7 +105,7 @@ export async function onboard(page: Page, name: string) {
   await page.fill("#nick", name);
   await page.click("button[type=submit]");
   try {
-    await expect(page.getByTestId("quick-match")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("hero-play")).toBeVisible({ timeout: 10_000 });
   } catch (err) {
     console.log(
       `[onboard ${name}] page text: ${((await page.locator("body").textContent()) ?? "").slice(0, 400)}`,
@@ -133,7 +133,7 @@ export async function startDuel(a: Page, b: Page): Promise<{ aId: string; bId: s
   );
   const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
   expect(code).toMatch(/^[A-Z0-9]{5}$/);
-  await b.getByTestId("join-room").click();
+  await b.getByTestId("nav-rooms").click();
   await b.getByTestId("room-code-input").fill(code);
   await b.getByTestId("join-submit").click();
   await expect(b.getByTestId("room-code")).toHaveText(code);

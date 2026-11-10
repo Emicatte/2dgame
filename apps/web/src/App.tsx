@@ -4,15 +4,16 @@ import { GameCanvas } from "./components/GameCanvas.tsx";
 import { Toasts } from "./components/Toasts.tsx";
 import { Button } from "./components/ui.tsx";
 import { sfx } from "./game/audio/sfx.ts";
+import { recordPlayed } from "./lib/recent.ts";
 import { useStore } from "./lib/store.ts";
+import { HOST_MODE } from "./net/api.ts";
 import { session, sessionStore } from "./net/session.ts";
+import { Home, type HomeView } from "./screens/Home.tsx";
 import { InGame } from "./screens/InGame.tsx";
 import { Lobby } from "./screens/Lobby.tsx";
-import { CreateDialog, JoinDialog, MainMenu, type MenuView } from "./screens/MainMenu.tsx";
 import { Onboarding } from "./screens/Onboarding.tsx";
-import { PlayScreen } from "./screens/PlayScreen.tsx";
 import { Results } from "./screens/Results.tsx";
-import { Leaderboard, Loadout, Profile, RoomBrowser, SettingsSheet } from "./screens/Sheets.tsx";
+import { Leaderboard, Loadout, Profile, SettingsSheet } from "./screens/Sheets.tsx";
 import { currentLoadout, loadProfile, profileStore } from "./state/profile.ts";
 
 /** `?join=CODE` invite links; `&team=1|2` asks to join a friend's team in team modes. */
@@ -38,7 +39,7 @@ function useInviteCode(): [string | null, 1 | 2 | undefined, () => void] {
 export function App() {
   const profile = useStore(profileStore);
   const sess = useStore(sessionStore);
-  const [view, setView] = useState<MenuView>("main");
+  const [view, setView] = useState<HomeView>("play");
   const [overlay, setOverlay] = useState<"settings" | "loadout" | null>(null);
   const [busy, setBusy] = useState(false);
   const [invite, inviteTeam, clearInvite] = useInviteCode();
@@ -64,7 +65,8 @@ export function App() {
       try {
         await session.joinByCode(invite, currentLoadout(), inviteTeam);
       } catch {
-        setView("join");
+        // The code stays filled in on the Rooms page, with the error toast explaining why.
+        setView("rooms");
       } finally {
         setBusy(false);
       }
@@ -72,12 +74,23 @@ export function App() {
     })();
   }, [profile.status, invite, inviteTeam, clearInvite]);
 
+  // Back from a room: the page the player left from, sheets closed.
   useEffect(() => {
-    if (sess.status === "connected") setView("main");
+    if (sess.status === "connected") setView((v) => (v === "discover" || v === "rooms" ? v : "play"));
   }, [sess.status]);
 
+  // "Recently played": a match of this room actually started (once per match).
+  const lastRecorded = useRef("");
+  useEffect(() => {
+    if (sess.status !== "connected" || sess.phase !== "playing" || sess.away) return;
+    const key = `${sess.roomId}:${sess.matchIndex}`;
+    if (lastRecorded.current === key) return;
+    lastRecorded.current = key;
+    recordPlayed(sess.mode, sess.mission);
+  }, [sess.status, sess.phase, sess.away, sess.roomId, sess.matchIndex, sess.mode, sess.mission]);
+
   const inRoom = sess.status === "connected" || sess.status === "reconnecting";
-  const back = () => setView("main");
+  const back = () => setView((v) => (v === "loadout" || v === "leaderboard" ? "profile" : "play"));
 
   let screen: React.ReactNode = null;
   if (profile.status === "loading") {
@@ -109,13 +122,22 @@ export function App() {
   } else {
     screen = (
       <>
-        <MainMenu onNavigate={setView} busy={busy} setBusy={setBusy} />
-        {view === "play" && <PlayScreen onBack={back} />}
-        {view === "browse" && <RoomBrowser onBack={back} />}
-        {view === "join" && <JoinDialog onClose={back} initialCode={invite ?? ""} />}
-        {view === "create" && <CreateDialog onClose={back} />}
+        <Home view={view} onNavigate={setView} inviteCode={invite ?? ""} />
+        {busy && (
+          <div className="toast-stack">
+            <div className="toast" aria-live="polite">
+              Joining your friend's room…
+            </div>
+          </div>
+        )}
         {view === "loadout" && <Loadout onBack={back} />}
-        {view === "profile" && <Profile onBack={back} />}
+        {view === "profile" && (
+          <Profile
+            onBack={back}
+            onLoadout={() => setView("loadout")}
+            onLeaderboard={HOST_MODE ? undefined : () => setView("leaderboard")}
+          />
+        )}
         {view === "leaderboard" && <Leaderboard onBack={back} />}
         {view === "settings" && <SettingsSheet onBack={back} />}
         {sess.error && sess.status === "error" && (

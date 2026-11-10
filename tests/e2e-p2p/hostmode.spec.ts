@@ -50,8 +50,8 @@ async function onboard(page: Page, name: string) {
   await page.goto("/");
   await page.fill("#nick", name);
   await page.click("button[type=submit]");
-  await expect(page.getByTestId("create-room")).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByTestId("quick-match")).toHaveCount(0);
+  await expect(page.getByTestId("hero-play")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("hero-play")).toContainText("you host");
   await page.waitForFunction(() => !!(window as unknown as { __scrapline?: unknown }).__scrapline);
 }
 
@@ -85,13 +85,14 @@ test("host mode: create, Team Deathmatch invite link, play, reload and resume, h
   await onboard(b, "Bravo");
 
   // A creates an arena hosted in its own tab.
+  await a.getByTestId("nav-rooms").click();
   await a.getByTestId("create-room").click();
-  await a.getByTestId("create-submit").click();
   await expect(a.getByTestId("host-hint")).toBeVisible({ timeout: 15_000 });
   const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
   expect(code).toMatch(/^[A-Z0-9]{5}$/);
 
   // Team Deathmatch, and B joins through A's "invite to my team" link over WebRTC.
+  await a.getByTestId("change-mode").click();
   await a.getByTestId("mode-tdm").click();
   await expect(a.getByTestId("match-rules")).toContainText("Team Deathmatch");
   const hostTeam = ((await a.getByTestId("team-1").textContent()) ?? "").includes("Alpha") ? 1 : 2;
@@ -155,7 +156,7 @@ test("host mode: create, Team Deathmatch invite link, play, reload and resume, h
   // The host leaves: B is told and returns to the menu.
   await a.close();
   await expect(b.getByText("The host closed the arena.")).toBeVisible({ timeout: 15_000 });
-  await expect(b.getByTestId("join-room")).toBeVisible();
+  await expect(b.getByTestId("nav-rooms")).toBeVisible();
 });
 
 test("host alone: the practice bots move, fight and hurt the host", async () => {
@@ -164,8 +165,8 @@ test("host alone: the practice bots move, fight and hurt the host", async () => 
   const a = await (await browsers[0]!.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
   a.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
   await onboard(a, "Solo");
+  await a.getByTestId("nav-rooms").click();
   await a.getByTestId("create-room").click();
-  await a.getByTestId("create-submit").click();
   await expect(a.getByTestId("host-hint")).toBeVisible({ timeout: 15_000 });
   await expect(a.getByText("Bot", { exact: true })).toHaveCount(3);
   await a.getByTestId("start-match").click();
@@ -210,8 +211,8 @@ test("the crosshair moves with the player: walking with the mouse still keeps th
   browsers = [await chromium.launch({ executablePath: CHROME, headless: true, args: ARGS })];
   const a = await (await browsers[0]!.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
   await onboard(a, "Aim");
+  await a.getByTestId("nav-rooms").click();
   await a.getByTestId("create-room").click();
-  await a.getByTestId("create-submit").click();
   await expect(a.getByTestId("host-hint")).toBeVisible({ timeout: 15_000 });
   await a.getByTestId("start-match").click();
   await phaseIs(a, "playing", 30_000);

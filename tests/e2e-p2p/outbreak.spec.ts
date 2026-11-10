@@ -48,7 +48,7 @@ async function onboard(page: Page, name: string) {
   await page.goto("/");
   await page.fill("#nick", name);
   await page.click("button[type=submit]");
-  await expect(page.getByTestId("create-room")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("hero-play")).toBeVisible({ timeout: 10_000 });
   await page.waitForFunction(() => !!(window as unknown as { __scrapline?: unknown }).__scrapline);
 }
 
@@ -109,6 +109,7 @@ test("Outbreak: two browsers complete co-op objectives of First Contact together
     ),
   );
   await expect(a.getByTestId("host-hint")).toBeVisible({ timeout: 15_000 });
+  await a.getByTestId("change-mode").click();
   await a.getByTestId("mode-outbreak").click();
   await expect(a.getByTestId("pve-settings")).toBeVisible();
   await expect(a.getByTestId("mission-first-contact")).toHaveAttribute("aria-pressed", "true");
@@ -119,7 +120,7 @@ test("Outbreak: two browsers complete co-op objectives of First Contact together
   const code = (await a.getByTestId("room-code").textContent())?.trim() ?? "";
   expect(code).toMatch(/^[A-Z0-9]{5}$/);
 
-  await b.getByTestId("join-room").click();
+  await b.getByTestId("nav-rooms").click();
   await b.getByTestId("room-code-input").fill(code);
   await b.getByTestId("join-submit").click();
   await expect(b.getByTestId("pve-settings")).toBeVisible({ timeout: 25_000 });
@@ -213,8 +214,11 @@ test("Survival: a boss renders with its health bar and telegraphs (host only)", 
   const a = await (await browsers[0]!.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
   a.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
   await onboard(a, "Solo");
-  await a.getByTestId("create-coop").click();
+  await a.getByTestId("nav-discover").click();
+  await a.getByTestId("xp-outbreak").click();
+  await a.getByTestId("xp-create").click();
   await expect(a.getByTestId("pve-settings")).toBeVisible({ timeout: 15_000 });
+  await a.getByTestId("change-mode").click();
   await a.getByTestId("mode-survival").click();
   await a.getByTestId("map-industrial").click();
   await a.getByTestId("difficulty-recruit").click();
@@ -266,7 +270,9 @@ test("Dead District: unlocked after First Contact, the squad reaches the apartme
     d.pve = { ...(d.pve ?? {}), missions: { "first-contact": { completions: 1, best: {} } } };
     localStorage.setItem(key, JSON.stringify(d));
   });
-  await a.getByTestId("create-coop").click();
+  await a.getByTestId("nav-discover").click();
+  await a.getByTestId("xp-outbreak").click();
+  await a.getByTestId("xp-create").click();
   await expect(a.getByTestId("pve-settings")).toBeVisible({ timeout: 15_000 });
   await expect(a.getByTestId("mission-dead-district")).toBeEnabled();
   await a.getByTestId("mission-dead-district").click();
@@ -325,7 +331,9 @@ test("The Convoy: the escorted truck's hull is on the HUD, locked until the keys
     };
     localStorage.setItem(key, JSON.stringify(d));
   });
-  await a.getByTestId("create-coop").click();
+  await a.getByTestId("nav-discover").click();
+  await a.getByTestId("xp-outbreak").click();
+  await a.getByTestId("xp-create").click();
   await expect(a.getByTestId("pve-settings")).toBeVisible({ timeout: 15_000 });
   await a.getByTestId("mission-the-convoy").click();
   await expect(a.getByTestId("briefing")).toContainText("The Convoy");
@@ -372,7 +380,9 @@ test("Black Site: dark and sealed at the start, the squad reaches the atrium and
     };
     localStorage.setItem(key, JSON.stringify(d));
   });
-  await a.getByTestId("create-coop").click();
+  await a.getByTestId("nav-discover").click();
+  await a.getByTestId("xp-outbreak").click();
+  await a.getByTestId("xp-create").click();
   await expect(a.getByTestId("pve-settings")).toBeVisible({ timeout: 15_000 });
   await a.getByTestId("mission-black-site").click();
   await expect(a.getByTestId("briefing")).toContainText("Black Site");
@@ -431,7 +441,9 @@ test("Final Breach: through the maintenance tunnels into the atrium, the waves b
     };
     localStorage.setItem(key, JSON.stringify(d));
   });
-  await a.getByTestId("create-coop").click();
+  await a.getByTestId("nav-discover").click();
+  await a.getByTestId("xp-outbreak").click();
+  await a.getByTestId("xp-create").click();
   await expect(a.getByTestId("pve-settings")).toBeVisible({ timeout: 15_000 });
   await a.getByTestId("mission-final-breach").click();
   await expect(a.getByTestId("briefing")).toContainText("Final Breach");
@@ -465,8 +477,11 @@ test("The Warden and Subject Zero render with their bars, plates and telegraphs 
   const a = await (await browsers[0]!.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
   a.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
   await onboard(a, "Solo");
-  await a.getByTestId("create-coop").click();
+  await a.getByTestId("nav-discover").click();
+  await a.getByTestId("xp-outbreak").click();
+  await a.getByTestId("xp-create").click();
   await expect(a.getByTestId("pve-settings")).toBeVisible({ timeout: 15_000 });
+  await a.getByTestId("change-mode").click();
   await a.getByTestId("mode-survival").click();
   await a.getByTestId("map-industrial").click();
   await a.getByTestId("difficulty-recruit").click();

@@ -250,6 +250,13 @@ export class ArenaScene extends Phaser.Scene {
 
     this.unsubs.push(
       gameEvents.on("roomChanged", (room) => this.attachRoom(room)),
+      gameEvents.on("menuMap", (id) => {
+        // Behind the home only: a room always shows its own map.
+        if (this.room || id === this.map.id || !(id in MAPS)) return;
+        this.time.delayedCall(0, () => {
+          if (!this.room && id !== this.map.id) this.loadMap(MAPS[id]);
+        });
+      }),
       gameEvents.on("net", ({ events, tick }) => this.onNetEvents(events, tick)),
       settingsStore.subscribe(() => this.applyQuality()),
       uiStore.subscribe(() => {

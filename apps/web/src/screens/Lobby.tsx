@@ -1,4 +1,6 @@
 import {
+  EXPERIENCE_CATEGORIES,
+  EXPERIENCE_CATEGORY_OF,
   type GameMode,
   isPveMode,
   isRoundMode,
@@ -6,7 +8,6 @@ import {
   MAPS,
   MATCH_LIMITS,
   MODE_BLURBS,
-  MODE_CATEGORIES,
   MODE_NAMES,
   MODE_SCORE_UNIT,
   MODE_VARIANTS,
@@ -19,7 +20,7 @@ import {
   TEAM_SIZE,
   TEAMS,
 } from "@scrapline/shared";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { mapThumb } from "../components/mapThumbs.ts";
 import { Button, formatClock, hexColor, LevelChip, Panel } from "../components/ui.tsx";
 import { MODE_FLAGS } from "../lib/modeFlags.ts";
@@ -54,6 +55,7 @@ const SCORE_LIMITS: Record<GameMode, number[]> = {
 export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
   const s = useStore(sessionStore);
   const [copied, setCopied] = useState<"room" | "team" | null>(null);
+  const picker = useRef<HTMLDetailsElement>(null);
   const self = s.players.find((p) => p.id === s.selfId);
   const isHost = s.hostId === s.selfId;
   const isPrivate = s.kind === "private";
@@ -130,14 +132,15 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
   /** The mode has its own end rule (ladder, rounds): no score limit to pick. */
   const ownEnd = s.mode === "gungame" || rounds;
   const tooFew = humans.length < def.players.min;
-  /** Modes a host can pick here, by category (co-op last). */
-  const pickable = MODE_CATEGORIES.map((c) => ({
+  /** Modes a host can switch to here, by platform category (same grouping as the home catalog). */
+  const pickable = EXPERIENCE_CATEGORIES.map((c) => ({
     ...c,
-    modes: c.modes.filter(
-      (m): m is GameMode =>
-        m in MODES && MODES[m as GameMode].status === "available" && modeEnabled(m, MODE_FLAGS),
+    modes: (Object.keys(EXPERIENCE_CATEGORY_OF) as GameMode[]).filter(
+      (m) =>
+        EXPERIENCE_CATEGORY_OF[m] === c.id && MODES[m].status === "available" && modeEnabled(m, MODE_FLAGS),
     ),
   })).filter((c) => c.modes.length > 0);
+  const category = EXPERIENCE_CATEGORIES.find((c) => c.id === EXPERIENCE_CATEGORY_OF[s.mode])?.name;
 
   return (
     <div className="screen screen--dim">
@@ -223,36 +226,51 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
         <div className="stack">
           <Panel title="Match">
             <div className="stack">
-              {canHost && (
-                <div className="stack" data-testid="mode-select" style={{ gap: 6 }}>
-                  {pickable.map((c) => (
-                    <fieldset
-                      key={c.id}
-                      className={`mode-grid ${c.id === "coop" ? "mode-grid--coop" : ""}`}
-                      aria-label={`${c.name} modes`}
-                    >
-                      <legend className="stencil mode-grid__legend">{c.name}</legend>
-                      {c.modes.map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          className={`mode-card ${c.id === "coop" ? "mode-card--coop" : ""}`}
-                          aria-pressed={s.mode === m}
-                          onClick={() => session.updateSettings({ mode: m })}
-                          data-testid={`mode-${m}`}
-                        >
-                          {MODE_NAMES[m]}
-                          <small>
-                            {MODES[m].players.min === MODES[m].players.max
-                              ? MODES[m].players.min
-                              : `${MODES[m].players.min}–${MODES[m].players.max}`}{" "}
-                            players
-                          </small>
-                        </button>
-                      ))}
-                    </fieldset>
-                  ))}
-                </div>
+              <div className="lobby-mode" data-testid="lobby-mode">
+                <span className="stencil">{category} · mode</span>
+                <strong className="lobby-mode__name">{MODE_NAMES[s.mode]}</strong>
+              </div>
+              {canHost ? (
+                <details className="mode-picker" ref={picker} data-testid="mode-select">
+                  <summary className="btn btn--sm" data-testid="change-mode">
+                    Change mode
+                  </summary>
+                  <div className="stack" style={{ gap: 6, marginTop: 10 }}>
+                    {pickable.map((c) => (
+                      <fieldset key={c.id} className="mode-grid" aria-label={`${c.name} modes`}>
+                        <legend className="stencil mode-grid__legend">{c.name}</legend>
+                        {c.modes.map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            className="mode-card"
+                            aria-pressed={s.mode === m}
+                            onClick={() => {
+                              session.updateSettings({ mode: m });
+                              if (picker.current) picker.current.open = false;
+                            }}
+                            data-testid={`mode-${m}`}
+                          >
+                            {MODE_NAMES[m]}
+                            <small>
+                              {MODES[m].players.min === MODES[m].players.max
+                                ? MODES[m].players.min
+                                : `${MODES[m].players.min}–${MODES[m].players.max}`}{" "}
+                              players
+                            </small>
+                          </button>
+                        ))}
+                      </fieldset>
+                    ))}
+                  </div>
+                </details>
+              ) : (
+                isPrivate &&
+                !waiting && (
+                  <p className="field__hint" data-testid="guest-hint">
+                    The host picks the mode, the map and the rules.
+                  </p>
+                )
               )}
               <p className="mode-blurb" data-testid="mode-blurb">
                 {MODE_BLURBS[s.mode]}
@@ -268,7 +286,8 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                 <PveMatchSettings canHost={canHost} />
               ) : (
                 <>
-                  <div className="grid-3">
+                  <span className="stencil">Map</span>
+                  <div className="grid-3" data-testid="lobby-maps">
                     {PVP_MAP_IDS.filter((id) => mapSupportsMode(MAPS[id], s.mode) || id === s.mapId).map(
                       (id) => (
                         <button
