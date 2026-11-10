@@ -6,6 +6,7 @@ import type {
   MatchState,
   NetEvent,
   PickupKind,
+  VehicleSpawnDef,
 } from "@scrapline/shared";
 import type { GameSimulation, ServerPlayer } from "../simulation/GameSimulation.ts";
 
@@ -47,6 +48,18 @@ export interface ObjectData {
   x: number;
   y: number;
   r: number;
+}
+
+/** An objective marker as published (MatchState.marks). */
+export interface MarkData {
+  k: string;
+  x: number;
+  y: number;
+  r: number;
+  c: number;
+  p: number;
+  l: string;
+  a: string;
 }
 
 /** The pose the other side is allowed to see of a player, or null when the real pose is public. */
@@ -126,6 +139,16 @@ export interface ModeController {
   objectEntries(): Map<string, ObjectData>;
   /** Lobby settings that matter to the mode (round count, variant). */
   configure(opts: { rounds: number; variant: string }): void;
+  /** Multiplier on the damage `attacker` deals to `target` (Chaos rules). */
+  damageScale(attacker: ServerPlayer | null, target: ServerPlayer): number;
+  /** After damage was applied (Chaos vampire). */
+  onDamage(target: ServerPlayer, attacker: ServerPlayer | null, dmg: number): void;
+  /** Objective markers (MatchState.marks), visible to everybody. */
+  markEntries(): Map<string, MarkData>;
+  /** One public status line (MatchState.modeText). */
+  statusText(): string;
+  /** Vehicles parked for this mode (Convoy's truck), or null for the map's own. */
+  vehicleSpawns(): readonly VehicleSpawnDef[] | null;
 }
 
 /** Defaults: an open free-for-all with nothing hidden. Modes override what they change. */
@@ -209,8 +232,20 @@ export abstract class BaseMode implements ModeController {
     return new Map();
   }
   configure(_opts: { rounds: number; variant: string }): void {}
+  damageScale(_attacker: ServerPlayer | null, _target: ServerPlayer): number {
+    return 1;
+  }
+  onDamage(_target: ServerPlayer, _attacker: ServerPlayer | null, _dmg: number): void {}
+  markEntries(): Map<string, MarkData> {
+    return new Map();
+  }
+  statusText(): string {
+    return "";
+  }
+  vehicleSpawns(): readonly VehicleSpawnDef[] | null {
+    return null;
+  }
 
-  /** Humans and practice bots currently in the match. */
   /** Players taking part in the match (not those who left it and wait in the room). */
   protected players(): ServerPlayer[] {
     return [...this.sim.players.values()].filter((p) => !p.away);

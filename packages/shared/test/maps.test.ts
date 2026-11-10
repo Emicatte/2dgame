@@ -30,6 +30,8 @@ describe("maps", () => {
       "mountain",
       "facility",
       "depot",
+      "motel",
+      "market",
     ]);
     for (const id of ["industrial", "neon", "desert"] as const)
       expect(MAPS[id].vehicleSpawns).toBeUndefined();
@@ -99,8 +101,12 @@ describe("maps", () => {
     });
 
     it("offers Prop Hunt only on maps with transformable objects", () => {
-      expect(mapsForMode("prophunt")).toEqual(["depot"]);
-      expect(mapsForMode("hideseek")).toContain("depot");
+      expect(mapsForMode("prophunt")).toEqual(["depot", "motel", "market"]);
+      for (const id of ["depot", "motel", "market"] as const) {
+        expect(mapsForMode("hideseek")).toContain(id);
+        expect(mapsForMode("infection")).toContain(id);
+        expect(MAPS[id].party?.props.length).toBeGreaterThanOrEqual(45);
+      }
     });
 
     it("Salvage Depot: party data is valid (pen, spawns, objects, hiding spots)", () => {

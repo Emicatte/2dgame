@@ -20,6 +20,8 @@ export type MapId =
   | "facility"
   /** Party maps (Prop Hunt, Hide & Seek). */
   | "depot"
+  | "motel"
+  | "market"
   /** PvE (Outbreak) maps: never offered to competitive modes. */
   | "works";
 

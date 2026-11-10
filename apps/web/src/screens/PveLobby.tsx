@@ -6,7 +6,6 @@ import {
   MAPS,
   MISSIONS,
   missionById,
-  missionUnlocked,
   PVE_SQUAD,
   SURVIVAL_MAPS,
   ZOMBIES,
@@ -35,7 +34,8 @@ export function PveMatchSettings({ canHost }: { canHost: boolean }) {
           <ol className="campaign" aria-label="Campaign">
             {CAMPAIGN_PLAN.map((c) => {
               const m = MISSIONS.find((x) => x.chapter === c.chapter);
-              const unlocked = !!m && missionUnlocked(progress, m);
+              // Every chapter is open: the campaign order is a suggestion, not a lock.
+              const unlocked = !!m;
               const best = m ? progress.missions[m.id]?.best[difficulty] : undefined;
               const selected = !!m && s.mission === m.id;
               return (
@@ -63,6 +63,30 @@ export function PveMatchSettings({ canHost }: { canHost: boolean }) {
               );
             })}
           </ol>
+          <ol className="campaign" aria-label="Operations">
+            {MISSIONS.filter((m) => m.chapter === 0).map((m) => {
+              const best = progress.missions[m.id]?.best[difficulty];
+              return (
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    className="campaign__mission"
+                    aria-pressed={s.mission === m.id}
+                    disabled={!canHost}
+                    onClick={() => session.updateSettings({ mission: m.id })}
+                    data-testid={`mission-${m.id}`}
+                    title={m.setting}
+                  >
+                    <span className="campaign__chapter mono">OP</span>
+                    <span className="campaign__name">{m.name}</span>
+                    <small>
+                      {best ? `Best ${formatClock(best)} on ${DIFFICULTY[difficulty].name}` : m.setting}
+                    </small>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
           {mission && (
             <div className="briefing" data-testid="briefing">
               <img className="briefing__map" src={mapThumb(mission.map)} alt="" />
@@ -72,7 +96,19 @@ export function PveMatchSettings({ canHost }: { canHost: boolean }) {
                 <p>{mission.brief}</p>
                 <p className="briefing__enemies">
                   Infected:{" "}
-                  {[...new Set(mission.groups.flatMap((g) => g.enemies.map((e) => e.kind)))]
+                  {[
+                    ...new Set([
+                      ...mission.groups.flatMap((g) => g.enemies.map((e) => e.kind)),
+                      ...mission.steps.flatMap((st) =>
+                        st.kind === "waves"
+                          ? st.waves.flatMap((w) => [
+                              ...(w.boss ? [w.boss] : []),
+                              ...(Object.keys(w.enemies) as (keyof typeof ZOMBIES)[]),
+                            ])
+                          : [],
+                      ),
+                    ]),
+                  ]
                     .map((k) => ZOMBIES[k].name)
                     .join(", ")}
                 </p>

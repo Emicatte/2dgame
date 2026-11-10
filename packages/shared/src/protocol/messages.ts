@@ -205,7 +205,9 @@ export type NetEvent =
   /** Prop Hunt: hint pings were published. */
   | { t: "hint"; n: number }
   /** A short private message to player `p` (an ability refused, why). */
-  | { t: "msg"; p: string; s: string };
+  | { t: "msg"; p: string; s: string }
+  /** A banner for everybody (a Chaos rule, a planted device, a new bounty target). */
+  | { t: "announce"; s: string; d?: string; w?: 0 | 1 | 2 };
 
 export interface NoticeMessage {
   text: string;

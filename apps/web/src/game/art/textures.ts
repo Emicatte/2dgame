@@ -187,10 +187,81 @@ function drawWeapon(w: WeaponDef): HTMLCanvasElement {
     roundRect(ctx, sh.len * 0.42, -sh.h / 2 + 1, sh.len * 0.16, sh.h - 2, 1);
     ctx.fill();
   }
+  drawWeaponDetails(ctx, w.id, sh);
   // Accent stripe matching the tracer color: readable weapon identity from top-down
   ctx.fillStyle = hex(accent, 0.9);
   ctx.fillRect(sh.len * 0.12, -sh.h / 2 + 1, sh.len * 0.18, 1.4);
   return c;
+}
+
+/** Silhouette details of the weapons added in 0.8 (magazines, scopes, drums, tubes). */
+function drawWeaponDetails(ctx: CanvasRenderingContext2D, id: string, sh: { len: number; h: number }): void {
+  const box = (x: number, y: number, w: number, h: number, color: number, r = 1) => {
+    ctx.fillStyle = hex(color);
+    roundRect(ctx, x, y, w, h, r);
+    ctx.fill();
+  };
+  const scope = (from: number, width: number, lens: number) => {
+    box(sh.len * from, -sh.h / 2 - 3, sh.len * width, 3.5, 0x15161a, 1.5);
+    ctx.fillStyle = hex(lens, 0.9);
+    ctx.fillRect(sh.len * from + 1, -sh.h / 2 - 2.2, 2, 2);
+  };
+  switch (id) {
+    case "revolver":
+      box(sh.len * 0.32, -sh.h / 2 - 0.5, 5, sh.h + 1, 0x4a4d55, 2.5);
+      break;
+    case "machinepistol":
+    case "pdw":
+      box(sh.len * 0.28, sh.h / 2 - 1, 3.5, id === "pdw" ? 7 : 6, 0x1e2024);
+      break;
+    case "lancer":
+      box(sh.len * 0.3, sh.h / 2 - 1, 5, 5, 0x1e2024);
+      box(sh.len * 0.78, -sh.h / 2 - 1, 3, 2, 0x4a4d55);
+      break;
+    case "dmr":
+      box(sh.len * 0.3, sh.h / 2 - 1, 4, 4, 0x1e2024);
+      scope(0.24, 0.28, 0xd7b8ff);
+      break;
+    case "lmg":
+      box(sh.len * 0.22, sh.h / 2 - 1, 9, 6, 0x2e3a2a, 2);
+      box(sh.len * 0.7, sh.h / 2, 1.5, 4, 0x4a4d55);
+      break;
+    case "doublebarrel":
+      box(sh.len * 0.55, -3, sh.len * 0.45, 2.4, 0x3a3d44);
+      box(sh.len * 0.55, 0.6, sh.len * 0.45, 2.4, 0x3a3d44);
+      box(0, -sh.h / 2 + 1, sh.len * 0.28, sh.h - 2, 0x6b4a30);
+      break;
+    case "autoshotgun":
+      box(sh.len * 0.32, sh.h / 2 - 1, 6, 6, 0x1e2024, 2.5);
+      break;
+    case "heavysniper":
+      scope(0.2, 0.32, 0xff6b6b);
+      box(sh.len * 0.92, -2.5, 3, 5, 0x4a4d55);
+      break;
+    case "grenadelauncher":
+      box(sh.len * 0.25, -sh.h / 2, sh.len * 0.32, sh.h, 0x3c4a34, 3);
+      box(sh.len * 0.55, -2.5, sh.len * 0.45, 5, 0x4a5a3a, 2);
+      break;
+    case "railgun":
+      box(sh.len * 0.5, -sh.h / 2 + 0.5, sh.len * 0.48, 1.6, 0x6bd0ff);
+      box(sh.len * 0.5, sh.h / 2 - 2.1, sh.len * 0.48, 1.6, 0x6bd0ff);
+      scope(0.22, 0.24, 0x6bd0ff);
+      break;
+    case "flamethrower":
+      box(sh.len * 0.12, sh.h / 2 - 1, 8, 7, 0x8a2a1a, 3);
+      box(sh.len * 0.85, -2.5, sh.len * 0.15, 5, 0x4a4d55, 1.5);
+      break;
+    case "claws":
+      ctx.strokeStyle = hex(0x8dff6b);
+      ctx.lineWidth = 1.4;
+      for (const dy of [-3, 0, 3]) {
+        ctx.beginPath();
+        ctx.moveTo(2, dy);
+        ctx.lineTo(sh.len + 1, dy * 1.3);
+        ctx.stroke();
+      }
+      break;
+  }
 }
 
 function drawFoot(): HTMLCanvasElement {

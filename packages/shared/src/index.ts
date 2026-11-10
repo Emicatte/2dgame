@@ -1,4 +1,5 @@
 export * from "./config/career.ts";
+export * from "./config/extraModes.ts";
 export * from "./config/game.ts";
 export * from "./config/modes.ts";
 export * from "./config/party.ts";

@@ -129,7 +129,26 @@ E2E_SHOTS_DIR=/tmp/shots pnpm test:e2e:p2p partymodes.spec   # same, keeping scr
 pnpm --filter @scrapline/server exec tsx scripts/modebench.ts  # tick cost and bandwidth per mode
 ```
 
-## Results (last run: 2026-11-09, v0.7.0 modes expansion, branch `modes-expansion`)
+### New modes, weapons, maps (0.8.0)
+
+```bash
+pnpm --filter @scrapline/server exec vitest run test/newmodes.test.ts test/operations.test.ts
+pnpm --filter @scrapline/shared exec vitest run test/maps.test.ts   # validates Motel Strip and Night Market
+pnpm test:e2e:p2p newmodes.spec                   # one two-browser match per new mode family
+```
+
+## Results (last run: 2026-11-10, v0.8.0, branch `more-content`)
+
+| Suite | Count | Result |
+|---|---|---|
+| Lint (Biome), typecheck (tsc strict, E2E sources included), production build | — | clean (the one older warning) |
+| `packages/shared` unit (+ the two new maps validated, prop counts, every chapter vs operations, the weapon "hits to kill" sanity rule over all 24 weapons) | 118 + 3 skipped | pass |
+| `apps/web` unit (+ visual family of each new weapon) | 145 | pass |
+| `apps/server` unit + integration (+ 13 mode tests: Infection sides, claws, pen immunity, conversion, last-survivor ping, both win conditions; Chaos rule rotation, weapon rule give-back, damage scale, vampire; Bounty scoring, claim and hand-over, point limit; Sabotage plant, fuse, defuse, no respawns, clock, half-time swap, match end; Pursuit checkpoints in order; Convoy truck and wreck; every new mode starts, runs a minute and produces results. + 2 operation playthroughs: Boss Rush's three bosses in order to completion, Extraction's three cases and the helipad) | 235 + 8 skipped | pass |
+| E2E host mode, new modes (`newmodes.spec.ts`, two Chrome processes over WebRTC): Play screen has no planned mode left; Infection sides and role chips on both browsers; Sabotage sites, status line and plant prompt on the guest; Convoy truck, checkpoints and destination on the guest; Chaos rule on both status lines; Bounty target and ping on the guest | 6 | pass (the Chaos check was first written against a 2.6 s banner that had already gone; it now checks the status line) |
+| E2E host mode regressions (`hostmode`, `leave`, `loot`, `partymodes`, `outbreak`) | 15 | 13 pass on the full run. TDM invite + reload failed once (the host tab still "Connecting…" at the first test of the run) and passed twice when rerun alone. **Outbreak First Contact co-op** fails the same way it already failed on `main` before this branch (infected count between the two browsers) |
+
+## Results (2026-11-09, v0.7.0 modes expansion, branch `modes-expansion`)
 
 | Suite | Count | Result |
 |---|---|---|

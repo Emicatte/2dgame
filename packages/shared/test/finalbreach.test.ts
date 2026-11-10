@@ -4,12 +4,14 @@ import { MAPS } from "../src/maps/index.ts";
 import { CAMPAIGN_PLAN, FINAL_BREACH, MISSIONS, type Trigger, ventOnline } from "../src/pve/missions.ts";
 
 describe("Final Breach data", () => {
-  it("completes the campaign: five chapters, each unlocked by the one before", () => {
-    expect(MISSIONS.map((m) => m.chapter)).toEqual(CAMPAIGN_PLAN.map((c) => c.chapter));
-    for (const [i, m] of MISSIONS.entries()) {
+  it("completes the campaign: five chapters, each unlocked by the one before; operations stand alone", () => {
+    const campaign = MISSIONS.filter((m) => m.chapter > 0);
+    expect(campaign.map((m) => m.chapter)).toEqual(CAMPAIGN_PLAN.map((c) => c.chapter));
+    for (const [i, m] of campaign.entries()) {
       if (i === 0) expect(m.requires).toBeUndefined();
-      else expect(m.requires).toBe(MISSIONS[i - 1]!.id);
+      else expect(m.requires).toBe(campaign[i - 1]!.id);
     }
+    for (const m of MISSIONS.filter((x) => x.chapter === 0)) expect(m.requires).toBeUndefined();
     expect(ZOMBIE_LIST.at(-1)!.kind).toBe("subject-zero");
     expect(ZOMBIE_LIST.map((z) => z.index)).toEqual(ZOMBIE_LIST.map((_, i) => i));
   });

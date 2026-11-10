@@ -23,7 +23,7 @@
 | 2 Gun Game | Ladder, demotion, overtime, HUD | Done, tested (unit, host mode, two-browser E2E) |
 | 3 Hide & Seek | Roles, pen and blindfold, exposure rules, three variants, spectating, rotation | Done, tested incl. what a seeker's client receives |
 | 4 Prop Hunt | Transform, lock, taunt, decoy, quick transform, penalty, hints, party map | Done, tested incl. what a hunter's client receives |
-| 5–8 | Infection, Sabotage, Bounty Hunt, Extraction, Chaos Arena, Vehicle Pursuit / Convoy, Boss Rush | Designed, planned (docs/v4/MODES.md §6) |
+| 5–8 | Infection, Sabotage, Bounty Hunt, Extraction, Chaos Arena, Vehicle Pursuit / Convoy, Boss Rush | Done in 0.8.0 (docs/v4/MODES.md §8), simple first versions; not playtested |
 | 9 | More party maps, effects, balance from real playtests | Open |
 | 10 | GPU benchmarks on real hardware, security review, deploy | Open (needs your hardware and approval) |
 

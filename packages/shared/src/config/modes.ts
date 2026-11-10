@@ -19,6 +19,12 @@ export type GameMode =
   | "gungame"
   | "hideseek"
   | "prophunt"
+  | "infection"
+  | "chaos"
+  | "bounty"
+  | "sabotage"
+  | "pursuit"
+  | "convoy"
   | "outbreak"
   | "survival";
 
@@ -31,6 +37,12 @@ export const GAME_MODES: readonly GameMode[] = [
   "gungame",
   "hideseek",
   "prophunt",
+  "infection",
+  "chaos",
+  "bounty",
+  "sabotage",
+  "pursuit",
+  "convoy",
   "outbreak",
   "survival",
 ];
@@ -298,6 +310,177 @@ export const MODES: Record<GameMode, ModeDef> = {
     status: "available",
     flag: "prophunt",
   },
+  infection: {
+    id: "infection",
+    name: "Infection",
+    blurb: "One infected at the start; every survivor eliminated joins the infected.",
+    category: "party",
+    structure: "roles",
+    players: { min: 2, max: 8 },
+    durationLabel: "Rounds of 2:30",
+    rules: [
+      "One player starts infected: fast, melee claws only",
+      "Survivors keep their guns, with endless ammo",
+      "A survivor taken down comes back infected",
+      "Survive the timer to win the round; the first infected rotates",
+    ],
+    respawn: "fast",
+    victory: "Most points after the rounds",
+    scoring: "Survivors: +1 per 10 s alive, +5 surviving the round. Infected: +3 per infection",
+    weapons: "Survivors: loadout primary + sidearm. Infected: claws",
+    vehicles: false,
+    abilities: ["Dash"],
+    hud: "roles",
+    rewards: "Completion, rounds survived, infections, victory",
+    events: ["Last survivor: everyone sees where they are"],
+    joinInProgress: "next-round",
+    disconnect: `Seat held 20 s; a side left empty ends the round. ${rotateRoles}`,
+    quick: false,
+    status: "available",
+    flag: "infection",
+  },
+  chaos: {
+    id: "chaos",
+    name: "Chaos Arena",
+    blurb: "A free-for-all whose rules change every 30–45 seconds.",
+    category: "party",
+    structure: "ffa",
+    players: { min: 1, max: 8 },
+    durationLabel: "8 min",
+    rules: [
+      "Free-for-all: most eliminations wins",
+      "Every 30–45 s a new rule: double damage, rockets only, vampire, regeneration…",
+      "The current rule is always shown at the top of the screen",
+    ],
+    respawn: "timed",
+    victory: "First to the elimination limit, or most eliminations when time runs out",
+    scoring: "1 point per elimination",
+    weapons: "Loadout, chests and pickups; some rules hand everyone the same weapon",
+    vehicles: false,
+    abilities: ["Dash"],
+    hud: "standard",
+    rewards: "Completion, eliminations, placement",
+    events: ["A rule change every 30–45 s"],
+    joinInProgress: "spawn",
+    disconnect: "Seat held 20 s",
+    quick: false,
+    status: "available",
+    flag: "chaos",
+  },
+  bounty: {
+    id: "bounty",
+    name: "Bounty Hunt",
+    blurb: "One marked target scores while alive; whoever takes them down is the next target.",
+    category: "competitive",
+    structure: "ffa",
+    players: { min: 2, max: 8 },
+    durationLabel: "8 min",
+    rules: [
+      "One player is the target: their area is pinged to everyone every few seconds",
+      "The target scores 1 point every 2 s alive",
+      "Take down the target: +5 points, and you become the target",
+      "Other eliminations: +1 point",
+    ],
+    respawn: "timed",
+    victory: "First to the point limit, or most points when time runs out",
+    scoring: "Target: 1 point / 2 s. Bounty claimed: 5. Elimination: 1",
+    weapons: "Loadout primary + sidearm, pickups and chests",
+    vehicles: false,
+    abilities: ["Dash"],
+    hud: "standard",
+    rewards: "Completion, eliminations, placement",
+    events: ["Target pinged every 5 s"],
+    joinInProgress: "spawn",
+    disconnect: "Seat held 20 s; a target who leaves passes the bounty on",
+    quick: false,
+    status: "available",
+    flag: "bounty",
+  },
+  sabotage: {
+    id: "sabotage",
+    name: "Sabotage",
+    blurb: "Rounds of attack and defence: plant the device on a site, or stop it. No respawns in a round.",
+    category: "competitive",
+    structure: "teams",
+    players: { min: 2, max: 8 },
+    durationLabel: "Rounds of 1:40",
+    rules: [
+      "Attackers plant the device on site A or B (hold E for 3 s)",
+      "Defenders defuse it (hold E for 5 s) or hold out until time runs out",
+      "No respawns inside a round; eliminating the other team also wins it",
+      "Sides swap at half time",
+    ],
+    respawn: "round",
+    victory: "Most rounds won",
+    scoring: "1 point per round won",
+    weapons: "Loadout primary + sidearm",
+    vehicles: false,
+    abilities: ["Dash"],
+    hud: "teams",
+    rewards: "Completion, eliminations, victory",
+    events: ["Device planted: 35 s fuse"],
+    joinInProgress: "next-round",
+    disconnect: "Seat held 20 s; a team left empty loses the round",
+    quick: false,
+    status: "available",
+    flag: "sabotage",
+  },
+  pursuit: {
+    id: "pursuit",
+    name: "Vehicle Pursuit",
+    blurb: "Runners cross the map through checkpoints to a destination; interceptors must stop them.",
+    category: "vehicles",
+    structure: "teams",
+    players: { min: 2, max: 8 },
+    durationLabel: "Rounds of 2:30",
+    rules: [
+      "Runners pass every checkpoint in order, then reach the destination (on foot or driving)",
+      "Interceptors stop them until the time runs out",
+      "Respawn after 4 s; sides swap every round",
+    ],
+    respawn: "timed",
+    victory: "Most rounds won",
+    scoring: "1 point per round won",
+    weapons: "Loadout primary + sidearm, vehicles",
+    vehicles: true,
+    abilities: ["Dash", "Vehicles"],
+    hud: "teams",
+    rewards: "Completion, eliminations, victory",
+    events: [],
+    joinInProgress: "spawn",
+    disconnect: "Seat held 20 s",
+    quick: false,
+    status: "available",
+    flag: "pursuit",
+  },
+  convoy: {
+    id: "convoy",
+    name: "Convoy",
+    blurb: "One team escorts an armored truck to its destination, the other intercepts it.",
+    category: "vehicles",
+    structure: "teams",
+    players: { min: 2, max: 8 },
+    durationLabel: "Rounds of 3 min",
+    rules: [
+      "Escorts drive the armored truck through the checkpoints to the destination",
+      "Interceptors win by wrecking the truck or holding out until time runs out",
+      "Respawn after 4 s; sides swap every round",
+    ],
+    respawn: "timed",
+    victory: "Most rounds won",
+    scoring: "1 point per round won",
+    weapons: "Loadout primary + sidearm, vehicles",
+    vehicles: true,
+    abilities: ["Dash", "Vehicles"],
+    hud: "teams",
+    rewards: "Completion, eliminations, victory",
+    events: [],
+    joinInProgress: "spawn",
+    disconnect: "Seat held 20 s",
+    quick: false,
+    status: "available",
+    flag: "convoy",
+  },
   outbreak: {
     id: "outbreak",
     name: "Outbreak",
@@ -363,78 +546,34 @@ export interface PlannedMode {
   needs: string;
 }
 
-export const PLANNED_MODES: readonly PlannedMode[] = [
-  {
-    id: "infection",
-    name: "Infection",
-    blurb: "One infected at the start; every survivor eliminated joins the infected.",
-    category: "party",
-    players: { min: 3, max: 8 },
-    status: "planned",
-    needs: "Roadmap phase 5: infected movement and melee on players, dynamic sides",
-  },
-  {
-    id: "chaos",
-    name: "Chaos Arena",
-    blurb: "A free-for-all whose rules change every 30–60 seconds.",
-    category: "party",
-    players: { min: 2, max: 8 },
-    status: "planned",
-    needs: "Roadmap phase 7: modifier system with compatibility rules and clean resets",
-  },
-  {
-    id: "sabotage",
-    name: "Sabotage",
-    blurb: "Rounds of 2v2: plant the device on a site or stop it. No respawns in a round.",
-    category: "competitive",
-    players: { min: 2, max: 8 },
-    status: "planned",
-    needs: "Roadmap phase 6: compact symmetric maps with two sites",
-  },
-  {
-    id: "bounty",
-    name: "Bounty Hunt",
-    blurb: "One marked target scores while alive; whoever takes them down is the next target.",
-    category: "competitive",
-    players: { min: 3, max: 8 },
-    status: "planned",
-    needs: "Roadmap phase 6: approximate periodic position pings",
-  },
+export const PLANNED_MODES: readonly PlannedMode[] = [];
+
+/**
+ * Co-op operations: Outbreak missions with a card of their own on the Play screen (they run on
+ * the Outbreak systems; the card opens a co-op room with the mission chosen).
+ */
+export interface CoopOperation {
+  id: string;
+  name: string;
+  blurb: string;
+  mission: string;
+  players: { min: number; max: number };
+}
+
+export const COOP_OPERATIONS: readonly CoopOperation[] = [
   {
     id: "extraction",
     name: "Extraction PvE",
     blurb: "Find the cargo, carry it to the extraction point through the infected.",
-    category: "coop",
+    mission: "extraction",
     players: { min: 1, max: 4 },
-    status: "planned",
-    needs: "Roadmap phase 7: carried objective on top of the Outbreak systems",
   },
   {
     id: "bossrush",
     name: "Boss Rush",
     blurb: "The Outbreak bosses back to back, with limited supplies.",
-    category: "coop",
+    mission: "boss-rush",
     players: { min: 1, max: 4 },
-    status: "planned",
-    needs: "Roadmap phase 8: reuses The Warden and Subject Zero from the Outbreak campaign",
-  },
-  {
-    id: "pursuit",
-    name: "Vehicle Pursuit",
-    blurb: "Runners cross the map to a destination; interceptors must stop them.",
-    category: "vehicles",
-    players: { min: 2, max: 8 },
-    status: "planned",
-    needs: "Roadmap phase 8: checkpoints and road routes on the large maps",
-  },
-  {
-    id: "convoy",
-    name: "Convoy",
-    blurb: "One team escorts an armored truck, the other intercepts it.",
-    category: "vehicles",
-    players: { min: 2, max: 8 },
-    status: "planned",
-    needs: "Roadmap phase 8: the escorted truck of The Convoy mission in PvP",
   },
 ];
 
@@ -490,12 +629,12 @@ export function isPveMode(mode: string): boolean {
 
 /** Sides assigned by the server at match start and rotated between rounds (Hide & Seek, Prop Hunt). */
 export function isRoleMode(mode: string): boolean {
-  return mode === "hideseek" || mode === "prophunt";
+  return mode === "hideseek" || mode === "prophunt" || mode === "infection";
 }
 
 /** Rounds inside one match (round stages, round results between them). */
 export function isRoundMode(mode: string): boolean {
-  return isRoleMode(mode);
+  return isRoleMode(mode) || mode === "sabotage" || mode === "pursuit" || mode === "convoy";
 }
 
 /** Co-op squad size limits. */
@@ -520,13 +659,19 @@ export const MODE_SCORE_UNIT: Record<GameMode, string> = {
   gungame: "levels",
   hideseek: "rounds",
   prophunt: "rounds",
+  infection: "rounds",
+  chaos: "eliminations",
+  bounty: "points",
+  sabotage: "rounds",
+  pursuit: "rounds",
+  convoy: "rounds",
   outbreak: "objectives",
   survival: "waves",
 };
 
 /** Modes that only make sense on maps with vehicles. */
 export function modeNeedsVehicles(mode: string): boolean {
-  return mode === "mayhem";
+  return mode === "mayhem" || mode === "pursuit" || mode === "convoy";
 }
 
 /** Vehicles parked on the map are spawned in this mode. */
@@ -536,7 +681,7 @@ export function modeUsesVehicles(mode: string): boolean {
 
 /** Team score comes from objectives only (eliminations do not score). */
 export function modeScoresObjectives(mode: string): boolean {
-  return mode === "dom" || mode === "ctf";
+  return mode === "dom" || mode === "ctf" || mode === "sabotage" || mode === "pursuit" || mode === "convoy";
 }
 
 /**
@@ -613,7 +758,15 @@ export function teamName(team: number): string {
 
 /** Lobby-chosen teams (Alpha / Bravo). Role modes have sides only during the match. */
 export function isTeamMode(mode: string): boolean {
-  return mode === "tdm" || mode === "dom" || mode === "ctf" || mode === "mayhem";
+  return (
+    mode === "tdm" ||
+    mode === "dom" ||
+    mode === "ctf" ||
+    mode === "mayhem" ||
+    mode === "sabotage" ||
+    mode === "pursuit" ||
+    mode === "convoy"
+  );
 }
 
 /** True when `a` may damage `b` under the given rules. Self-damage does not exist. */
@@ -681,6 +834,56 @@ export const MODE_DEFAULTS: Record<GameMode, ModeRules> = {
     mode: "prophunt",
     teamSize: 0,
     maxPlayers: MATCH_DEFAULTS.maxPlayers,
+    durationSec: 20 * 60,
+    scoreLimit: 4,
+    friendlyFire: false,
+  },
+  infection: {
+    mode: "infection",
+    teamSize: 0,
+    maxPlayers: MATCH_DEFAULTS.maxPlayers,
+    durationSec: 20 * 60,
+    scoreLimit: 4,
+    friendlyFire: false,
+  },
+  chaos: {
+    mode: "chaos",
+    teamSize: 0,
+    maxPlayers: MATCH_DEFAULTS.maxPlayers,
+    durationSec: 8 * 60,
+    scoreLimit: 25,
+    friendlyFire: false,
+  },
+  // Bounty: the score limit is in points.
+  bounty: {
+    mode: "bounty",
+    teamSize: 0,
+    maxPlayers: MATCH_DEFAULTS.maxPlayers,
+    durationSec: 8 * 60,
+    scoreLimit: 60,
+    friendlyFire: false,
+  },
+  // Team round modes: `scoreLimit` is the round count, the clock a safety cap.
+  sabotage: {
+    mode: "sabotage",
+    teamSize: 2,
+    maxPlayers: 4,
+    durationSec: 20 * 60,
+    scoreLimit: 6,
+    friendlyFire: false,
+  },
+  pursuit: {
+    mode: "pursuit",
+    teamSize: 2,
+    maxPlayers: 4,
+    durationSec: 20 * 60,
+    scoreLimit: 4,
+    friendlyFire: false,
+  },
+  convoy: {
+    mode: "convoy",
+    teamSize: 2,
+    maxPlayers: 4,
     durationSec: 20 * 60,
     scoreLimit: 4,
     friendlyFire: false,

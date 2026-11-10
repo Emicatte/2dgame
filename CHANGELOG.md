@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.8.0 — unreleased (branch `more-content`)
+
+### Added
+- **Six new modes, playable** (they were "Planned" on the Play screen), each with a server
+  controller shared by the dedicated server and host mode:
+  - **Infection** (party): one infected per eight players with fast melee claws; survivors keep
+    their guns with endless ammo; a fallen survivor comes back infected; the last survivor is
+    pinged to everyone. Rounds, rotating first infected.
+  - **Chaos Arena** (party, free-for-all): the rule changes every 30–45 s (double or triple
+    damage, rockets / snipers / shotguns / miniguns / flamethrowers / railguns only, vampire,
+    regeneration, full shields); weapons are given back when a weapon rule ends.
+  - **Bounty Hunt** (competitive, free-for-all): one target scores while alive and is pinged every
+    5 s (never centred on them); taking them down is worth 5 and makes you the target.
+  - **Sabotage** (competitive, teams): rounds without respawns; attackers plant on site A or B
+    (hold E 3 s), defenders defuse (5 s) before the 35 s fuse; sides swap at half time.
+  - **Vehicle Pursuit** and **Convoy** (vehicles, teams): runners pass two checkpoints and reach
+    the destination; in Convoy only the armored truck counts and the interceptors win by
+    wrecking it. Sides swap every round.
+- **Co-op operations** with their own cards: **Extraction** (three cargo cases on Halvorsen Works,
+  then hold the helipad) and **Boss Rush** (the Abomination, the Warden and Subject Zero back to
+  back in the Final Breach atrium). They are Outbreak missions; the co-op lobby lists them under
+  the campaign.
+- **13 new weapons**: Magnum .44, Hornet MP, Lancer HAR, Sentinel DMR, Viper PDW, Bulldog LMG, Twin
+  Fang, Reaper AS, Thunder .50, Popper GL (explosive), Arc Railgun, Scorcher (flamethrower) in
+  chests (Lancer, Sentinel and Viper also as loadout primaries), and the infected's claws.
+- **Two Prop Hunt maps**: Motel Strip (six rooms, parking lot, drained pool, laundry) and Night
+  Market (stall rows, food court, storeroom, loading dock); also offered for Hide & Seek,
+  Infection, Deathmatch, Gun Game, Chaos and Bounty.
+- Generic mode objective markers (`MatchState.marks`: ring, label, progress, off-screen arrow,
+  "hold E" prompt for a team) and a status line (`MatchState.modeText`); "announce" banners.
+
+### Changed
+- Every Outbreak chapter can be chosen from the start (no campaign lock).
+- Team round modes show the round clock and number instead of the match cap.
+
 ## 0.7.2 — unreleased (branch `leave-match`)
 
 ### Fixed

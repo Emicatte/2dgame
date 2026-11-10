@@ -11,6 +11,8 @@ import {
   type NetEvent,
   PROP_HUNT,
   ROLE,
+  roleText,
+  TEAMS,
   WEAPONS,
 } from "@scrapline/shared";
 import Phaser from "phaser";
@@ -45,15 +47,18 @@ const LABEL_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
 };
 
 const roleName = (mode: string, role: number) =>
-  role === ROLE.SEEKER
-    ? mode === "prophunt"
-      ? "Hunter"
-      : "Seeker"
-    : role === ROLE.HIDER
-      ? mode === "prophunt"
-        ? "Prop"
-        : "Hider"
-      : "Spectator";
+  role === ROLE.SEEKER ? roleText(mode).seeker : role === ROLE.HIDER ? roleText(mode).hider : "Spectator";
+
+/** Ring colour of a mode marker: its team, or amber for neutral ones. */
+const markColor = (c: number) => (c === 1 || c === 2 ? TEAMS[c].color : 0xffc53d);
+
+const MARK_LABEL: Phaser.Types.GameObjects.Text.TextStyle = {
+  fontFamily: "Chakra Petch, sans-serif",
+  fontSize: "13px",
+  color: "#ffffff",
+  stroke: "#0b0c0e",
+  strokeThickness: 4,
+};
 
 /**
  * Client side of Gun Game, Hide & Seek and Prop Hunt: presentation only. It draws what the
@@ -67,6 +72,9 @@ export class ModeLayer {
   private readonly snaps: ObjSnap[] = [];
   private readonly pingGfx: Phaser.GameObjects.Graphics;
   private readonly markGfx: Phaser.GameObjects.Graphics;
+  /** Mode objective markers (MatchState.marks) and their labels. */
+  private readonly objGfx: Phaser.GameObjects.Graphics;
+  private readonly objLabels = new Map<string, Phaser.GameObjects.Text>();
   private readonly spots = new Map<string, number>();
   private readonly bubbles: { text: Phaser.GameObjects.Text; until: number }[] = [];
   private darkOn = false;
@@ -79,6 +87,7 @@ export class ModeLayer {
   ) {
     this.pingGfx = scene.add.graphics().setDepth(31);
     this.markGfx = scene.add.graphics().setDepth(48);
+    this.objGfx = scene.add.graphics().setDepth(32);
     for (const def of DISGUISES) {
       const key = propTextureKey(def.index);
       if (!scene.textures.exists(key))
@@ -249,6 +258,7 @@ export class ModeLayer {
     const now = performance.now();
     this.drawObjects(state, selfId, renderTick, local, role);
     this.drawPings(state, serverTick);
+    this.drawObjectiveMarks(state, cam);
     this.drawMarks(state, selfId, renderTick, now);
     this.updateDark(state, selfId, local, cam, map, dtSec);
     for (let i = this.bubbles.length - 1; i >= 0; i--) {
@@ -336,6 +346,95 @@ export class ModeLayer {
     });
   }
 
+  /**
+   * Mode objective markers: a ring with a label and a progress arc, and an arrow at the screen
+   * edge when the marker is off screen.
+   */
+  private drawObjectiveMarks(state: MatchState, cam: Phaser.Cameras.Scene2D.Camera): void {
+    const g = this.objGfx;
+    g.clear();
+    const seen = new Set<string>();
+    const view = cam.worldView;
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 220);
+    state.marks.forEach((m, id) => {
+      seen.add(id);
+      const color = markColor(m.c);
+      const dim = m.k === "checkpoint" && m.p < 100;
+      const alpha = dim ? 0.35 : 0.85;
+      g.lineStyle(m.k === "target" ? 3 : 4, color, alpha * (m.k === "device" ? 0.6 + pulse * 0.4 : 1));
+      g.strokeCircle(m.x, m.y, m.r);
+      g.fillStyle(color, m.k === "target" ? 0.05 + pulse * 0.05 : 0.08);
+      g.fillCircle(m.x, m.y, m.r);
+      if (m.p > 0 && m.p < 100) {
+        g.lineStyle(6, 0xffffff, 0.9);
+        g.beginPath();
+        g.arc(m.x, m.y, m.r + 8, -Math.PI / 2, -Math.PI / 2 + (m.p / 100) * Math.PI * 2);
+        g.strokePath();
+      }
+      let label = this.objLabels.get(id);
+      if (!label) {
+        label = this.scene.add.text(m.x, m.y, m.l, MARK_LABEL).setOrigin(0.5, 1).setDepth(47);
+        this.objLabels.set(id, label);
+      }
+      if (label.text !== m.l) label.setText(m.l);
+      label.setPosition(m.x, m.y - m.r - 6).setAlpha(dim ? 0.6 : 1);
+      // Off screen: an arrow at the edge pointing to it.
+      const inView = view.contains(m.x, m.y);
+      if (!inView && !dim) {
+        const cx = view.centerX;
+        const cy = view.centerY;
+        const a = Math.atan2(m.y - cy, m.x - cx);
+        const hw = view.width / 2 - 34;
+        const hh = view.height / 2 - 34;
+        const k = Math.min(Math.abs(hw / Math.cos(a)), Math.abs(hh / Math.sin(a)));
+        const ax = cx + Math.cos(a) * k;
+        const ay = cy + Math.sin(a) * k;
+        const s = 14;
+        g.fillStyle(color, 0.95);
+        g.fillTriangle(
+          ax + Math.cos(a) * s,
+          ay + Math.sin(a) * s,
+          ax + Math.cos(a + 2.4) * s,
+          ay + Math.sin(a + 2.4) * s,
+          ax + Math.cos(a - 2.4) * s,
+          ay + Math.sin(a - 2.4) * s,
+        );
+      }
+    });
+    for (const [id, label] of this.objLabels) {
+      if (seen.has(id)) continue;
+      label.destroy();
+      this.objLabels.delete(id);
+    }
+    // Bounty: a red marker over the target when visible.
+    if (state.mode === "bounty")
+      state.players.forEach((p) => {
+        if (p.role !== 1 || !p.alive) return;
+        const y = p.y - 50;
+        g.fillStyle(0xff4d4d, 0.95);
+        g.fillTriangle(p.x - 9, y - 16, p.x + 9, y - 16, p.x, y);
+        g.lineStyle(2, 0xff4d4d, 0.8);
+        g.strokeCircle(p.x, p.y, 30);
+      });
+  }
+
+  /** "Hold E" prompt of the marker the local player stands in (Sabotage plant / defuse). */
+  prompt(
+    state: MatchState,
+    selfId: string,
+    local: { x: number; y: number } | null,
+  ): { text: string; progress: number } | null {
+    const me = state.players.get(selfId);
+    if (!me?.alive || !local) return null;
+    let out: { text: string; progress: number } | null = null;
+    state.marks.forEach((m) => {
+      if (out || !m.a || m.c !== me.team) return;
+      if ((local.x - m.x) ** 2 + (local.y - m.y) ** 2 > m.r * m.r) return;
+      out = { text: m.a, progress: m.p / 100 };
+    });
+    return out;
+  }
+
   /** "!" over hiders who were just spotted (seekers' view). */
   private drawMarks(state: MatchState, selfId: string, _renderTick: number, now: number): void {
     const g = this.markGfx;
@@ -417,32 +516,20 @@ export class ModeLayer {
       case "round": {
         const role = this.myRole(state, selfId);
         const name = roleName(state.mode, role);
+        const text = roleText(state.mode);
         if (ev.s === "prep")
           showBanner(
             `Round ${ev.n}`,
             role === ROLE.SEEKER
-              ? `You are a ${name}: wait for the others to hide`
+              ? text.seekerPrep || `You are a ${name}`
               : role === ROLE.HIDER
-                ? state.mode === "prophunt"
-                  ? "You are a Prop: press Q (or E on an object) to transform"
-                  : "You are a Hider: find a place out of sight"
+                ? text.hiderPrep
                 : "Spectating until the next round",
           );
-        else if (ev.s === "hunt")
-          showBanner(
-            state.mode === "prophunt" ? "The hunt begins" : "Ready or not, here they come",
-            "",
-            "warn",
-          );
+        else if (ev.s === "hunt") showBanner(text.huntBanner, "", "warn");
         else if (ev.s === "break")
           showBanner(
-            ev.w === ROLE.SEEKER
-              ? state.mode === "prophunt"
-                ? "Hunters win the round"
-                : "Seekers win the round"
-              : state.mode === "prophunt"
-                ? "Props win the round"
-                : "Hiders win the round",
+            ev.w === ROLE.SEEKER ? text.seekerWin : text.hiderWin,
             "",
             ev.w === role ? "good" : "info",
           );
@@ -459,7 +546,10 @@ export class ModeLayer {
       case "found": {
         const v = state.players.get(ev.p)?.name ?? "?";
         const by = state.players.get(ev.by)?.name ?? "";
-        if (ev.p === selfId) showBanner("You were found", by ? `by ${by}` : "", "warn");
+        const infection = state.mode === "infection";
+        if (ev.p === selfId)
+          showBanner(infection ? "You were infected" : "You were found", by ? `by ${by}` : "", "warn");
+        else if (infection) showToast(by ? `${by} infected ${v}` : `${v} was infected`);
         else showToast(by ? `${by} found ${v}` : `${v} is out`);
         break;
       }
@@ -492,6 +582,11 @@ export class ModeLayer {
       case "msg":
         if (ev.p === selfId) showToast(ev.s);
         break;
+      case "announce": {
+        const mine = this.me(state, selfId)?.team ?? 0;
+        showBanner(ev.s, ev.d ?? "", ev.w ? (ev.w === mine ? "good" : "warn") : "info");
+        break;
+      }
     }
   }
 
@@ -555,6 +650,9 @@ export class ModeLayer {
     this.spots.clear();
     this.pingGfx.clear();
     this.markGfx.clear();
+    this.objGfx.clear();
+    for (const l of this.objLabels.values()) l.destroy();
+    this.objLabels.clear();
     if (this.darkOn) {
       this.darkOn = false;
       this.lightmap.setActive(false);

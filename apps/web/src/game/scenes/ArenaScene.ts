@@ -336,6 +336,15 @@ export class ArenaScene extends Phaser.Scene {
           pings: st.pings.size,
           players,
           body: this.predictor.body,
+          modeText: st.modeText,
+          marks: (() => {
+            const out: { id: string; k: string; x: number; y: number; l: string; a: string; c: number }[] =
+              [];
+            st.marks.forEach((m, id) => {
+              out.push({ id, k: m.k, x: m.x, y: m.y, l: m.l, a: m.a, c: m.c });
+            });
+            return out;
+          })(),
         };
       },
       vehicles: () => {
@@ -2183,9 +2192,14 @@ export class ArenaScene extends Phaser.Scene {
       this.lastCountdownSec = s;
     }
     const weapon = this.predictor.mount ? null : this.nearbyWeaponPickup();
+    const modePrompt = this.predictorAlive
+      ? this.modes.prompt(state, this.room.sessionId, { x: this.predictor.sim.x, y: this.predictor.sim.y })
+      : null;
     const interact = this.enterTarget
       ? `Enter ${this.enterTarget.def.name} as ${this.enterTarget.def.seats[this.enterTarget.seat]!.role}`
-      : (this.enterBlocked ?? (weapon ? (weapon === CHEST_PROMPT ? weapon : `Take ${weapon}`) : null));
+      : (this.enterBlocked ??
+        modePrompt?.text ??
+        (weapon ? (weapon === CHEST_PROMPT ? weapon : `Take ${weapon}`) : null));
     if (this.pve.active) this.updatePveHud(state, serverTick);
     const killerName = this.killedBy ? (state.players.get(this.killedBy)?.name ?? "someone") : null;
     const keySlots = ["1", "2", "3"];
