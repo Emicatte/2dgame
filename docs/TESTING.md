@@ -144,12 +144,21 @@ pnpm test:e2e:p2p newmodes.spec                   # one two-browser match per ne
 | Lint (Biome), typecheck (tsc strict, E2E sources included) | — | clean (the one older warning) |
 | `packages/shared` unit (+ experience catalog: unique ids, every mode has a card, card maps belong to the mode, planned experiences never start, feature flags, operation ↔ room mapping) | 126 + 3 skipped | pass |
 | `apps/web` unit (+ recently played list) | 147 | pass |
-| `apps/server` unit + integration (unchanged) | 235 + 8 skipped | pass |
+| `apps/server` unit + integration (unchanged; after merging 0.8.1) | 243 + 8 skipped | pass |
 | E2E host mode, home (`home.spec.ts`): one entry per destination, no map picker before the lobby (Play, Discover, experience card, Rooms), Escape closes the card and returns focus, category tile → filtered Discover, sheets go back where they came from, one-click Play → lobby, map and mode chosen in the lobby, "Continue" after a real match. Discover with all 18 map images: 4.5 s in this container (software rendering), longest main-thread task 189 ms | 2 | pass |
 | E2E host mode regressions, moved to the new navigation (`hostmode`, `leave`, `loot`, `newmodes`, `partymodes`, `outbreak`, `vehicles`) | 20 | 19 pass. **Outbreak First Contact co-op** fails at the guest's infected count, as it already did on `main` (see 0.8.0 below). The Gun Game test first failed because Discover kept the Party filter between visits (intended); the test now selects "All" |
 | E2E dedicated server, `teams.spec` (server-mode home, create room, change mode, team invite, join) | 1 | navigation steps pass; fails later at the elimination step, as the dedicated-server specs already did in this environment (~5 FPS software rendering, see 0.7.0 below) |
 
-## Results (last run: 2026-11-10, v0.8.0, branch `more-content`)
+## Results (last run: 2026-11-10, v0.8.1, branch `party-dynamics`)
+
+| Suite | Count | Result |
+|---|---|---|
+| Lint, typecheck (incl. E2E sources), production build | — | clean (the one older warning) |
+| `packages/shared` / `apps/web` unit | 118 + 3 skipped / 145 | pass |
+| `apps/server` unit + integration (+ 8 in `partydynamics.test.ts`: sonar range, offset and recharge; hiders cannot sonar; noise decoy clamped and fading; seekers cannot noise; lights out announced and back; Blackout cycle unannounced; swap keeps ids, places and kinds while ownership moves, recharge, refusal with nothing in range; hunters' sonar; new objects on every party map; transform into a new object) | 243 + 8 skipped | pass. Two co-op tick-cost budget tests failed once while two Chrome processes ran the E2E suite on the same machine; they pass with the machine idle |
+| E2E host mode (`partymodes.spec`, `newmodes.spec`, two Chrome processes over WebRTC), incl. the 2 new ones: picker with 18 objects, swap (V) moves the prop's object id to the nearest object, the hunter's sonar starts its recharge; Hide & Seek seeker sonar and hider noise decoy (a ping reaches the seeker) | 11 | pass |
+
+## Results (2026-11-10, v0.8.0, branch `more-content`)
 
 | Suite | Count | Result |
 |---|---|---|

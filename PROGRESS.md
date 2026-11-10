@@ -3,7 +3,7 @@
 Platform roadmap (multiplayer 2D browser platform). Short on purpose: update at checkpoints only.
 
 **Current phase:** 1 done (home + navigation + catalog). Next: 2 (platform architecture).
-**Branch:** `platform-home` (base `main` 0.8.0). Not deployed; production untouched.
+**Branch:** `platform-home` (base `main` 0.8.1). Not deployed; production untouched.
 
 ## Phase 0 · audit (2026-11-10)
 - `main` = 0.8.0: 16 room modes in `MODES` (shared), one server controller per mode

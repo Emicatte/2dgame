@@ -38,7 +38,8 @@ export function syncModeState(
       if (ps.gg !== 0) ps.gg = 0;
     }
   }
-  if (state.pings.size > 0 && ctl?.mode !== "prophunt") state.pings.clear();
+  // Pings belong to the round modes (hints, sonar, noise decoys); anything else clears them.
+  if (state.pings.size > 0 && !(ctl && "pings" in ctl)) state.pings.clear();
 
   const text = ctl?.statusText() ?? "";
   if (state.modeText !== text) state.modeText = text;
@@ -81,6 +82,7 @@ export function syncModeState(
     if (s.cdT !== a.cdT) s.cdT = a.cdT;
     if (s.cdS !== a.cdS) s.cdS = a.cdS;
     if (s.cdD !== a.cdD) s.cdD = a.cdD;
+    if (s.cdW !== a.cdW) s.cdW = a.cdW;
   }
 
   const objects = ctl?.objectEntries() ?? new Map();

@@ -1,6 +1,6 @@
 import { emptySlot, fullSlot, INFECTION, ROLE, SECONDARY_WEAPON } from "@scrapline/shared";
 import type { ServerPlayer } from "../simulation/GameSimulation.ts";
-import type { MarkData, ModeFacts } from "./ModeController.ts";
+import type { ModeFacts } from "./ModeController.ts";
 import { RoundMode } from "./RoundMode.ts";
 
 /**
@@ -9,7 +9,7 @@ import { RoundMode } from "./RoundMode.ts";
  * survivors win the round if one of them is still standing when the timer runs out.
  *
  * Sides reuse the round machinery: infected = SEEKER (1), survivors = HIDER (2). Nothing is
- * hidden: everybody sees everybody, and the last survivor is pinged to the whole map.
+ * hidden on screen; the last survivor is announced by name only (no position).
  */
 export class InfectionMode extends RoundMode {
   readonly mode = "infection" as const;
@@ -22,20 +22,16 @@ export class InfectionMode extends RoundMode {
   /** Survival points already paid this round, per survivor (units of aliveEverySec). */
   private readonly alivePaid = new Map<string, number>();
   private readonly aliveTicks = new Map<string, number>();
-  private lastPing: { x: number; y: number; name: string } | null = null;
-  private lastPingTick = 0;
 
   override reset(): void {
     this.alivePaid.clear();
     this.aliveTicks.clear();
-    this.lastPing = null;
     super.reset();
   }
 
   protected override onRoundStart(): void {
     this.alivePaid.clear();
     this.aliveTicks.clear();
-    this.lastPing = null;
   }
 
   /** Nothing is secret in Infection. */
@@ -109,31 +105,6 @@ export class InfectionMode extends RoundMode {
         this.alivePaid.set(h.id, units);
       }
     }
-    const last = survivors.length === 1 ? survivors[0]! : null;
-    if (!last) {
-      this.lastPing = null;
-      return;
-    }
-    if (!this.lastPing || this.sim.tick - this.lastPingTick >= this.tickOf(INFECTION.lastSurvivorPingSec)) {
-      this.lastPing = { x: last.sim.x, y: last.sim.y, name: last.name };
-      this.lastPingTick = this.sim.tick;
-    }
-  }
-
-  override markEntries(): Map<string, MarkData> {
-    const out = new Map<string, MarkData>();
-    if (this.lastPing && this.stage === "hunt")
-      out.set("last", {
-        k: "target",
-        x: this.lastPing.x,
-        y: this.lastPing.y,
-        r: 150,
-        c: ROLE.HIDER,
-        p: 0,
-        l: `Last survivor: ${this.lastPing.name}`,
-        a: "",
-      });
-    return out;
   }
 
   override facts(p: ServerPlayer): ModeFacts {

@@ -92,7 +92,33 @@ function PropAbilities() {
         <span>Decoy</span>
         <small>{cd(m.decoyInSec)}</small>
       </div>
+      <div className="prop-bar__item" data-testid="ability-swap">
+        <kbd>V</kbd>
+        <span>Swap</span>
+        <small>{cd(m.swapInSec)}</small>
+      </div>
       <span className="prop-bar__help">{PROP_KEYS_HELP}</span>
+    </div>
+  );
+}
+
+/** G for seekers and hunters (sonar) and for Hide & Seek hiders (noise decoy at the crosshair). */
+function RoleAbility({ seeker }: { seeker: boolean }) {
+  const m = useStore(modeHudStore);
+  if (m.stage !== "hunt") return null;
+  const left = m.abilityInSec;
+  return (
+    <div className="prop-bar" data-testid="role-ability">
+      <div className="prop-bar__item">
+        <kbd>G</kbd>
+        <span>{seeker ? "Sonar" : "Noise decoy"}</span>
+        <small>{left > 0.05 ? `${Math.ceil(left)}s` : "ready"}</small>
+      </div>
+      <span className="prop-bar__help">
+        {seeker
+          ? "Pings everyone hiding around you"
+          : "Throws a fake ping where you aim: send the seekers the wrong way"}
+      </span>
     </div>
   );
 }
@@ -184,6 +210,10 @@ function RoundHud() {
       )}
       {penalty && <div className="penalty-flash" aria-hidden="true" />}
       {s.mode === "prophunt" && m.role === ROLE.HIDER && <PropAbilities />}
+      {s.mode === "prophunt" && m.role === ROLE.SEEKER && <RoleAbility seeker />}
+      {s.mode === "hideseek" && (m.role === ROLE.SEEKER || m.role === ROLE.HIDER) && (
+        <RoleAbility seeker={m.role === ROLE.SEEKER} />
+      )}
       <PropPicker />
       {blind && (
         <div className="blindfold" data-testid="blindfold">

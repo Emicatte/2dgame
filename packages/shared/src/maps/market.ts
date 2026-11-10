@@ -19,10 +19,12 @@ const STALL_PROPS: PropSpotDef["kind"][] = [
   "box",
   "cooler",
   "barrel",
-  "box",
+  "toolbox",
   "crate",
-  "bin",
-  "cooler",
+  "bag",
+  "speaker",
+  "gascan",
+  "tv",
 ];
 let n = 0;
 for (const [r, y] of ROWS.entries()) {
@@ -81,8 +83,8 @@ solids.push(
 
 props.push(
   // Food court
-  { kind: "plant", x: 420, y: 80 },
-  { kind: "bin", x: 200, y: 500 },
+  { kind: "lamp", x: 420, y: 80 },
+  { kind: "bag", x: 200, y: 500 },
   { kind: "plant", x: 420, y: 820 },
   { kind: "bin", x: 200, y: 1150 },
   { kind: "cooler", x: 380, y: 1120 },
@@ -98,26 +100,29 @@ props.push(
   { kind: "box", x: 1960, y: 150, rot: 30 },
   { kind: "barrel", x: 2090, y: 150 },
   { kind: "crate", x: 1900, y: 320 },
-  { kind: "box", x: 2010, y: 300 },
+  { kind: "toolbox", x: 2010, y: 300 },
   { kind: "barrel", x: 2100, y: 420 },
   { kind: "crate", x: 1850, y: 440 },
   // Loading dock
   { kind: "tires", x: 1880, y: 600 },
   { kind: "barrel", x: 2050, y: 620 },
   { kind: "barrel", x: 2090, y: 660 },
-  { kind: "cone", x: 2000, y: 880 },
+  { kind: "gascan", x: 2000, y: 880 },
   { kind: "crate", x: 2100, y: 960 },
   { kind: "tires", x: 1800, y: 1180 },
-  { kind: "box", x: 1880, y: 1300 },
+  { kind: "extinguisher", x: 1880, y: 1300 },
   // South plaza
   { kind: "bin", x: 820, y: 1300 },
   { kind: "plant", x: 1160, y: 1300 },
   { kind: "cone", x: 600, y: 1360 },
   { kind: "cone", x: 1400, y: 1360 },
   { kind: "cooler", x: 1300, y: 1180 },
-  { kind: "tires", x: 600, y: 1200 },
+  { kind: "speaker", x: 600, y: 1200 },
   { kind: "box", x: 1600, y: 1300 },
   { kind: "plant", x: 2100, y: 1160 },
+  { kind: "sofa", x: 380, y: 1250 },
+  { kind: "vending", x: 90, y: 1100 },
+  { kind: "lamp", x: 440, y: 1330 },
 );
 
 const decor: DecorDef[] = [

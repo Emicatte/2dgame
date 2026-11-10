@@ -40,6 +40,7 @@ export interface AllyData {
   cdT: number;
   cdS: number;
   cdD: number;
+  cdW: number;
 }
 
 /** A Prop Hunt object as published (MatchState.disguises). */
