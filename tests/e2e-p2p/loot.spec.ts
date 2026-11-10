@@ -55,7 +55,7 @@ test("chest: loot drops on the ground, weapon taken with E, shield cell kept and
     // and do the whole sequence. The practice bots may shoot the player meanwhile: retry.
     let done = false;
     for (let attempt = 0; attempt < 14 && !done; attempt++) {
-      await teleport(185, 1408);
+      await teleport(185 * 1.375, 1408 * 1.375); // base chest position × ARENA_SCALE
       await page.waitForTimeout(500);
       if ((await drops()).length === 0) {
         if (!(await prompt())?.includes("Open chest")) continue;

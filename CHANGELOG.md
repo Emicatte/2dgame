@@ -2,6 +2,30 @@
 
 ## 0.9.0 — unreleased (branch `platform-home`)
 
+### Changed (arenas about twice the surface)
+- The nine combat arenas (Industrial, Neon, Desert, Urban, Airbase, Harbor, Downtown, Mountain,
+  Tactical Facility) are 1.375× wider and taller (≈1.9× the surface), `maps/expand.ts`: walls and
+  roads stretch, buildings and props keep their size, spawns, pickups, vehicles and objectives move
+  with the layout, and the freed space gets mirrored crate and sandbag cover (never on roads,
+  lanes or helipads). Party and PvE maps are unchanged.
+
+### Added (new modes)
+- **Parkour** (Challenge): seeded 3-lane course with pits (jump them with the dash), sweeping
+  bars, traps and checkpoints; fastest time wins.
+- **Escape Room** (Adventure, 2–4): three rooms locked by a key, pressure plates held together
+  and a switch sequence with its clue on a terminal. **Haunted Facility** is its horror variant
+  (dark, with the maze creature).
+- **Night Hunt** (Horror): one random player hunts the others in the dark maze after 8 s; the
+  survivors escape through the exit or are caught.
+- **Hot Potato** (Party): pass the bomb by touch before the fuse runs out; last one standing.
+- **Free Roam** (Social): drive and explore Scrapline Isle, no weapons, no damage.
+- **Racing**: laps around the flags of the vehicle maps, a car each on a grid.
+- Battle Royale minimap with the storm, the next circle and the bus line.
+- The catalog has no "Planned" cards left: every experience can be started.
+
+### Fixed
+- Battle Royale: picked-up weapons fill empty slots 1 and 2 before the pickup slot.
+
 ### Added (Battle Royale, first scale)
 - **Battle Royale** (Action, up to 16 players for now) on **Scrapline Isle**, a 4096×4096 island of
   16 named districts. Everyone starts on the flying bus, which crosses the island on a different
@@ -55,9 +79,8 @@
 ### Added
 - **Experience catalog** (`packages/shared/src/config/experiences.ts`): eight platform categories
   (Action, Survival, Horror, Party, Adventure, Challenge, Racing, Social) derived from the mode
-  registry and the co-op operations, plus ten planned experiences (Battle Royale, Haunted Facility,
-  Night Hunt, mazes, Parkour, Escape Room, Racing, Hot Potato, Free Roam) shown as "Planned" with
-  what they still need and no way to start them.
+  registry and the co-op operations, first shown as "Planned" for the experiences still to build
+  (all of them are playable by the end of 0.9.0).
 - "Recently played", recorded when a match actually starts. Live "players in public rooms" in the
   top bar on the dedicated server (host mode has no such data and shows nothing).
 ## 0.8.1 — unreleased (branch `party-dynamics`)

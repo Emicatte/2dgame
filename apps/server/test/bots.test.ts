@@ -56,7 +56,7 @@ function facingSpots(sim: GameSimulation): [{ x: number; y: number }, { x: numbe
   for (const a of s)
     for (const b of s) {
       const d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (d > 300 && d < 600 && hasLineOfSight(sim.shotWorld, a.x, a.y, b.x, b.y)) return [a, b];
+      if (d > 300 && d < 800 && hasLineOfSight(sim.shotWorld, a.x, a.y, b.x, b.y)) return [a, b];
     }
   throw new Error("no facing spawns");
 }

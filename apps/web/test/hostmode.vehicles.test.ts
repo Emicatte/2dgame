@@ -1,4 +1,5 @@
 import {
+  ARENA_SCALE,
   airWorldFor,
   BTN,
   C2S,
@@ -29,6 +30,7 @@ import { BUILD_ID } from "../src/p2p/wire.ts";
  * driving, convergence of the predicted car to the host's car once every input is acknowledged.
  */
 const STEP_MS = STEP_DT * 1000;
+const K = ARENA_SCALE; // positions of the base Urban layout
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const rooms: { leave(): Promise<void> }[] = [];
 afterEach(async () => {
@@ -45,10 +47,10 @@ describe("host mode vehicle netcode (120 ms RTT, real time)", () => {
       headless: true,
       debug: {
         spawns: [
-          { x: 700, y: 1230 },
-          { x: 700, y: 1330 },
+          { x: 700 * K, y: 1280 * K - 50 },
+          { x: 700 * K, y: 1280 * K + 50 },
         ],
-        vehicles: [{ kind: "car", x: 700, y: 1280, angle: 0 }],
+        vehicles: [{ kind: "car", x: 700 * K, y: 1280 * K, angle: 0 }],
       },
     });
     rooms.push(host);
@@ -176,7 +178,7 @@ describe("host mode vehicle netcode (120 ms RTT, real time)", () => {
     const snap = metrics.snapshot(performance.now(), predictor);
     const car = host.state.vehicles.get("dbg-0")!;
     const v = predictor.vehicle!;
-    const travelled = Math.hypot(car.x - 700, car.y - 1280);
+    const travelled = Math.hypot(car.x - 700 * K, car.y - 1280 * K);
     console.log(
       `[hostmode vehicles] generated ${snap.generated} pending max ${snap.pendingMaxEver} corrections ${snap.corrections} ` +
         `(snaps ${snap.snaps}, max ${snap.correctionMax}px) car at ${car.x.toFixed(1)},${car.y.toFixed(1)} hp ${car.hp} ` +

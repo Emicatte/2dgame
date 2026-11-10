@@ -36,7 +36,8 @@ async function lobbyFor(page: Page, id: string, mode: string) {
 
 const playing = (page: Page) =>
   page.waitForFunction(
-    () => (window as unknown as { __scrapline?: { phase(): string | null } }).__scrapline?.phase() === "playing",
+    () =>
+      (window as unknown as { __scrapline?: { phase(): string | null } }).__scrapline?.phase() === "playing",
     null,
     { timeout: 30_000 },
   );

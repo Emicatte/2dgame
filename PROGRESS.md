@@ -91,10 +91,26 @@ interest management, then real-player tests on a dedicated server) and 3 (arena 
 - Hosting note: in host mode the host's browser uploads to every guest (50 × 13.9 KB/s ≈
   0.7 MB/s before WebRTC overhead): 32–50 players need the dedicated server, not host mode.
 
+## Phases 6–7, 11 · new modes (done)
+- `MazeMode` drives Classic/Horror Maze, Parkour, Escape Room (+ Haunted Facility), Night Hunt
+  on seeded maps (`maps/maze.ts`, `maps/challenges.ts`): gates (key, switch, plates, sequence),
+  pits, sweepers, traps, checkpoints, hunter role. `PartyModes.ts`: Hot Potato, Free Roam,
+  Racing (laps on the flags of vehicle maps). Catalog: no planned cards left.
+
+## Phase 3 · arenas ×2 (done)
+- `maps/expand.ts`, `ARENA_SCALE` 1.375 on the nine combat arenas (≈1.9× surface): walls and
+  roads stretch, objects keep size, positions scale, mirrored cover fills the open ground.
+  Tests with fixed coordinates now scale them.
+
 ## Open issues
 - Lobby map grid still renders its thumbnails synchronously (pre-existing; cache is warmed by
   the home cards).
 - No friends system: "Rooms" covers private rooms and codes.
+- Not done: BR duo/squad and downed state, chest rarity tiers, interest management and a real
+  32–50 player test (needs the dedicated server: decision and cost pending), Puzzle Race,
+  Hide & Seek+, a broad graphics pass.
+- Pre-existing: Outbreak First Contact co-op E2E fails on main too; dedicated-server E2E flaky
+  in this container.
 
 ## Roadmap
 | Phase | Scope | Status |
@@ -102,12 +118,12 @@ interest management, then real-player tests on a dedicated server) and 3 (arena 
 | 0 | Audit | done |
 | 1 | Home, navigation, catalog | done |
 | 2 | Experience registry wiring, lifecycle, shared interaction system | done (with 6a) |
-| 3 | Arena maps ×2 surface | — |
+| 3 | Arena maps ×2 surface | done (×1.375 per side) |
 | 4 | Bot AI 2.0 (perception, memory, personalities, team radio) | done |
-| 5 | Graphics overhaul + LOW/MEDIUM/HIGH | — |
-| 6 | Non-combat: Classic Maze ✓, Horror Maze ✓, Parkour, Escape Room | in progress |
-| 7 | Horror overhaul: Horror Maze creature + director ✓; Haunted Facility, Night Hunt | in progress |
+| 5 | Graphics overhaul + LOW/MEDIUM/HIGH | presets existed already; no broad art pass |
+| 6 | Non-combat: Classic Maze, Horror Maze, Parkour, Escape Room | done |
+| 7 | Horror: Horror Maze creature + director, Haunted Facility, Night Hunt | done |
 | 8–9 | Battle Royale map, bus, drop, loot, storm, victory (≤16) | done (first scale) |
 | 10 | BR scaling 8→50: interest management, real-player tests, dedicated server | measured sim only |
-| 11 | Racing, Hide & Seek+, Hot Potato, Puzzle Race, Free Roam | — |
-| 12 | Polish & release | — |
+| 11 | Racing, Hot Potato, Free Roam done; Puzzle Race, Hide & Seek+ not done | partial |
+| 12 | Polish & release | docs updated; merge/deploy awaits approval |

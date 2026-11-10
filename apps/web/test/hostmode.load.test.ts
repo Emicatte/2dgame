@@ -1,8 +1,10 @@
 import {
+  ARENA_SCALE,
   BTN,
   C2S,
   encodeInput,
   type InputFrame,
+  MAPS,
   type MatchState,
   quantizeInput,
   SERVER_TICK_MS,
@@ -25,16 +27,14 @@ afterEach(async () => {
   for (const r of rooms.splice(0)) await r.leave();
 });
 
+// Alpha: beside the car, APC and rover of the west street; Bravo: their mirrors; one walker each.
+const V = MAPS.urban.vehicleSpawns!;
+const beside = (v: (typeof V)[number]) => ({ x: v.x + (v.x < MAPS.urban.width / 2 ? 48 : -48), y: v.y });
 const SPAWNS = [
-  // Alpha: beside the car, APC and rover of the west street; Bravo: their mirrors.
-  { x: 400, y: 820 },
-  { x: 400, y: 1280 },
-  { x: 400, y: 1760 },
-  { x: 300, y: 1050 },
-  { x: 3184, y: 1740 },
-  { x: 3184, y: 1280 },
-  { x: 3184, y: 800 },
-  { x: 3284, y: 1510 },
+  ...V.slice(0, 3).map(beside),
+  { x: 300 * ARENA_SCALE, y: 1050 * ARENA_SCALE },
+  ...V.slice(3, 6).map(beside),
+  { x: 3284 * ARENA_SCALE, y: 1510 * ARENA_SCALE },
 ];
 
 describe("host mode under load (8 players, 6 vehicles)", () => {

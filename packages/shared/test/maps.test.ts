@@ -143,3 +143,16 @@ describe("maps", () => {
     expect(isFreeSpot(world, map.spawns[0]!)).toBe(true);
   });
 });
+
+describe("expanded arenas", () => {
+  it("are about twice the surface, with extra cover, and objects keep their size", async () => {
+    const { ARENA_SCALE } = await import("../src/maps/expand.ts");
+    for (const id of ["industrial", "neon", "desert", "urban", "facility"] as const) {
+      const m = MAPS[id];
+      const area = (m.width * m.height) / ((m.width / ARENA_SCALE) * (m.height / ARENA_SCALE));
+      expect(area).toBeGreaterThan(1.8);
+      expect(area).toBeLessThan(2.1);
+      expect(m.solids.some((s) => s.kind === "crate" && s.w === 56)).toBe(true);
+    }
+  });
+});

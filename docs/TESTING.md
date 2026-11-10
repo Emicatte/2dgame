@@ -137,6 +137,14 @@ pnpm --filter @scrapline/shared exec vitest run test/maps.test.ts   # validates 
 pnpm test:e2e:p2p newmodes.spec                   # one two-browser match per new mode family
 ```
 
+## Results (2026-11-10, v0.9.0 new modes + bigger arenas, branch `platform-home`)
+
+| Suite | Count | Result |
+|---|---|---|
+| Lint, typecheck | — | clean (the one older warning) |
+| Unit: shared (+ expanded arenas: size, spawns and pickups clear and inside, cover off roads; challenge maps) / web (host load and vehicles on the bigger Urban) / server (+ Parkour, Escape Room, Night Hunt, Hot Potato, Free Roam, Racing, BR slots) | 135 + 3 skipped / 147 / 265 + 8 skipped | pass |
+| E2E host mode: `home`, `hostmode`, `vehicles`, `loot`, Survival boss, `platform` (new-mode lobbies; Parkour, Free Roam, Racing start) | 9 | pass |
+
 ## Results (2026-11-10, v0.9.0 platform phases, branch `platform-home`)
 
 | Suite | Count | Result |

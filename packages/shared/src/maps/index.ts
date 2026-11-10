@@ -14,9 +14,13 @@ import { SALVAGE_DEPOT } from "./depot.ts";
 import { DESERT_OUTPOST } from "./desert.ts";
 import { DEAD_DISTRICT } from "./district.ts";
 import { DOWNTOWN } from "./downtown.ts";
+import { expandArena } from "./expand.ts";
 import { TACTICAL_FACILITY } from "./facility.ts";
 import { HARBOR_CONFLICT } from "./harbor.ts";
 import { INDUSTRIAL_ARENA } from "./industrial.ts";
+
+export { ARENA_SCALE } from "./expand.ts";
+
 import { buildIsland } from "./island.ts";
 import { NIGHT_MARKET } from "./market.ts";
 import { buildMaze, MAZE_DEFAULT_IDS, parseMazeId } from "./maze.ts";
@@ -57,8 +61,24 @@ const BASE_MAPS: Record<
   island: buildIsland(2026),
 };
 
+/** Arenas grown to about twice their surface (see expand.ts); party and PvE maps stay as built. */
+const EXPANDED = new Set([
+  "industrial",
+  "neon",
+  "desert",
+  "urban",
+  "airbase",
+  "harbor",
+  "downtown",
+  "mountain",
+  "facility",
+]);
+
 const LISTED: Record<string, MapDef> = Object.fromEntries([
-  ...Object.entries(BASE_MAPS).map(([id, m]) => [id, withChests(m)]),
+  ...Object.entries(BASE_MAPS).map(([id, m]) => [
+    id,
+    EXPANDED.has(id) ? expandArena(withChests(m)) : withChests(m),
+  ]),
   ...MAZE_DEFAULT_IDS.map((id) => {
     const p = parseMazeId(id)!;
     return [id, buildMaze(p.size, p.seed)];
