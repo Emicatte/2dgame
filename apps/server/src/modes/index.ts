@@ -11,6 +11,7 @@ import type { ModeController } from "./ModeController.ts";
 import { FreeRoamMode, HotPotatoMode, RacingMode } from "./PartyModes.ts";
 import { PropHuntMode } from "./PropHunt.ts";
 import { PursuitMode } from "./Pursuit.ts";
+import { PuzzleRaceMode } from "./PuzzleRace.ts";
 import { SabotageMode } from "./Sabotage.ts";
 
 export type { ModeController } from "./ModeController.ts";
@@ -43,6 +44,8 @@ export function createModeController(mode: GameMode, sim: GameSimulation): ModeC
     case "escape":
     case "nighthunt":
       return new MazeMode(sim, mode);
+    case "puzzlerace":
+      return new PuzzleRaceMode(sim);
     case "battleroyale":
       return new BattleRoyaleMode(sim);
     case "hotpotato":

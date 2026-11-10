@@ -2,7 +2,7 @@ import { type Browser, chromium, expect, type Page, test } from "@playwright/tes
 
 /**
  * Every platform experience added after the home overhaul opens a lobby from its card; the solo
- * ones start and run (Parkour, Free Roam, Racing).
+ * ones start and run (Parkour, Free Roam, Racing, Puzzle Race).
  */
 
 const CHROME = process.env.CHROME_PATH ?? "/usr/bin/google-chrome";
@@ -58,12 +58,13 @@ test("new experiences open their lobby; group ones ask for players", async () =>
   }
 });
 
-test("Parkour, Free Roam and Racing start solo", async () => {
+test("Parkour, Free Roam, Racing and Puzzle Race start solo", async () => {
   const page = await open();
   for (const [id, mode, status] of [
     ["parkour", "Parkour Challenge", "finished"],
     ["freeroam", "Free Roam", "no damage"],
     ["racing", "Vehicle Racing", "3 laps"],
+    ["puzzlerace", "Puzzle Race", "Code:"],
   ] as const) {
     await lobbyFor(page, id, mode);
     await page.getByTestId("start-match").click();

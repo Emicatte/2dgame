@@ -44,7 +44,7 @@ export class MazeMode extends BaseMode {
   ) {
     super(sim);
   }
-  private open = new Set<string>();
+  protected open = new Set<string>();
   /** Key carriers by gate id. */
   private carrier = new Map<string, string>();
   private checkpoint = new Map<string, number>();
@@ -56,11 +56,11 @@ export class MazeMode extends BaseMode {
   monster: MazeMonster | null = null;
 
   /** Ticks per second. */
-  private get rate(): number {
+  protected get rate(): number {
     return this.sim.secToTicks(1);
   }
 
-  private get maze(): MazeDef | undefined {
+  protected get maze(): MazeDef | undefined {
     return this.sim.map.maze;
   }
 
@@ -111,7 +111,7 @@ export class MazeMode extends BaseMode {
     this.monster?.noise(p.sim.x, p.sim.y, 300);
   }
 
-  private applyWorld(): void {
+  protected applyWorld(): void {
     const maze = this.maze;
     if (!maze) return;
     const w = pveWorlds(this.sim.map, maze.gates, this.open);

@@ -379,7 +379,7 @@ export function buildMaze(size: MazeSize, seed: number): MapDef {
     lights,
     spawns,
     pickups: [],
-    modes: ["maze", "nighthunt"],
+    modes: ["maze", "nighthunt", "puzzlerace"],
     players: { min: 1, max: 8 },
     maze,
   };

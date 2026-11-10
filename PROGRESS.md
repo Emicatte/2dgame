@@ -102,13 +102,17 @@ interest management, then real-player tests on a dedicated server) and 3 (arena 
   roads stretch, objects keep size, positions scale, mirrored cover fills the open ground.
   Tests with fixed coordinates now scale them.
 
+## Phase 11 rest + graphics pass (done)
+- `PuzzleRace.ts` (on `MazeMode`, gates open, per-player codes); Hide & Seek "closing" variant
+  (shrinking safe zone in `HideSeek.ts`, `zone` mark). Graphics: outskirts tile, edge curb,
+  ambient occlusion in the baked shadows, ColorMatrix grade (`fxBudget.grade`).
+
 ## Open issues
 - Lobby map grid still renders its thumbnails synchronously (pre-existing; cache is warmed by
   the home cards).
 - No friends system: "Rooms" covers private rooms and codes.
 - Not done: BR duo/squad and downed state, chest rarity tiers, interest management and a real
-  32–50 player test (needs the dedicated server: decision and cost pending), Puzzle Race,
-  Hide & Seek+, a broad graphics pass.
+  32–50 player test (needs the dedicated server: decision and cost pending).
 - Pre-existing: Outbreak First Contact co-op E2E fails on main too; dedicated-server E2E flaky
   in this container.
 
@@ -120,10 +124,10 @@ interest management, then real-player tests on a dedicated server) and 3 (arena 
 | 2 | Experience registry wiring, lifecycle, shared interaction system | done (with 6a) |
 | 3 | Arena maps ×2 surface | done (×1.375 per side) |
 | 4 | Bot AI 2.0 (perception, memory, personalities, team radio) | done |
-| 5 | Graphics overhaul + LOW/MEDIUM/HIGH | presets existed already; no broad art pass |
+| 5 | Graphics overhaul + LOW/MEDIUM/HIGH | done (presets + outskirts, AO, grade) |
 | 6 | Non-combat: Classic Maze, Horror Maze, Parkour, Escape Room | done |
 | 7 | Horror: Horror Maze creature + director, Haunted Facility, Night Hunt | done |
 | 8–9 | Battle Royale map, bus, drop, loot, storm, victory (≤16) | done (first scale) |
 | 10 | BR scaling 8→50: interest management, real-player tests, dedicated server | measured sim only |
-| 11 | Racing, Hot Potato, Free Roam done; Puzzle Race, Hide & Seek+ not done | partial |
-| 12 | Polish & release | docs updated; merge/deploy awaits approval |
+| 11 | Racing, Hot Potato, Free Roam, Puzzle Race, Hide & Seek Closing zone | done |
+| 12 | Polish & release | merged to main (0.9.0) |

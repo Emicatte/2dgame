@@ -137,6 +137,14 @@ pnpm --filter @scrapline/shared exec vitest run test/maps.test.ts   # validates 
 pnpm test:e2e:p2p newmodes.spec                   # one two-browser match per new mode family
 ```
 
+## Results (2026-11-10, v0.9.0 Puzzle Race, Closing zone, graphics pass)
+
+| Suite | Count | Result |
+|---|---|---|
+| Lint, typecheck | — | clean (the one older warning) |
+| Unit: shared / web / server (+ Puzzle Race order, reset, win; Closing zone reveal) | 135 + 3 skipped / 147 / 267 + 8 skipped | pass |
+| E2E host mode: `platform` (incl. Puzzle Race solo start), `home`, `hostmode` | 7 | pass |
+
 ## Results (2026-11-10, v0.9.0 new modes + bigger arenas, branch `platform-home`)
 
 | Suite | Count | Result |

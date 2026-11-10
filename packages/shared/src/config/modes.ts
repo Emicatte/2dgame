@@ -34,7 +34,8 @@ export type GameMode =
   | "nighthunt"
   | "hotpotato"
   | "freeroam"
-  | "racing";
+  | "racing"
+  | "puzzlerace";
 
 export const GAME_MODES: readonly GameMode[] = [
   "deathmatch",
@@ -61,6 +62,7 @@ export const GAME_MODES: readonly GameMode[] = [
   "hotpotato",
   "freeroam",
   "racing",
+  "puzzlerace",
 ];
 
 export type ModeCategory = "competitive" | "party" | "coop" | "vehicles" | "challenge";
@@ -680,6 +682,20 @@ export const MODES: Record<GameMode, ModeDef> = {
     ["No damage between players", "Vehicles on the roads", "Explore the districts"],
     { vehicles: true, victory: "None", scoring: "None" },
   ),
+  puzzlerace: lite(
+    "puzzlerace",
+    "Puzzle Race",
+    "Four switches hide in the maze. Press them in the order of the code before anyone else.",
+    "challenge",
+    { min: 1, max: 8 },
+    "6 min",
+    [
+      "Every player solves the same code on their own",
+      "A wrong switch resets your code",
+      "First to solve scores; a new code follows",
+    ],
+    { victory: "First to the puzzle count", scoring: "Puzzles solved" },
+  ),
   racing: lite(
     "racing",
     "Vehicle Racing",
@@ -865,6 +881,7 @@ export const MODE_SCORE_UNIT: Record<GameMode, string> = {
   hotpotato: "rounds",
   freeroam: "points",
   racing: "laps",
+  puzzlerace: "puzzles",
 };
 
 /** Modes that only make sense on maps with vehicles. */
@@ -1160,6 +1177,14 @@ export const MODE_DEFAULTS: Record<GameMode, ModeRules> = {
     scoreLimit: 0,
     friendlyFire: false,
   },
+  puzzlerace: {
+    mode: "puzzlerace",
+    teamSize: 0,
+    maxPlayers: 8,
+    durationSec: 6 * 60,
+    scoreLimit: 3,
+    friendlyFire: false,
+  },
   racing: {
     mode: "racing",
     teamSize: 0,
@@ -1184,6 +1209,11 @@ export const MODE_VARIANTS: Partial<
       id: "blackout",
       name: "Blackout",
       blurb: "The lights go out periodically; the seeker has a flashlight.",
+    },
+    {
+      id: "closing",
+      name: "Closing zone",
+      blurb: "A safe zone shrinks during the hunt: hiders caught outside it are revealed.",
     },
   ],
   prophunt: [{ id: "classic", name: "Classic", blurb: "Props vs hunters, sides swap every round." }],

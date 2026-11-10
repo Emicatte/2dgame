@@ -69,6 +69,8 @@ export const HIDE_SEEK = {
   seekerWeapons: ["smg", "pistol"] as readonly WeaponId[],
   points: { hiddenEverySec: 10, hidden: 1, survive: 5, find: 3 },
   blackout: { onSec: 22, offSec: 14 },
+  /** "Closing" variant: from this share of the hunt a safe zone shrinks; hiders outside it are seen. */
+  zone: { fromShare: 0.4, endRadius: 520 },
 } as const;
 
 // ------------------------------------------------------------------ Prop Hunt

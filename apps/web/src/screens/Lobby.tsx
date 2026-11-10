@@ -64,6 +64,7 @@ const SCORE_LIMITS: Record<GameMode, number[]> = {
   hotpotato: [],
   freeroam: [],
   racing: [1, 2, 3, 5],
+  puzzlerace: [1, 3, 5],
 };
 
 export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {

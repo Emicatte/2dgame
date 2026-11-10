@@ -51,6 +51,8 @@ export interface FxBudget {
   lightMinIntensity: number;
   /** Camera vignette filter. */
   vignette: boolean;
+  /** Camera colour grade (saturation and contrast). */
+  grade: boolean;
 }
 
 export const FX_BUDGETS: Readonly<Record<GraphicsQuality, FxBudget>> = {
@@ -76,6 +78,7 @@ export const FX_BUDGETS: Readonly<Record<GraphicsQuality, FxBudget>> = {
     impactLights: false,
     lightMinIntensity: 0.45,
     vignette: false,
+    grade: false,
   },
   medium: {
     tracers: 40,
@@ -98,6 +101,7 @@ export const FX_BUDGETS: Readonly<Record<GraphicsQuality, FxBudget>> = {
     impactLights: false,
     lightMinIntensity: 0.25,
     vignette: false,
+    grade: true,
   },
   high: {
     tracers: 64,
@@ -120,6 +124,7 @@ export const FX_BUDGETS: Readonly<Record<GraphicsQuality, FxBudget>> = {
     impactLights: true,
     lightMinIntensity: 0,
     vignette: true,
+    grade: true,
   },
 };
 

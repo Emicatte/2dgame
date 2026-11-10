@@ -2,6 +2,15 @@
 
 ## 0.9.0 — unreleased (branch `platform-home`)
 
+### Added (Puzzle Race, Hide & Seek Closing zone, graphics)
+- **Puzzle Race** (Challenge, 1–8): four lettered switches in a maze with every gate open; press
+  them in the order of the code before the others (a wrong switch resets your code); first to
+  the lobby's puzzle count (1/3/5) wins.
+- **Hide & Seek · Closing zone** variant: from 40% of the hunt a safe zone shrinks towards a
+  hiding area; hiders outside it are revealed to the seekers.
+- Graphics: ground beyond the map edge (no more flat void near the borders), a lit curb on the
+  edge, soft ambient occlusion around every solid, colour grade on Medium and High.
+
 ### Changed (arenas about twice the surface)
 - The nine combat arenas (Industrial, Neon, Desert, Urban, Airbase, Harbor, Downtown, Mountain,
   Tactical Facility) are 1.375× wider and taller (≈1.9× the surface), `maps/expand.ts`: walls and

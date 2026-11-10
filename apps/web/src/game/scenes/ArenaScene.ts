@@ -68,7 +68,7 @@ import Phaser from "phaser";
 import { keyLabel, settingsStore } from "../../lib/settings.ts";
 import { gameEvents, session, sessionStore } from "../../net/session.ts";
 import { currentLoadout } from "../../state/profile.ts";
-import { renderMap } from "../art/mapRenderer.ts";
+import { renderMap, renderOutskirts } from "../art/mapRenderer.ts";
 import { TEX, TEX_SCALE } from "../art/textures.ts";
 import { score } from "../audio/score.ts";
 import { sfx } from "../audio/sfx.ts";
@@ -199,6 +199,7 @@ export class ArenaScene extends Phaser.Scene {
   private zoomFactor = 1;
   private engineTimer = 0;
   private mapTiles: Phaser.GameObjects.Image[] = [];
+  private outskirts?: Phaser.GameObjects.TileSprite;
   private pendingMap: MapId | null = null;
   private pointViews = new Map<string, PointView>();
   private flagViews = new Map<string, FlagView>();
@@ -614,6 +615,12 @@ export class ArenaScene extends Phaser.Scene {
       cam.filters.external.clear();
       // The vignette is a full-screen pass: High only.
       if (budget.vignette) cam.filters.external.addVignette(0.5, 0.5, 0.95, 0.35);
+      // Colour grade (Medium and High): a touch more saturation and contrast.
+      if (budget.grade) {
+        const cm = cam.filters.external.addColorMatrix().colorMatrix;
+        cm.saturate(0.12);
+        cm.contrast(0.06, true);
+      }
     }
   }
 
@@ -663,6 +670,15 @@ export class ArenaScene extends Phaser.Scene {
       this.mapImage = this.add.image(0, 0, key).setOrigin(0).setDepth(0);
     }
     this.cameras.main.setBackgroundColor(map.theme.fog);
+    // Ground beyond the edge (one repeating tile), under the map.
+    const outKey = `outskirts-${map.id}`;
+    if (!this.textures.exists(outKey)) this.addStaticCanvas(outKey, renderOutskirts(map));
+    const PAD = 1600;
+    this.outskirts?.destroy();
+    this.outskirts = this.add
+      .tileSprite(-PAD, -PAD, map.width + PAD * 2, map.height + PAD * 2, outKey)
+      .setOrigin(0)
+      .setDepth(-1);
 
     for (const l of this.lightImages) l.img.destroy();
     this.lightImages = map.lights.map((l, i) => ({

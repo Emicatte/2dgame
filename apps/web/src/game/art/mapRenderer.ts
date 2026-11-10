@@ -32,6 +32,24 @@ export function renderMap(map: MapDef, scale = 1, opts: { props?: boolean } = {}
 }
 
 /**
+ * The ground beyond the map edge, as a repeating tile: the theme's floor sunk into its shadow, with
+ * grain and slab seams, so the camera never shows a flat void near the edges.
+ */
+export function renderOutskirts(map: MapDef): HTMLCanvasElement {
+  const t = map.theme;
+  const [c, ctx] = makeCanvas(PATTERN, PATTERN);
+  const rand = mulberry32(hashString(`${map.id}-out`));
+  ctx.fillStyle = hex(shade(t.floor, -0.62));
+  ctx.fillRect(0, 0, PATTERN, PATTERN);
+  speckle(ctx, 0, 0, PATTERN, PATTERN, 0.004, rand, shade(t.floorAlt, -0.4), 0.5, 3);
+  speckle(ctx, 0, 0, PATTERN, PATTERN, 0.002, rand, t.shadow, 0.6, 2);
+  ctx.fillStyle = hex(t.shadow, 0.5);
+  ctx.fillRect(0, PATTERN / 2, PATTERN, 2);
+  ctx.fillRect(PATTERN / 2, 0, 2, PATTERN);
+  return c;
+}
+
+/**
  * Party maps: dark corners, hiding spots and the transformable objects. Prop Hunt draws its objects
  * live (real and disguised alike), so the baked map leaves them out there (`props: false`).
  */
@@ -448,6 +466,9 @@ function drawShadows(ctx: CanvasRenderingContext2D, map: MapDef) {
   const k = 1 / 8;
   const [sc, sctx] = makeCanvas(map.width * k, map.height * k);
   sctx.scale(k, k);
+  // Ambient occlusion: a soft dark halo around every solid (blurred by the 1/8 upscale).
+  sctx.fillStyle = hex(map.theme.shadow, 0.28);
+  for (const s of map.solids) if (s.kind !== "water") sctx.fillRect(s.x - 14, s.y - 14, s.w + 28, s.h + 28);
   sctx.fillStyle = hex(map.theme.shadow, 0.6);
   for (const s of map.solids) {
     if (s.kind === "water") continue;
@@ -828,6 +849,10 @@ function drawBorder(ctx: CanvasRenderingContext2D, map: MapDef) {
   ctx.fillRect(0, map.height - 6, map.width, 6);
   ctx.fillRect(0, 0, 6, map.height);
   ctx.fillRect(map.width - 6, 0, 6, map.height);
+  // A lit curb just inside the edge: the map's limit reads clearly against the outskirts.
+  ctx.strokeStyle = hex(shade(map.theme.floor, 0.3), 0.45);
+  ctx.lineWidth = 2;
+  ctx.strokeRect(7, 7, map.width - 14, map.height - 14);
   const g = ctx.createLinearGradient(0, 0, b * 4, 0);
   g.addColorStop(0, hex(map.theme.shadow, 0.5));
   g.addColorStop(1, hex(map.theme.shadow, 0));
