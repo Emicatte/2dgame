@@ -202,6 +202,145 @@ export function drawPropShape(ctx: CanvasRenderingContext2D, def: DisguiseDef): 
       ctx.fillRect(x + w - 13, y + 15, 6, 4);
       break;
     }
+    case "lamp": {
+      // Floor lamp from above: a round shade with the bulb glow.
+      const r = w / 2;
+      ctx.fillStyle = hex(0x6b5a3a);
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0xd9c48a);
+      ctx.beginPath();
+      ctx.arc(0, -1, r - 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0xfff1c0, 0.95);
+      ctx.beginPath();
+      ctx.arc(0, -1, r * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "tv": {
+      ctx.fillStyle = hex(0x2a2a2e);
+      rr(ctx, x, y, w, h, 4);
+      ctx.fill();
+      ctx.fillStyle = hex(0x3c3c42);
+      rr(ctx, x + 2, y + 2, w - 4, h - 6, 4);
+      ctx.fill();
+      ctx.fillStyle = hex(0x4f6b7a);
+      rr(ctx, x + 5, y + 5, w - 16, h - 12, 5);
+      ctx.fill();
+      ctx.fillStyle = hex(0xffffff, 0.18);
+      ctx.fillRect(x + 7, y + 7, w - 22, 3);
+      ctx.fillStyle = hex(0x9a9a9a);
+      ctx.beginPath();
+      ctx.arc(x + w - 6, y + 9, 2, 0, Math.PI * 2);
+      ctx.arc(x + w - 6, y + 16, 2, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "bag": {
+      // Black trash bag: a lumpy blob with a knot.
+      ctx.fillStyle = hex(0x1b1d22);
+      ctx.beginPath();
+      ctx.ellipse(0, 1, w / 2, h / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0x2c3038);
+      ctx.beginPath();
+      ctx.ellipse(-3, -1, w / 2 - 4, h / 2 - 4, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0x4a505c, 0.8);
+      ctx.beginPath();
+      ctx.ellipse(-6, -5, 5, 3, 0.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0x101114);
+      ctx.beginPath();
+      ctx.arc(w / 2 - 6, -h / 2 + 6, 3, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "toolbox": {
+      ctx.fillStyle = hex(0x8a1f1f);
+      rr(ctx, x, y, w, h, 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0xc0392b);
+      rr(ctx, x + 1, y + 1, w - 2, h - 4, 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0x2a2a2e);
+      ctx.fillRect(x + w / 2 - 7, y + 3, 14, 3);
+      ctx.fillStyle = hex(0xd0d0d0);
+      ctx.fillRect(x + 3, y + h / 2, 3, 3);
+      ctx.fillRect(x + w - 6, y + h / 2, 3, 3);
+      break;
+    }
+    case "extinguisher": {
+      const r = w / 2;
+      ctx.fillStyle = hex(0x8a1a12);
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0xd8352a);
+      ctx.beginPath();
+      ctx.arc(0, -1, r - 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0x2a2a2e);
+      ctx.fillRect(-2, -r, 4, r);
+      ctx.fillRect(0, -r, r + 2, 3);
+      break;
+    }
+    case "gascan": {
+      ctx.fillStyle = hex(0x9a3a12);
+      rr(ctx, x, y, w, h, 3);
+      ctx.fill();
+      ctx.fillStyle = hex(0xd9581f);
+      rr(ctx, x + 1, y + 1, w - 2, h - 4, 3);
+      ctx.fill();
+      ctx.strokeStyle = hex(0x9a3a12);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y + 4);
+      ctx.lineTo(x + w - 8, y + h - 7);
+      ctx.stroke();
+      ctx.fillStyle = hex(0x2a2a2e);
+      ctx.fillRect(x + w - 6, y + 2, 4, 6);
+      break;
+    }
+    case "sofa": {
+      ctx.fillStyle = hex(0x3a2a4a);
+      rr(ctx, x, y, w, h, 7);
+      ctx.fill();
+      ctx.fillStyle = hex(0x5a4272);
+      rr(ctx, x + 2, y + 2, w - 4, 10, 5);
+      ctx.fill();
+      ctx.fillStyle = hex(0x6d5288);
+      rr(ctx, x + 7, y + 12, w / 2 - 9, h - 17, 4);
+      ctx.fill();
+      rr(ctx, 2, y + 12, w / 2 - 9, h - 17, 4);
+      ctx.fill();
+      ctx.fillStyle = hex(0x4a3560);
+      rr(ctx, x + 1, y + 10, 6, h - 13, 3);
+      ctx.fill();
+      rr(ctx, x + w - 7, y + 10, 6, h - 13, 3);
+      ctx.fill();
+      break;
+    }
+    case "speaker": {
+      ctx.fillStyle = hex(0x18191c);
+      rr(ctx, x, y, w, h, 3);
+      ctx.fill();
+      ctx.fillStyle = hex(0x26282d);
+      rr(ctx, x + 1, y + 1, w - 2, h - 4, 3);
+      ctx.fill();
+      ctx.fillStyle = hex(0x0e0f11);
+      ctx.beginPath();
+      ctx.arc(0, 2, w * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0x3a3d44);
+      ctx.beginPath();
+      ctx.arc(0, 2, w * 0.12, 0, Math.PI * 2);
+      ctx.arc(0, y + 6, 3, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
   }
 }
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.8.1 — unreleased (branch `party-dynamics`)
+
+### Changed
+- **Infection**: the last survivor is no longer marked on the map (it made the hunt too easy);
+  they are only announced by name.
+- **Hide & Seek and Prop Hunt, more dynamic**:
+  - **Sonar (G)** for seekers and hunters: pings (approximately, never centred) everyone hiding
+    within 450 px; 30 s recharge.
+  - **Noise decoy (G)** for Hide & Seek hiders: a fake ping where you aim (up to 420 px, stopped
+    by walls) to send the seekers the wrong way; 25 s recharge.
+  - **Swap (V)** for props: become the nearest real object within 280 px (its kind, its spot);
+    your old object stays behind as a real one. No object moves and no id changes on the hunters'
+    screens, only a puff of dust at both spots; 40 s recharge.
+  - **Lights out** 80 s into every hunt, for 20 s (seekers and hunters keep a flashlight);
+    Blackout keeps its own cycle.
+  - **8 new objects to turn into**: floor lamp, old TV, trash bag, toolbox, fire extinguisher, gas
+    can, sofa (big, slow, tough), speaker. All 18 objects are on Salvage Depot, Motel Strip and
+    Night Market.
+- Pings (hints, sonar, noise) are now shared by the round modes (`RoundMode`), with
+  `PlayerState.abl` (role ability recharge) and `AllyState.cdW` (swap recharge).
+
 ## 0.8.0 — unreleased (branch `more-content`)
 
 ### Added

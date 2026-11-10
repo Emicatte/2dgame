@@ -83,7 +83,15 @@ export type DisguiseKind =
   | "plant"
   | "tires"
   | "cone"
-  | "vending";
+  | "vending"
+  | "lamp"
+  | "tv"
+  | "bag"
+  | "toolbox"
+  | "extinguisher"
+  | "gascan"
+  | "sofa"
+  | "speaker";
 
 export interface DisguiseDef {
   kind: DisguiseKind;
@@ -112,7 +120,41 @@ export const DISGUISES: readonly DisguiseDef[] = [
   { kind: "tires", index: 7, name: "Tire stack", radius: 19, w: 38, h: 38, health: 100, speed: 0.95 },
   { kind: "cone", index: 8, name: "Traffic cone", radius: 12, w: 24, h: 24, health: 60, speed: 1 },
   { kind: "vending", index: 9, name: "Vending machine", radius: 26, w: 52, h: 40, health: 140, speed: 0.8 },
+  // 0.8.1: small and fast (extinguisher, lamp, gas can), large and slow (sofa).
+  { kind: "lamp", index: 10, name: "Floor lamp", radius: 12, w: 24, h: 24, health: 55, speed: 1.05 },
+  { kind: "tv", index: 11, name: "Old TV", radius: 17, w: 36, h: 30, health: 85, speed: 0.95 },
+  { kind: "bag", index: 12, name: "Trash bag", radius: 15, w: 30, h: 28, health: 70, speed: 1 },
+  { kind: "toolbox", index: 13, name: "Toolbox", radius: 13, w: 30, h: 18, health: 65, speed: 1.02 },
+  {
+    kind: "extinguisher",
+    index: 14,
+    name: "Fire extinguisher",
+    radius: 10,
+    w: 18,
+    h: 18,
+    health: 45,
+    speed: 1.1,
+  },
+  { kind: "gascan", index: 15, name: "Gas can", radius: 12, w: 24, h: 20, health: 55, speed: 1.05 },
+  { kind: "sofa", index: 16, name: "Sofa", radius: 28, w: 60, h: 34, health: 160, speed: 0.75 },
+  { kind: "speaker", index: 17, name: "Speaker", radius: 16, w: 30, h: 30, health: 80, speed: 1 },
 ];
+
+/**
+ * Abilities that keep Hide & Seek and Prop Hunt moving (0.8.1). G is the role ability: the
+ * seeking side's sonar, a Hide & Seek hider's noise decoy, a prop's decoy object. V: a prop swaps
+ * places with a real object. Mid-hunt the lights go out for a while.
+ */
+export const PARTY_ABILITIES = {
+  /** Seekers / hunters: a pulse that pings (approximately) everyone hiding within range. */
+  sonar: { cooldownSec: 30, rangePx: 450, pingRadius: 130, pingSec: 4 },
+  /** Hide & Seek hiders: a fake ping where they aim, up to range. */
+  noise: { cooldownSec: 25, rangePx: 420, pingRadius: 110, pingSec: 4 },
+  /** Prop Hunt props: become the nearest real object in range; your old object stays behind. */
+  swap: { cooldownSec: 40, rangePx: 280 },
+  /** Lights out mid-hunt (seekers keep a flashlight). */
+  lightsOut: { atSec: 80, durationSec: 20 },
+} as const;
 
 export function disguiseDef(index: number): DisguiseDef | undefined {
   return DISGUISES[index];

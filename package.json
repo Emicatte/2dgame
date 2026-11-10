@@ -1,7 +1,7 @@
 {
   "name": "scrapline",
   "private": true,
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "SCRAPLINE (provisional name) \u2014 top-down 2D multiplayer arena shooter for the browser",
   "type": "module",
   "packageManager": "pnpm@10.28.0",

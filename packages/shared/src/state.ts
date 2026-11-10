@@ -24,6 +24,8 @@ export const PlayerState = schema(
     cells: t.uint8().default(0),
     /** Left the running match but still in the room: back in at the next match. */
     away: t.boolean().default(false),
+    /** Party modes: tick at which the role ability (G: sonar / noise) is ready again. */
+    abl: t.uint32().default(0),
     kills: t.uint16().default(0),
     deaths: t.uint16().default(0),
     streak: t.uint8().default(0),
@@ -260,6 +262,8 @@ export const AllyState = schema(
     cdT: t.uint32().default(0),
     cdS: t.uint32().default(0),
     cdD: t.uint32().default(0),
+    /** Prop Hunt: tick at which swap is ready again. */
+    cdW: t.uint32().default(0),
   },
   "AllyState",
 );

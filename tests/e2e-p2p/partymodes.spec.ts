@@ -24,6 +24,9 @@ interface ModeInfo {
   pings: number;
   players: { id: string; role: number; masked: boolean; x: number; y: number; gg: number; pts: number }[];
   body: { radius: number; speed: number } | null;
+  objects: { id: string; x: number; y: number; k: number }[];
+  abl: number;
+  tick: number;
 }
 
 interface Hooks {
@@ -266,4 +269,76 @@ test("Prop Hunt: the prop transforms (Q), hunters get the objects only when the 
   expect(Math.abs(after.x - before.x)).toBeLessThan(1);
   await shot(b, "prophunt-hunter");
   expect(aId).toBeTruthy();
+});
+
+test("Prop Hunt 0.8.1: 18 objects in the picker, swap (V) to a nearby object, the hunter's sonar (G)", async () => {
+  const { a, b } = await twoPlayers();
+  await arenaFor(a, b, "prophunt");
+  expect(
+    await hooks(a, (h) =>
+      h.partyDebug("first", (h.mode()?.players ?? []).find((p) => p.id !== h.selfId())!.id),
+    ),
+  ).toBe(true);
+  await startMatch(a, b);
+  await stageIs(a, "prep");
+  await a.keyboard.press("KeyQ");
+  await expect(a.locator('[data-testid^="prop-kind-"]')).toHaveCount(18);
+  await shot(a, "prophunt-picker-18");
+  await a.keyboard.press("KeyQ");
+  await stageIs(b, "hunt", 45_000);
+  // Stand on a hiding spawn of Salvage Depot, then swap with the nearest object (within 280 px).
+  const aId = (await hooks(a, (h) => h.selfId()))!;
+  await hooks(a, (h) => h.partyDebug("teleport", h.selfId()!, "", 800, 640));
+  await a.waitForTimeout(600);
+  const before = (await hooks(a, (h) => h.mode()))!;
+  const near = before.objects
+    .filter((o) => o.id !== before.ally?.d)
+    .map((o) => ({ ...o, d: Math.hypot(o.x - 800, o.y - 640) }))
+    .sort((x, y) => x.d - y.d)[0]!;
+  expect(near.d).toBeLessThan(280);
+  await expect(a.getByTestId("ability-swap")).toContainText("ready");
+  await a.keyboard.press("KeyV");
+  await a.waitForFunction(
+    (id) => (window as unknown as { __scrapline: Hooks }).__scrapline.mode()?.ally?.d === id,
+    near.id,
+    { timeout: 5000 },
+  );
+  await expect(a.getByTestId("ability-swap")).not.toContainText("ready", { timeout: 3000 });
+  expect(aId).toBeTruthy();
+  // The hunter: G fires the sonar, the bar shows it recharging.
+  await expect(b.getByTestId("role-ability")).toContainText("Sonar");
+  await b.keyboard.press("KeyG");
+  await b.waitForFunction(
+    () => {
+      const m = (window as unknown as { __scrapline: Hooks }).__scrapline.mode();
+      return !!m && m.abl > m.tick;
+    },
+    null,
+    { timeout: 5000 },
+  );
+  await expect(b.getByTestId("role-ability")).not.toContainText("ready", { timeout: 3000 });
+  await shot(b, "prophunt-sonar");
+});
+
+test("Hide & Seek 0.8.1: seekers get the sonar, hiders the noise decoy (G)", async () => {
+  const { a, b } = await twoPlayers();
+  await arenaFor(a, b, "hideseek");
+  expect(
+    await hooks(a, (h) =>
+      h.partyDebug("first", (h.mode()?.players ?? []).find((p) => p.id !== h.selfId())!.id),
+    ),
+  ).toBe(true);
+  await startMatch(a, b);
+  await stageIs(b, "hunt", 45_000);
+  await expect(b.getByTestId("role-ability")).toContainText("Sonar");
+  await expect(a.getByTestId("role-ability")).toContainText("Noise decoy");
+  // The hider throws a noise: a ping appears on the seeker's screen.
+  await a.mouse.move(900, 360);
+  await a.keyboard.press("KeyG");
+  await b.waitForFunction(
+    () => ((window as unknown as { __scrapline: Hooks }).__scrapline.mode()?.pings ?? 0) > 0,
+    null,
+    { timeout: 5000 },
+  );
+  await shot(b, "hideseek-noise");
 });

@@ -251,7 +251,7 @@ First, deliberately simple versions on the existing machinery. Tuning in
 
 | Mode | Controller | Rules as built |
 |---|---|---|
-| Infection | `Infection.ts` (extends `RoundMode`) | 1 infected per 8 players (rotates), claws only (`claws`: 3 short rays, 72 px, +12 % speed via the weapon's move multiplier, so prediction stays exact); survivors: loadout + sidearm, endless reserve; fallen survivor → infected after 2 s; infected cannot be hurt in the pen; the round goes on while anybody is infected; last survivor pinged every 4 s; prep 8 s, round 150 s |
+| Infection | `Infection.ts` (extends `RoundMode`) | 1 infected per 8 players (rotates), claws only (`claws`: 3 short rays, 72 px, +12 % speed via the weapon's move multiplier, so prediction stays exact); survivors: loadout + sidearm, endless reserve; fallen survivor → infected after 2 s; infected cannot be hurt in the pen; the round goes on while anybody is infected; the last survivor is announced by name only; prep 8 s, round 150 s |
 | Chaos Arena | `Chaos.ts` | Free-for-all to the elimination limit; one of 11 rules every 30–45 s (damage ×2/×3, a weapon for everyone, vampire 50 %, regeneration, full shields); pickups of weapons and chests off during weapon rules; weapons carried before a weapon rule are given back |
 | Bounty Hunt | `Bounty.ts` | Target = the leader standing (first player at the start); +1 / 2 s alive, +5 for the bounty, +1 per other elimination; ping every 5 s, 220 px ring offset from the target; first to the point limit (default 60) |
 | Sabotage | `Sabotage.ts` (extends `TeamRounds.ts`) | Sites = the map's Domination A and C points; plant 3 s, defuse 5 s, fuse 35 s, round 100 s; no respawns in a round; elimination wins a round (after a plant the defenders must still defuse); sides swap at half; a team with more than half the rounds wins early |
@@ -271,3 +271,18 @@ leaders in the Final Breach atrium, a supply drop after each). Both are played t
 Not done, stated plainly: no balance from real playtests; bots do not plant, defuse, drive the
 truck or chase the bounty (they only fight); Pursuit routes are derived from the map's objective
 points, not hand-authored roads; the infected have no special vision or abilities.
+
+## 9. More dynamic Hide & Seek and Prop Hunt (0.8.1)
+
+Tuning in `PARTY_ABILITIES` (`packages/shared/src/config/party.ts`); the shared parts live in
+`RoundMode` (pings, sonar, lights out, the role ability cooldown synced as `PlayerState.abl`).
+
+| Mechanic | Who | Rule |
+|---|---|---|
+| Sonar (G) | Seekers, hunters | Pings every hiding player within 450 px with a 130 px ring that never centres on them, for 4 s; 30 s recharge; hunt only |
+| Noise decoy (G) | Hide & Seek hiders | A 110 px ping at the aimed point, at most 420 px away and pulled back until a wall no longer blocks the throw; 4 s; 25 s recharge |
+| Swap (V) | Props | The nearest real object (not a decoy, not a player) within 280 px: the prop takes its kind and spot, its own object stays as a real one. Ids and positions of both objects are unchanged, so the hunters' state shows no movement; "poof" events at both spots; 40 s recharge |
+| Lights out | Everyone | 80 s into the hunt, 20 s of darkness (seekers/hunters keep a flashlight; in Hide & Seek the sight rules use the flashlight cone as in Blackout); announced. Blackout keeps its own cycle |
+| New objects | Props | Floor lamp, old TV, trash bag, toolbox, fire extinguisher, gas can, sofa, speaker (indices 10–17, appended: existing indices unchanged). Every party map carries all 18 |
+
+Infection no longer marks the last survivor (announced by name only).

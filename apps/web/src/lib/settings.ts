@@ -17,7 +17,8 @@ export type Action =
   | "propMenu"
   | "lock"
   | "taunt"
-  | "decoy";
+  | "decoy"
+  | "swap";
 
 export const ACTION_LABELS: Record<Action, string> = {
   up: "Move up",
@@ -36,7 +37,8 @@ export const ACTION_LABELS: Record<Action, string> = {
   propMenu: "Prop Hunt: choose an object to turn into",
   lock: "Prop Hunt: lock position",
   taunt: "Prop Hunt: taunt",
-  decoy: "Prop Hunt: drop a decoy",
+  decoy: "Party modes: role ability (seekers: sonar · hiders: noise decoy · props: decoy object)",
+  swap: "Prop Hunt: swap places with a nearby object",
 };
 
 /** KeyboardEvent.code values, so bindings follow physical keys on AZERTY/QWERTZ too. */
@@ -58,6 +60,7 @@ export const DEFAULT_BINDINGS: Record<Action, string> = {
   lock: "KeyC",
   taunt: "KeyT",
   decoy: "KeyG",
+  swap: "KeyV",
 };
 
 export const GRAPHICS_QUALITIES = ["low", "medium", "high"] as const;

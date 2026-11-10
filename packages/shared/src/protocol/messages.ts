@@ -99,7 +99,10 @@ export type MatchSettings = z.infer<typeof settingsSchema>;
  * no `k` copy the object in front of you. "lock" toggles the position lock.
  */
 export const abilitySchema = z.object({
-  a: z.enum(["transform", "lock", "taunt", "decoy"]),
+  a: z.enum(["transform", "lock", "taunt", "decoy", "swap", "sonar", "noise"]),
+  /** Noise decoy: the world point aimed at (clamped server-side to the ability's range). */
+  x: z.number().int().min(-1000).max(20000).optional(),
+  y: z.number().int().min(-1000).max(20000).optional(),
   k: z
     .number()
     .int()
@@ -206,6 +209,10 @@ export type NetEvent =
   | { t: "hint"; n: number }
   /** A short private message to player `p` (an ability refused, why). */
   | { t: "msg"; p: string; s: string }
+  /** Seeker sonar pulse from (x, y) with radius r. */
+  | { t: "sonar"; x: number; y: number; r: number }
+  /** Prop Hunt swap: a puff of dust at both objects. */
+  | { t: "poof"; x: number; y: number }
   /** A banner for everybody (a Chaos rule, a planted device, a new bounty target). */
   | { t: "announce"; s: string; d?: string; w?: 0 | 1 | 2 };
 

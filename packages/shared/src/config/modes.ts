@@ -332,7 +332,7 @@ export const MODES: Record<GameMode, ModeDef> = {
     abilities: ["Dash"],
     hud: "roles",
     rewards: "Completion, rounds survived, infections, victory",
-    events: ["Last survivor: everyone sees where they are"],
+    events: ["Last survivor: announced by name, never shown on the map"],
     joinInProgress: "next-round",
     disconnect: `Seat held 20 s; a side left empty ends the round. ${rotateRoles}`,
     quick: false,
