@@ -2,6 +2,13 @@
 
 ## 0.9.0 — unreleased (branch `platform-home`)
 
+### Changed (practice bots)
+- Bots only see what they face (130° field of view, plus anyone very close, and all around for a
+  moment after being hit by someone unseen), hear gunshots and go to investigate, and no longer
+  know where the nearest enemy is when idle (they patrol). In team modes teammates share the last
+  enemy one of them saw. Personalities: aggressive, tactical (flanks), cautious, explorer (loot),
+  support (sticks with hurt teammates); Rook, Vex and Kestrel are aggressive, tactical, cautious.
+
 ### Added (Horror Maze)
 - **Horror Maze** (Horror, 1–4 players): the maze in the dark with flashlights, and one creature
   driven by the Outbreak enemy AI. It sees only with line of sight, hears running, dashes, gates

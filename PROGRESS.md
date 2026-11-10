@@ -2,8 +2,8 @@
 
 Platform roadmap (multiplayer 2D browser platform). Short on purpose: update at checkpoints only.
 
-**Current phase:** 2, 6a, 7a done (interactions, Classic Maze, Horror Maze). Next: 4 (bot
-personalities and team behaviour on top of BotBrain).
+**Current phase:** 2, 4, 6a, 7a done (interactions, bot AI 2.0, Classic Maze, Horror Maze).
+Next: 8–9 (Battle Royale foundation and gameplay, small player counts first).
 **Branch:** `platform-home` (base `main` 0.8.1). Not deployed; production untouched.
 
 ## Phase 0 · audit (2026-11-10)
@@ -60,6 +60,17 @@ personalities and team behaviour on top of BotBrain).
   Variant setting for the maze.
 - Known limit: the creature's position is sent to every client (a modified client could see it).
 
+## Phase 4 · bot AI 2.0 (done, on top of BotBrain from 0.6.1)
+- Already there: line of sight, reaction 0.3–0.55 s, imperfect aim that settles, bursts,
+  weapon distance with strafing, cover when hurt/reloading, medkits, last-seen memory.
+- Added: field of view (130°, 240 px near sense, 360° for 1.5 s after an unseen hit); hearing
+  of gunshots (1300–1600 px by personality) → investigate; no more knowing where the nearest
+  enemy is (idle bots patrol spawns or loot); team radio (teammates share the last sighting,
+  ≤ 3 s old); personalities aggressive / tactical (flanks) / cautious / explorer (loot) /
+  support (stays with the most hurt teammate) as weights on the same decisions; outnumbered
+  retreat for cautious, tactical and support.
+- Cost measured: 17 µs per bot per tick (3 bots, 90 s on Industrial, unit test log).
+
 ## Open issues
 - Lobby map grid still renders its thumbnails synchronously (pre-existing; cache is warmed by
   the home cards).
@@ -72,7 +83,7 @@ personalities and team behaviour on top of BotBrain).
 | 1 | Home, navigation, catalog | done |
 | 2 | Experience registry wiring, lifecycle, shared interaction system | done (with 6a) |
 | 3 | Arena maps ×2 surface | — |
-| 4 | Bot AI 2.0 (perception, memory, utility AI) | — |
+| 4 | Bot AI 2.0 (perception, memory, personalities, team radio) | done |
 | 5 | Graphics overhaul + LOW/MEDIUM/HIGH | — |
 | 6 | Non-combat: Classic Maze ✓, Horror Maze ✓, Parkour, Escape Room | in progress |
 | 7 | Horror overhaul: Horror Maze creature + director ✓; Haunted Facility, Night Hunt | in progress |
