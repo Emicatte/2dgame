@@ -253,9 +253,25 @@ export class ModeLayer {
   }
 
   /** Who the camera follows while the local player is out of the round (null: themselves). */
+  /** Which of the players still in the game a spectator watches (click: the next one). */
+  private spectateIndex = 0;
+
+  nextSpectate(): void {
+    this.spectateIndex++;
+  }
+
   spectateTarget(state: MatchState, selfId: string): string | null {
     const ps = this.me(state, selfId);
-    if (!ps || ps.alive || state.round.stage === "" || ps.respawnTick > 0) return null;
+    if (!ps || ps.alive || ps.respawnTick > 0) return null;
+    // Battle Royale: out for good, watch the players still alive.
+    if (state.mode === "battleroyale") {
+      const alive: string[] = [];
+      state.players.forEach((p, id) => {
+        if (id !== selfId && p.alive) alive.push(id);
+      });
+      return alive.length ? alive[this.spectateIndex % alive.length]! : null;
+    }
+    if (state.round.stage === "") return null;
     let pick: string | null = null;
     state.players.forEach((p, id) => {
       if (pick || id === selfId || !p.alive) return;

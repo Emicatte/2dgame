@@ -2,6 +2,11 @@
 
 ## 0.9.0 — unreleased (branch `platform-home`)
 
+### Changed (Infection, Battle Royale spectator)
+- Infection: the infected have 250 health, regenerate 20 per second after 3 s without damage and
+  hit 1.5× harder; a survivor they take rises infected where they fell after 1 s.
+- Battle Royale: an eliminated player watches the players still alive (click for the next).
+
 ### Changed (Parkour, a real parkour)
 - SPACE / Shift **jump** on Parkour courses (shared sim, predicted): about 0.6 s in the air at
   a little more than walking speed; airborne players clear gaps, spike strips and low lasers.

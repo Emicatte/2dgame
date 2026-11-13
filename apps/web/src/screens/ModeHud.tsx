@@ -202,7 +202,11 @@ function RoundHud() {
         {variant && variant.id !== "classic" && <small> · {variant.name}</small>}
         {m.dark && <small> · lights out</small>}
       </div>
-      {m.spectating && <div className="spectating">Watching {m.spectating}</div>}
+      {m.spectating && (
+        <div className="spectating" data-testid="spectating">
+          Watching {m.spectating} · click for the next
+        </div>
+      )}
       {spotted && m.role === ROLE.HIDER && (
         <div className="spotted" role="alert">
           You have been spotted

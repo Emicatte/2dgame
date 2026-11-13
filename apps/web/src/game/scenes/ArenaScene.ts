@@ -247,6 +247,8 @@ export class ArenaScene extends Phaser.Scene {
     this.lightmap.setQuality(settingsStore.get().quality);
     this.pve.lightmap = this.lightmap;
     this.modes = new ModeLayer(this, this.effects, this.lightmap);
+    // Spectating (out of the round, or out of a Battle Royale): a click watches the next player.
+    this.input.on("pointerdown", () => this.modes.nextSpectate());
     this.br = new BrLayer(this);
     this.perf = new PerfRecorder(this.game, () => this.children.length);
     this.crosshair = new Crosshair(this);
