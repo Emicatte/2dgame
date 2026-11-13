@@ -1,6 +1,6 @@
 import type { Rect, Vec2 } from "../sim/math.ts";
 import { mulberry32 } from "../sim/rng.ts";
-import type { MazeDef, MazeGate, MazeSweeper, MazeTrap } from "./maze.ts";
+import type { MazeDef, MazeGate, MazeLaser, MazeSweeper, MazeTrap } from "./maze.ts";
 import type { DecorDef, LightDef, MapDef, MapId, SolidDef } from "./types.ts";
 
 /**
@@ -55,57 +55,114 @@ function baseDef(
 }
 
 /** Three corridors in a snake; timed floor traps, gaps to dash over and moving bars. */
+/**
+ * Parkour course: four lanes in a snake, each a run of patterns that get harder lane by lane:
+ * gaps and double gaps (jump), spike strips (jump or time them), low lasers (jump), blinking
+ * laser gates and moving bars (time or dodge, a jump does not help), slaloms between blocks and
+ * narrow bridges over a gap. Checkpoints at the start and the middle of every lane.
+ */
 function buildCourse(seed: number): MapDef {
   const rng = mulberry32(seed * 7 + 3);
-  const W = 2800;
-  const LANE = 260;
-  const H = 3 * (LANE + T) + T;
+  const W = 3200;
+  const LANE = 240;
+  const LANES = 4;
+  const H = LANES * (LANE + T) + T;
   const laneY = (j: number) => T + j * (LANE + T);
   const solids: SolidDef[] = [
     { kind: "wall", x: 0, y: 0, w: W, h: T },
     { kind: "wall", x: 0, y: H - T, w: W, h: T },
     { kind: "wall", x: 0, y: 0, w: T, h: H },
     { kind: "wall", x: W - T, y: 0, w: T, h: H },
-    { kind: "wall", x: 0, y: laneY(1) - T, w: W - LANE - T, h: T },
-    { kind: "wall", x: LANE + T, y: laneY(2) - T, w: W - LANE - T, h: T },
   ];
+  // Lane j runs left→right when even; the wall below it leaves the turn open at its end.
+  for (let j = 0; j < LANES - 1; j++)
+    solids.push({ kind: "wall", x: j % 2 ? LANE + T : 0, y: laneY(j + 1) - T, w: W - LANE - T, h: T });
   const traps: MazeTrap[] = [];
   const pits: (Rect & { id: string })[] = [];
   const sweepers: MazeSweeper[] = [];
+  const lasers: MazeLaser[] = [];
   const decor: DecorDef[] = [];
-  for (let j = 0; j < 3; j++) {
+  const r = (a: number, b: number) => a + rng() * (b - a);
+  const phase = () => Math.round(rng() * 30) / 10;
+  const SLOT = 230;
+  const x0 = LANE + T + 140;
+  const x1 = W - LANE - T - 140;
+  const mid = W / 2;
+  const checkpoints: Vec2[] = [];
+  for (let j = 0; j < LANES; j++) {
     const y = laneY(j);
-    for (let k = 0; k < 6; k++) {
-      const x = 420 + k * 360;
-      const kind = Math.floor(rng() * 3);
-      const id = `h-${j}-${k}`;
-      if (kind === 0) {
-        traps.push({ id, x: x - 70, y: y + 14, w: 140, h: LANE - 28, phase: Math.round(rng() * 30) / 10 });
-        decor.push({ kind: "hazard", x: x - 70, y: y + 14, w: 140, h: LANE - 28 });
-      } else if (kind === 1) {
-        pits.push({ id, x: x - 45, y, w: 90, h: LANE });
-      } else {
-        sweepers.push({
-          id,
-          x0: x,
-          y0: y + 50,
-          x1: x,
-          y1: y + LANE - 50,
-          w: 34,
-          h: 110,
-          periodSec: 1.8 + rng() * 1.2,
-          phase: Math.round(rng() * 20) / 10,
-        });
+    const ltr = j % 2 === 0;
+    checkpoints.push({ x: ltr ? 150 : W - 150, y: y + LANE / 2 }, { x: mid, y: y + LANE / 2 });
+    const pool = j === 0 ? 5 : 8;
+    let n = 0;
+    for (let x = x0; x <= x1; x += SLOT) {
+      if (Math.abs(x - mid) < SLOT * 0.75) continue; // the middle checkpoint pad stays clear
+      const id = `h-${j}-${n++}`;
+      const gap = r(90, 110) + j * 8;
+      switch (Math.floor(rng() * pool)) {
+        case 0:
+          pits.push({ id, x: x - gap / 2, y, w: gap, h: LANE });
+          break;
+        case 1:
+          traps.push({ id, x: x - 60, y, w: 120, h: LANE, phase: phase() });
+          decor.push({ kind: "hazard", x: x - 60, y, w: 120, h: LANE });
+          break;
+        case 2:
+          lasers.push({ id, x: x - 4, y, w: 8, h: LANE, low: true, onSec: 1, offSec: 0, phase: 0 });
+          break;
+        case 3:
+          sweepers.push({
+            id,
+            x0: x,
+            y0: y + 48,
+            x1: x,
+            y1: y + LANE - 48,
+            w: 30,
+            h: 96,
+            periodSec: r(1.4, 2.2),
+            phase: phase(),
+          });
+          break;
+        case 4:
+          solids.push(
+            { kind: "wall", x: x - 70, y, w: 36, h: LANE * 0.62 },
+            { kind: "wall", x: x + 34, y: y + LANE * 0.38, w: 36, h: LANE * 0.62 },
+          );
+          break;
+        case 5:
+          pits.push(
+            { id: `${id}a`, x: x - 100, y, w: 80, h: LANE },
+            { id: `${id}b`, x: x + 20, y, w: 80, h: LANE },
+          );
+          break;
+        case 6:
+          lasers.push({
+            id,
+            x: x - 4,
+            y,
+            w: 8,
+            h: LANE,
+            low: false,
+            onSec: r(0.9, 1.3),
+            offSec: r(1, 1.4),
+            phase: phase(),
+          });
+          break;
+        default: {
+          // A narrow bridge over a wide gap: walk the strip or jump the gap.
+          const bridge = 54;
+          const top = r(40, LANE - 40 - bridge);
+          pits.push(
+            { id: `${id}a`, x: x - 80, y, w: 160, h: top },
+            { id: `${id}b`, x: x - 80, y: y + top + bridge, w: 160, h: LANE - top - bridge },
+          );
+        }
       }
     }
   }
-  const start: Rect = { x: T, y: laneY(0), w: 260, h: LANE };
-  const checkpoints: Vec2[] = [
-    { x: 150, y: laneY(0) + LANE / 2 },
-    { x: W - 150, y: laneY(1) + LANE / 2 },
-    { x: 150, y: laneY(2) + LANE / 2 },
-  ];
-  const exit = { x: W - 140, y: laneY(2) + LANE / 2, r: 90 };
+  const start: Rect = { x: T, y: laneY(0), w: 240, h: LANE };
+  const last = LANES - 1;
+  const exit = { x: last % 2 ? 140 : W - 140, y: laneY(last) + LANE / 2, r: 90 };
   const maze: MazeDef = {
     size: "m",
     seed,
@@ -116,18 +173,19 @@ function buildCourse(seed: number): MapDef {
     gates: [],
     checkpoints,
     traps,
-    route: 3,
-    lair: { x: W / 2, y: laneY(1) + LANE / 2 },
+    route: LANES,
+    lair: { x: mid, y: laneY(1) + LANE / 2 },
     pits,
     sweepers,
+    lasers,
   };
-  const lights: LightDef[] = checkpoints.map((c) => ({ ...c, radius: 260, color: 0x9fd8ff, intensity: 0.4 }));
+  const lights: LightDef[] = checkpoints.map((c) => ({ ...c, radius: 240, color: 0x9fd8ff, intensity: 0.4 }));
   lights.push({ x: exit.x, y: exit.y, radius: 300, color: 0x7dffb0, intensity: 0.5 });
   return {
     ...baseDef(
       `parkour-${seed}` as MapId,
       "Parkour Course",
-      `Three lanes, seed ${seed}: traps, gaps, moving bars.`,
+      `Four lanes, seed ${seed}: gaps, spikes, lasers, moving bars, slaloms.`,
       W,
       H,
     ),

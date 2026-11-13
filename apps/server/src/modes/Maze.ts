@@ -2,6 +2,8 @@ import {
   emptySlot,
   formatIdList,
   type GameMode,
+  hasJumps,
+  laserLive,
   MAZE_TRAP,
   type MatchState,
   type MazeDef,
@@ -58,6 +60,11 @@ export class MazeMode extends BaseMode {
   /** Ticks per second. */
   protected get rate(): number {
     return this.sim.secToTicks(1);
+  }
+
+  /** Parkour: the dash key jumps; airborne players clear gaps, spikes and low lasers. */
+  private get jumps(): boolean {
+    return hasJumps(this.sim.map);
   }
 
   protected get maze(): MazeDef | undefined {
@@ -228,6 +235,15 @@ export class MazeMode extends BaseMode {
         this.sendBack(p, `${p.name} fell`);
         continue;
       }
+      const air = p.sim.dash > 0 && this.jumps;
+      if (
+        (maze.lasers ?? []).some(
+          (l) => (!l.low || !air) && laserLive(l, secs) && inRect(l, PLAYER.radius - 6),
+        )
+      ) {
+        this.sendBack(p, `${p.name} hit a laser`);
+        continue;
+      }
       if ((maze.sweepers ?? []).some((sw) => inRect(sweeperAt(sw, secs), PLAYER.radius - 4))) {
         this.sendBack(p, `${p.name} was swept away`);
         continue;
@@ -243,7 +259,7 @@ export class MazeMode extends BaseMode {
       }
 
       for (const t of maze.traps) {
-        if (!this.trapLive(t.phase)) continue;
+        if (!this.trapLive(t.phase) || (this.jumps && p.sim.dash > 0)) continue;
         const cx = Math.max(t.x, Math.min(x, t.x + t.w));
         const cy = Math.max(t.y, Math.min(y, t.y + t.h));
         if ((cx - x) ** 2 + (cy - y) ** 2 > PLAYER.radius ** 2) continue;
@@ -430,6 +446,17 @@ export class MazeMode extends BaseMode {
     for (const q of maze.pits ?? [])
       out.set(q.id, { k: "pit", x: q.x + q.w / 2, y: q.y + q.h / 2, r: q.w / 2, c: 0, p: 0, l: "", a: "" });
     const secs = (this.sim.tick - this.startTick) / this.rate;
+    for (const l of maze.lasers ?? [])
+      out.set(l.id, {
+        k: "laser",
+        x: l.x + l.w / 2,
+        y: l.y + l.h / 2,
+        r: l.h / 2,
+        c: 0,
+        p: laserLive(l, secs) ? 100 : 0,
+        l: "",
+        a: "",
+      });
     for (const sw of maze.sweepers ?? []) {
       const r = sweeperAt(sw, secs);
       out.set(sw.id, {

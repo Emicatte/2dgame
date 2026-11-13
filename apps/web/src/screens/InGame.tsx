@@ -1,5 +1,6 @@
 import {
   GUN_GAME,
+  INFECTION,
   isPveMode,
   isRoundMode,
   isTeamMode,
@@ -9,6 +10,7 @@ import {
   MODES,
   type NetEvent,
   PLAYER,
+  ROLE,
   SHIELD,
   TEAMS,
   weaponByIndex,
@@ -401,7 +403,10 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
   const roundClock = isRoundMode(s.mode) && !!mode.stage;
   const clock = roundClock ? mode.stageLeftSec : hud.timeLeftSec;
   const myTeam = s.players.find((p) => p.id === s.selfId)?.team ?? 0;
-  const hpFrac = hud.hp / PLAYER.maxHealth;
+  // The infected have more health (Infection): their bar is out of that.
+  const maxHp =
+    s.mode === "infection" && mode.role === ROLE.SEEKER ? INFECTION.infectedHealth : PLAYER.maxHealth;
+  const hpFrac = Math.min(1, hud.hp / maxHp);
   const statusClass = s.status === "reconnecting" || hud.stalled ? "is-bad" : hud.ping > 150 ? "is-warn" : "";
   const interactKey = keyLabel(settings.bindings.interact);
 
@@ -556,7 +561,7 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
                 )}
               </div>
               <div className={`dash-meter ${hud.dashProgress >= 1 ? "is-ready" : ""}`}>
-                <span>Dash</span>
+                <span>{s.mode === "parkour" ? "Jump" : "Dash"}</span>
                 <span className="dash-meter__bar">
                   <span
                     className="dash-meter__fill"
@@ -642,6 +647,11 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
           </div>
         )}
 
+        {s.phase === "playing" && s.mode === "battleroyale" && !hud.alive && mode.spectating && (
+          <div className="spectating" data-testid="spectating">
+            Eliminated · watching {mode.spectating} · click for the next
+          </div>
+        )}
         {s.phase === "playing" && !hud.alive && hud.respawnInSec !== null && (
           <div className="center-msg">
             <div className="death" role="status">

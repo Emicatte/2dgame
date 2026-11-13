@@ -623,11 +623,15 @@ export const MODES: Record<GameMode, ModeDef> = {
   parkour: lite(
     "parkour",
     "Parkour Challenge",
-    "A three-lane obstacle course: time the traps, dash over the gaps, slip past the moving bars.",
+    "A four-lane parkour run: jump gaps, spikes and low lasers, time the laser gates, dodge the bars.",
     "challenge",
     { min: 1, max: 8 },
     "3–5 min",
-    ["Dash (SPACE / Shift) over the gaps", "Live traps and moving bars send you back", "Fastest time wins"],
+    [
+      "SPACE / Shift jumps: gaps, spikes and low lasers",
+      "Laser gates and moving bars: time them",
+      "Fastest time wins",
+    ],
     { victory: "Fastest time to the finish", scoring: "Finish time" },
   ),
   escape: lite(

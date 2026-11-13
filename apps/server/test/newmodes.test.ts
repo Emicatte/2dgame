@@ -163,12 +163,19 @@ describe("Infection", () => {
     expect(ctl.stage).toBe("hunt");
     ticks(sim, sec(INFECTION.respawnSec) + 2);
     expect(inf.alive).toBe(true);
-    // A survivor falls: infected, back with claws.
+    // A survivor taken by the infected rises infected where they fell, tougher, with claws.
+    const at = { x: s1!.sim.x, y: s1!.sim.y };
     eliminate(sim, s1!, inf, WEAPONS.claws.index);
     expect(ctl.sideOf(s1!.id)).toBe(ROLE.SEEKER);
-    ticks(sim, sec(INFECTION.respawnSec) + 2);
+    ticks(sim, sec(INFECTION.turnSec) + 2);
     expect(s1!.alive).toBe(true);
+    expect(Math.hypot(s1!.sim.x - at.x, s1!.sim.y - at.y)).toBeLessThan(40);
+    expect(s1!.hp).toBe(INFECTION.infectedHealth);
     expect(s1!.sim.slots[0]!.id).toBe(WEAPONS.claws.index);
+    // The infected regenerate after a pause.
+    inf.hp = 100;
+    ticks(sim, sec(INFECTION.regen.afterSec + 2));
+    expect(inf.hp).toBeGreaterThan(100);
     expect(ctl.pointsOf(inf.id)).toBe(INFECTION.points.infect);
     // The last survivor is announced, but never marked on the map.
     ticks(sim, sec(4));

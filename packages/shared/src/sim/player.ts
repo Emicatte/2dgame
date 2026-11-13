@@ -33,6 +33,20 @@ export function fireIntervalSteps(w: WeaponDef): number {
 const DASH_STEPS = secToSteps(PLAYER.dashDuration);
 const DASH_COOLDOWN_STEPS = secToSteps(PLAYER.dashCooldown);
 
+/**
+ * Parkour jump (maps with jumps): the dash key lifts the player off the ground for a moment; they
+ * keep steering at a little more than walking speed and walls still block them. While in the air
+ * (the dash counter runs) gaps, floor spikes and low lasers do not touch them.
+ */
+export const JUMP = { sec: 0.6, cooldownSec: 0.75, speedMult: 1.12 } as const;
+export const JUMP_STEPS = secToSteps(JUMP.sec);
+const JUMP_COOLDOWN_STEPS = secToSteps(JUMP.cooldownSec);
+
+/** Height of a jump in progress, 0..1 (0 = on the ground), from the remaining jump steps. */
+export function jumpArc(stepsLeft: number): number {
+  return stepsLeft > 0 ? Math.sin(Math.PI * (1 - stepsLeft / JUMP_STEPS)) : 0;
+}
+
 export interface WeaponSlotState {
   /** Weapon index or NO_WEAPON. */
   id: number;
@@ -122,6 +136,8 @@ export interface StepContext {
    * owner's ghost (AllyState.k) so the prediction uses the same body.
    */
   body?: { radius: number; speed: number } | null;
+  /** Parkour maps: the dash key jumps (see JUMP) instead of dashing. */
+  jump?: boolean;
 }
 
 export function emptySlot(): WeaponSlotState {
@@ -246,7 +262,13 @@ function stepMovement(s: PlayerSim, input: InputFrame, ctx: StepContext, dt: num
     if (s.dashCd > 0) s.dashCd -= 1;
     return;
   }
-  if (ctx.alive && dashPressed && !s.dashHeld && s.dashCd === 0 && s.dash === 0) {
+  if (ctx.jump && ctx.alive && dashPressed && !s.dashHeld && s.dashCd === 0 && s.dash === 0) {
+    s.dash = JUMP_STEPS;
+    s.dashCd = JUMP_COOLDOWN_STEPS;
+    s.dashDx = 0;
+    s.dashDy = 0;
+    ctx.emit?.({ kind: "dash" });
+  } else if (!ctx.jump && ctx.alive && dashPressed && !s.dashHeld && s.dashCd === 0 && s.dash === 0) {
     if (len > 0) {
       s.dashDx = mx;
       s.dashDy = my;
@@ -264,13 +286,15 @@ function stepMovement(s: PlayerSim, input: InputFrame, ctx: StepContext, dt: num
     s.vx = 0;
     s.vy = 0;
     s.dash = 0;
-  } else if (s.dash > 0) {
+  } else if (s.dash > 0 && !ctx.jump) {
     s.vx = s.dashDx * PLAYER.dashSpeed;
     s.vy = s.dashDy * PLAYER.dashSpeed;
     s.dash -= 1;
   } else {
+    if (s.dash > 0) s.dash -= 1; // a jump in progress
+    const air = s.dash > 0 ? JUMP.speedMult : 1;
     const w = activeWeapon(s);
-    const maxSpeed = PLAYER.maxSpeed * (w?.moveSpeedMult ?? 1) * speedMult;
+    const maxSpeed = PLAYER.maxSpeed * (w?.moveSpeedMult ?? 1) * speedMult * air;
     const rate = len > 0 ? PLAYER.acceleration : PLAYER.deceleration;
     [s.vx, s.vy] = approach2(s.vx, s.vy, mx * maxSpeed, my * maxSpeed, rate * dt);
   }

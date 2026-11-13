@@ -11,6 +11,12 @@ export const INFECTION = {
   /** One infected per this many players at the start of a round. */
   playersPerInfected: 8,
   respawnSec: 2,
+  /** The infected are tougher: more health, regeneration after a pause, harder hits. */
+  infectedHealth: 250,
+  regen: { afterSec: 3, perSec: 20 },
+  damageMult: 1.5,
+  /** A survivor taken by an infected rises infected where they fell after this. */
+  turnSec: 1,
   points: { aliveEverySec: 10, alive: 1, survive: 5, infect: 3 },
 } as const;
 

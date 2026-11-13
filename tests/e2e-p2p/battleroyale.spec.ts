@@ -77,4 +77,13 @@ test("Battle Royale: bus, jump with SPACE, parachute, landing, storm", async () 
     .poll(async () => (await players(a)).filter((p) => p.frozen).length, { timeout: 20_000 })
     .toBe(0);
   await expect(a.getByTestId("mode-status")).toContainText(/storm (moves in|closing)/);
+  // Eliminated: out for good, the camera watches the players still alive (click for the next).
+  await a.evaluate(
+    (id) =>
+      (
+        window as unknown as { __scrapline: { partyDebug(op: string, a: string): boolean } }
+      ).__scrapline.partyDebug("eliminate", id),
+    me,
+  );
+  await expect(a.getByTestId("spectating")).toContainText("watching", { timeout: 10_000 });
 });

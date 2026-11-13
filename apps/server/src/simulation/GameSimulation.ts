@@ -19,6 +19,7 @@ import {
   fullSlot,
   type GameMode,
   type HitTarget,
+  hasJumps,
   hasLineOfSight,
   type InputFrame,
   inSector,
@@ -737,6 +738,7 @@ export class GameSimulation {
         : this.groundObstacles(null),
       downed,
       body: this.ctl?.body(p) ?? null,
+      jump: hasJumps(this.map),
     });
     let entered = false;
     if (canAct && !downed && (pressed & BTN.INTERACT) !== 0) entered = this.tryEnter(p);

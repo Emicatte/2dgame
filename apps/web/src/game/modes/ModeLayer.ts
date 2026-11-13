@@ -53,7 +53,7 @@ const roleName = (mode: string, role: number) =>
 
 /** Ring colour of a mode marker: its team, or amber for neutral ones. */
 /** Marks the maze draws itself (no ring). */
-const MAZE_KINDS = new Set(["trap", "door", "key", "switch", "plate", "pit", "sweeper", "terminal"]);
+const MAZE_KINDS = new Set(["trap", "door", "key", "switch", "plate", "pit", "sweeper", "terminal", "laser"]);
 
 const markColor = (c: number) => (c === 1 || c === 2 ? TEAMS[c].color : 0xffc53d);
 
@@ -253,9 +253,25 @@ export class ModeLayer {
   }
 
   /** Who the camera follows while the local player is out of the round (null: themselves). */
+  /** Which of the players still in the game a spectator watches (click: the next one). */
+  private spectateIndex = 0;
+
+  nextSpectate(): void {
+    this.spectateIndex++;
+  }
+
   spectateTarget(state: MatchState, selfId: string): string | null {
     const ps = this.me(state, selfId);
-    if (!ps || ps.alive || state.round.stage === "" || ps.respawnTick > 0) return null;
+    if (!ps || ps.alive || ps.respawnTick > 0) return null;
+    // Battle Royale: out for good, watch the players still alive.
+    if (state.mode === "battleroyale") {
+      const alive: string[] = [];
+      state.players.forEach((p, id) => {
+        if (id !== selfId && p.alive) alive.push(id);
+      });
+      return alive.length ? alive[this.spectateIndex % alive.length]! : null;
+    }
+    if (state.round.stage === "") return null;
     let pick: string | null = null;
     state.players.forEach((p, id) => {
       if (pick || id === selfId || !p.alive) return;
@@ -464,22 +480,45 @@ export class ModeLayer {
     pulse: number,
   ): boolean {
     if (m.k === "trap") {
+      // The trap's own rectangle (the hitbox), spikes in a grid over all of it, raised when live.
+      const t = maze.traps.find((q) => q.id === id) ?? { x: m.x - m.r, y: m.y - m.r, w: m.r * 2, h: m.r * 2 };
       const live = m.p >= 100;
       g.fillStyle(0xff3b30, live ? 0.32 + pulse * 0.18 : 0.06);
-      g.fillRect(m.x - m.r, m.y - m.r, m.r * 2, m.r * 2);
+      g.fillRect(t.x, t.y, t.w, t.h);
       g.lineStyle(live ? 3 : 2, 0xff5a52, live ? 0.95 : 0.35);
-      g.strokeRect(m.x - m.r, m.y - m.r, m.r * 2, m.r * 2);
-      // Spikes: a grid of small triangles, raised when live.
-      const n = 4;
-      const step = (m.r * 2) / n;
+      g.strokeRect(t.x, t.y, t.w, t.h);
+      const nx = Math.max(1, Math.round(t.w / 40));
+      const ny = Math.max(1, Math.round(t.h / 40));
+      const sx = t.w / nx;
+      const sy = t.h / ny;
+      const h = Math.min(sx, sy) * (live ? 0.32 : 0.14);
       g.fillStyle(live ? 0xffd2cc : 0x5a2b28, live ? 0.9 : 0.6);
-      for (let i = 0; i < n; i++)
-        for (let j = 0; j < n; j++) {
-          const cx = m.x - m.r + step * (i + 0.5);
-          const cy = m.y - m.r + step * (j + 0.5);
-          const h = live ? step * 0.32 : step * 0.14;
+      for (let i = 0; i < nx; i++)
+        for (let j = 0; j < ny; j++) {
+          const cx = t.x + sx * (i + 0.5);
+          const cy = t.y + sy * (j + 0.5);
           g.fillTriangle(cx - h, cy + h, cx + h, cy + h, cx, cy - h);
         }
+      return true;
+    }
+    if (m.k === "laser") {
+      // Emitters at both ends; low lasers (jump them) are orange and always on, gates red and blink.
+      const q = maze.lasers?.find((x) => x.id === id);
+      if (!q) return true;
+      const live = m.p >= 100;
+      const color = q.low ? 0xffa23d : 0xff2d55;
+      g.fillStyle(0x2a2d33, 1);
+      g.fillRect(q.x - 6, q.y, q.w + 12, 14);
+      g.fillRect(q.x - 6, q.y + q.h - 14, q.w + 12, 14);
+      if (live) {
+        g.fillStyle(color, 0.22 + pulse * 0.12);
+        g.fillRect(q.x - 6, q.y, q.w + 12, q.h);
+        g.fillStyle(color, 0.95);
+        g.fillRect(q.x + q.w / 2 - 2, q.y, 4, q.h);
+      } else {
+        g.lineStyle(2, color, 0.25);
+        g.lineBetween(q.x + q.w / 2, q.y + 14, q.x + q.w / 2, q.y + q.h - 14);
+      }
       return true;
     }
     if (m.k === "pit") {

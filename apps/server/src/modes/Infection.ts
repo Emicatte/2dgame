@@ -22,10 +22,16 @@ export class InfectionMode extends RoundMode {
   /** Survival points already paid this round, per survivor (units of aliveEverySec). */
   private readonly alivePaid = new Map<string, number>();
   private readonly aliveTicks = new Map<string, number>();
+  /** Last tick each infected was hurt (regeneration waits for a pause). */
+  private readonly hurtTick = new Map<string, number>();
+  /** Survivors taken by an infected: where they rise, infected. */
+  private readonly turned = new Map<string, { x: number; y: number }>();
 
   override reset(): void {
     this.alivePaid.clear();
     this.aliveTicks.clear();
+    this.hurtTick.clear();
+    this.turned.clear();
     super.reset();
   }
 
@@ -40,6 +46,11 @@ export class InfectionMode extends RoundMode {
   }
 
   override spawnPoint(p: ServerPlayer): { x: number; y: number } {
+    const at = this.turned.get(p.id);
+    if (at) {
+      this.turned.delete(p.id);
+      return at;
+    }
     // The first infected start in the pen; once the hunt runs, infected come back anywhere far
     // from the survivors.
     if (this.sideOf(p.id) === ROLE.SEEKER && this.stage === "hunt") return this.sim.chooseSpawn(p.id);
@@ -48,6 +59,10 @@ export class InfectionMode extends RoundMode {
 
   override onSpawn(p: ServerPlayer): void {
     super.onSpawn(p);
+    if (this.sideOf(p.id) === ROLE.SEEKER) {
+      p.hp = INFECTION.infectedHealth;
+      return;
+    }
     if (this.sideOf(p.id) !== ROLE.HIDER) return;
     const primary = fullSlot(p.primary);
     primary.reserve = -1;
@@ -56,8 +71,9 @@ export class InfectionMode extends RoundMode {
   }
 
   /** Infected come back; a fallen survivor comes back infected. */
-  override respawnDelay(_victim: ServerPlayer): number {
-    return INFECTION.respawnSec;
+  override respawnDelay(victim: ServerPlayer, killer?: ServerPlayer | null): number {
+    const taken = this.sideOf(victim.id) === ROLE.HIDER && !!killer && this.sideOf(killer.id) === ROLE.SEEKER;
+    return taken ? INFECTION.turnSec : INFECTION.respawnSec;
   }
 
   override allowJoinSpawn(p: ServerPlayer): boolean {
@@ -75,6 +91,8 @@ export class InfectionMode extends RoundMode {
     const wasSurvivor = this.sideOf(victim.id) === ROLE.HIDER;
     super.onKill(victim, killer, weapon);
     if (!wasSurvivor) return;
+    if (killer && this.sideOf(killer.id) === ROLE.SEEKER)
+      this.turned.set(victim.id, { x: victim.sim.x, y: victim.sim.y });
     this.side.set(victim.id, ROLE.SEEKER);
     victim.team = ROLE.SEEKER;
     const left = this.aliveSide(ROLE.HIDER).length;
@@ -88,11 +106,20 @@ export class InfectionMode extends RoundMode {
   }
 
   /** The infected cannot be hurt while they wait in the pen. */
-  override damageScale(_attacker: ServerPlayer | null, target: ServerPlayer): number {
-    return this.stage === "prep" && this.sideOf(target.id) === ROLE.SEEKER ? 0 : 1;
+  override damageScale(attacker: ServerPlayer | null, target: ServerPlayer): number {
+    if (this.sideOf(target.id) === ROLE.SEEKER) {
+      if (this.stage === "prep") return 0;
+      this.hurtTick.set(target.id, this.sim.tick);
+    }
+    return attacker && this.sideOf(attacker.id) === ROLE.SEEKER ? INFECTION.damageMult : 1;
   }
 
   protected override huntTick(): void {
+    const quiet = this.tickOf(INFECTION.regen.afterSec);
+    if (this.sim.tick % this.tickOf(1) === 0)
+      for (const z of this.aliveSide(ROLE.SEEKER))
+        if (z.hp < INFECTION.infectedHealth && this.sim.tick - (this.hurtTick.get(z.id) ?? 0) >= quiet)
+          z.hp = Math.min(INFECTION.infectedHealth, z.hp + INFECTION.regen.perSec);
     const every = this.tickOf(INFECTION.points.aliveEverySec);
     const survivors = this.aliveSide(ROLE.HIDER);
     for (const h of survivors) {
