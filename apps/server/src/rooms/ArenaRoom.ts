@@ -170,6 +170,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       durationSec: MATCH_DEFAULTS.durationSec,
       killLimit: MATCH_DEFAULTS.killLimit,
       maxPlayers: MATCH_DEFAULTS.maxPlayers,
+      bots: MATCH_DEFAULTS.bots,
       tickRate: NET.serverTickRate,
     });
     this.rules = new MatchRules(this.sim, this.state, (id) => this.bots.has(id));
@@ -502,6 +503,10 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
       else this.notice("Too many players in the room for that team size", "warn", undefined, client);
     }
     if (s.friendlyFire !== undefined && this.rules.teamMode) this.rules.setFriendlyFire(s.friendlyFire);
+    if (s.bots !== undefined && s.bots !== this.state.bots) {
+      this.state.bots = s.bots;
+      this.syncPracticeTargets();
+    }
     if (s.map && s.map !== this.state.mapId) {
       if (this.rules.mapAllowed(s.map)) {
         this.state.mapId = s.map;
@@ -774,8 +779,9 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   private syncPracticeTargets() {
     const humans = this.clients.length;
     const solo = this.kind === "private" && humans === 1 && this.rules.practiceAllowed;
-    const wanted = solo && this.state.phase === "lobby" ? 3 : 0;
+    const wanted = solo && this.state.phase === "lobby" ? this.state.bots : 0;
     const keep = solo && this.state.phase !== "lobby";
+    if (!keep && this.bots.size > 0 && this.bots.size !== wanted) this.clearBots();
     if (wanted > 0 && this.bots.size === 0) {
       for (let i = 1; i <= wanted; i++) {
         const id = `bot:${i}`;
@@ -802,15 +808,17 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
         this.state.players.set(id, ps);
         this.views.set(id, ps);
       }
-    } else if (wanted === 0 && !keep && this.bots.size > 0) {
-      for (const id of this.bots) {
-        this.sim.removePlayer(id);
-        this.state.players.delete(id);
-        this.views.delete(id);
-      }
-      this.bots.clear();
-      this.botDriver.clear();
     }
+  }
+
+  private clearBots() {
+    for (const id of this.bots) {
+      this.sim.removePlayer(id);
+      this.state.players.delete(id);
+      this.views.delete(id);
+    }
+    this.bots.clear();
+    this.botDriver.clear();
   }
 
   /** Practice bots play like people (see BotBrain): they move, take cover and shoot back. */

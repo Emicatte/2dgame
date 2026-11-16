@@ -12,14 +12,32 @@ import {
   NET,
   NO_WEAPON,
   PLAYER,
+  PRIMARY_WEAPONS,
   quantizeInput,
+  SHIELD,
   type Vec2,
   weaponByIndex,
 } from "@scrapline/shared";
 import type { GameSimulation, ServerPlayer } from "../simulation/GameSimulation.ts";
 
-/** Names of the three practice bots. */
-export const BOT_NAMES = ["Rook", "Vex", "Kestrel"] as const;
+/** Bot names, in seat order. */
+export const BOT_NAMES = [
+  "Rook",
+  "Vex",
+  "Kestrel",
+  "Mako",
+  "Juno",
+  "Bolt",
+  "Nyx",
+  "Ash",
+  "Talon",
+  "Echo",
+  "Grit",
+  "Sable",
+] as const;
+
+/** Bots start with different primaries. */
+export const BOT_PRIMARIES = PRIMARY_WEAPONS;
 
 /** How good the bots are: tuned to be beatable but to punish standing in the open. */
 export const BOT_SKILL = {
@@ -174,6 +192,7 @@ export class BotBrain {
   private mode: Mode = "hunt";
   private target = "";
   private reactAt = 0;
+  private weaponCheckAt = 0;
   private trackFrom = 0;
   private lastSeen: Vec2 | null = null;
   private lastSeenTick = -1e9;
@@ -228,14 +247,23 @@ export class BotBrain {
     let buttons = 0;
     let slot = -1;
 
-    // Weapon: switch away from an empty one.
+    // Weapon: the strongest one with ammo (in a fight: with a loaded magazine, a swap beats a reload).
     const cur = me.sim.slots[me.sim.slot];
-    if (cur && cur.mag === 0 && cur.reserve === 0) {
-      const other = me.sim.slots.findIndex(
-        (s, i) => i !== me.sim.slot && s.id >= 0 && (s.mag > 0 || s.reserve !== 0),
-      );
-      if (other >= 0) slot = other;
+    if (tick >= this.weaponCheckAt || (cur && cur.mag === 0)) {
+      this.weaponCheckAt = tick + sec(0.5);
+      const fighting = this.target !== "";
+      const power = (i: number) => {
+        const sl = me.sim.slots[i];
+        const w = sl && sl.id >= 0 ? weaponByIndex(sl.id) : undefined;
+        if (!sl || !w || (sl.mag === 0 && (fighting || sl.reserve === 0))) return 0;
+        return w.damage * w.pellets * w.rpm;
+      };
+      let best = me.sim.slot;
+      for (let i = 0; i < me.sim.slots.length; i++) if (power(i) > power(best) * 1.15) best = i;
+      if (best !== me.sim.slot) slot = best;
     }
+    // Shield cells: top up whenever a whole cell fits (presses are edge-triggered: every other tick).
+    if (me.cells > 0 && me.shield <= SHIELD.max - SHIELD.perCell && tick % 2 === 0) buttons |= BTN.SHIELD;
     const weapon = cur ? weaponByIndex(cur.id) : undefined;
     const prof = this.profile;
     const preferred = Math.min(620, Math.max(150, (weapon?.falloffStartPx ?? 300) * 0.85 * prof.rangeMult));
@@ -332,11 +360,14 @@ export class BotBrain {
     } else {
       // Cover, a medkit, the last place it saw someone, or a wander towards the noise.
       let goal: Vec2 | null = null;
-      // Unarmed (Battle Royale landing): the nearest weapon, chest or weapon on the ground.
+      // Loot: unarmed (Battle Royale landing) the nearest weapon or chest; otherwise, with nothing
+      // to chase, chests nearby and weapons while the pick-up slot is free.
       const unarmed = me.sim.slots.every((sl) => sl.id === NO_WEAPON);
-      if (unarmed) {
-        const loot = this.nearestLoot(sim, pos);
-        if (loot) {
+      const lead = this.lastSeen ?? this.heard ?? intel;
+      if (unarmed || (!hurt && !lead && this.mode !== "cover")) {
+        const freeSlot = unarmed || (me.sim.slots[2]?.id ?? NO_WEAPON) === NO_WEAPON;
+        const loot = this.nearestLoot(sim, pos, freeSlot);
+        if (loot && (unarmed || Math.hypot(loot.x - pos.x, loot.y - pos.y) < 700)) {
           goal = loot;
           if (Math.hypot(loot.x - pos.x, loot.y - pos.y) < PLAYER.interactRadius && tick % 2 === 0)
             buttons |= BTN.INTERACT;
@@ -347,7 +378,6 @@ export class BotBrain {
       } else if (this.mode === "cover" && this.cover) goal = this.cover;
       else if (hurt) goal = this.nearestHealth(sim, pos);
       // Something to investigate: what it saw, what it heard, what a teammate saw.
-      const lead = this.lastSeen ?? this.heard ?? intel;
       if (!goal && lead) goal = prof.flank && !this.flankDone ? this.flank(sim, pos, lead) : lead;
       if (!goal && prof.supportAllies) goal = this.allyToSupport(sim, me, pos);
       if (!goal) goal = this.wander(sim, me, pos);
@@ -495,7 +525,7 @@ export class BotBrain {
   }
 
   /** Weapons to pick up: chests and weapon pickups that are there, weapons lying on the ground. */
-  private nearestLoot(sim: GameSimulation, pos: Vec2): Vec2 | null {
+  private nearestLoot(sim: GameSimulation, pos: Vec2, weapons = true): Vec2 | null {
     let best: Vec2 | null = null;
     let bestD = Number.POSITIVE_INFINITY;
     const consider = (x: number, y: number) => {
@@ -506,8 +536,9 @@ export class BotBrain {
       }
     };
     for (const pk of sim.pickups.values())
-      if (pk.active && (pk.def.kind === "chest" || pk.def.kind === "weapon")) consider(pk.def.x, pk.def.y);
-    for (const d of sim.drops.values()) if (d.kind === "weapon") consider(d.x, d.y);
+      if (pk.active && (pk.def.kind === "chest" || (weapons && pk.def.kind === "weapon")))
+        consider(pk.def.x, pk.def.y);
+    if (weapons) for (const d of sim.drops.values()) if (d.kind === "weapon") consider(d.x, d.y);
     return best;
   }
 

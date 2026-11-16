@@ -40,7 +40,7 @@ import {
 } from "@scrapline/shared";
 import { z } from "zod";
 // The dedicated server's simulation, state mirroring and scoring run unchanged in the host's tab.
-import { BOT_NAMES, BotDriver } from "../../../server/src/bots/BotBrain.ts";
+import { BOT_NAMES, BOT_PRIMARIES, BotDriver } from "../../../server/src/bots/BotBrain.ts";
 import type { ModeFacts } from "../../../server/src/modes/ModeController.ts";
 import { syncModeState } from "../../../server/src/modes/sync.ts";
 import { type ComputedResult, computeResults, resultRows } from "../../../server/src/players/results.ts";
@@ -94,6 +94,8 @@ export interface HostRoomOptions {
   host: HostProfile;
   /** Runs the tick loop from timers only (tests); the game also pumps from animation frames. */
   headless?: boolean;
+  /** Bots at creation (lobby setting afterwards). Default MATCH_DEFAULTS.bots. */
+  bots?: number;
   /** Test-only fixed spawns / vehicle placement (honored in dev and E2E builds only). */
   debug?: HostDebugOptions;
 }
@@ -193,6 +195,7 @@ export class HostRoom {
       durationSec: MATCH_DEFAULTS.durationSec,
       killLimit: MATCH_DEFAULTS.killLimit,
       maxPlayers: MATCH_DEFAULTS.maxPlayers,
+      bots: opts.bots ?? MATCH_DEFAULTS.bots,
       tickRate: NET.serverTickRate,
       hostId: this.sessionId,
     });
@@ -699,6 +702,10 @@ export class HostRoom {
         this.notice("Too many players in the room for that team size", "warn", undefined, id);
     }
     if (s.friendlyFire !== undefined && this.rules.teamMode) this.rules.setFriendlyFire(s.friendlyFire);
+    if (s.bots !== undefined && s.bots !== this.state.bots) {
+      this.state.bots = s.bots;
+      this.syncPracticeTargets();
+    }
     if (s.map && s.map !== this.state.mapId) {
       if (this.rules.mapAllowed(s.map)) {
         this.switchMap(s.map);
@@ -762,7 +769,8 @@ export class HostRoom {
 
   private startCountdown() {
     this.syncPracticeTargets();
-    this.practiceMatch = this.bots.size > 0;
+    // Alone with bots: practice (no XP). With friends the match counts as usual.
+    this.practiceMatch = this.bots.size > 0 && this.seats.size === 0;
     this.rules.prepareMatch();
     this.sim.setPve(this.rules.pveConfig());
     this.sim.resetForMatch();
@@ -877,35 +885,33 @@ export class HostRoom {
 
   // ------------------------------------------------------------------ practice targets
 
-  /** Same as the dedicated server: a host alone in the lobby gets three strafing targets. */
+  /** Bots chosen by the host (lobby setting, also with friends); the lineup is kept during a match. */
   private syncPracticeTargets() {
-    // Co-op PvE has its own enemies, the round modes need people: no training targets.
-    const alone = this.seats.size === 0 && this.rules.practiceAllowed;
-    const wanted = alone && this.state.phase === "lobby" ? 3 : 0;
-    const keep = alone && this.state.phase !== "lobby";
-    if (wanted > 0 && this.bots.size === 0) {
-      for (let i = 1; i <= wanted; i++) {
-        const id = `bot:${i}`;
-        this.bots.add(id);
-        this.addPlayer(id, {
-          name: BOT_NAMES[i - 1] ?? `Bot ${i}`,
-          skin: "ash",
-          level: 1,
-          primary: "rifle",
-          profileId: "",
-        });
-        const ps = this.state.players.get(id);
-        if (ps) ps.ready = true;
-      }
-    } else if (wanted === 0 && !keep && this.bots.size > 0) {
-      for (const id of this.bots) {
-        this.sim.removePlayer(id);
-        this.state.players.delete(id);
-        this.views.delete(id);
-        this.lastInputTick.delete(id);
-      }
-      this.bots.clear();
-      this.botDriver.clear();
+    if (this.state.phase !== "lobby") return;
+    // Co-op PvE has its own enemies, the round modes need people: no bots there.
+    const wanted = this.rules.practiceAllowed ? this.state.bots : 0;
+    for (let i = 1; i <= wanted; i++) {
+      const id = `bot:${i}`;
+      if (this.bots.has(id)) continue;
+      this.bots.add(id);
+      this.addPlayer(id, {
+        name: BOT_NAMES[i - 1] ?? `Bot ${i}`,
+        skin: "ash",
+        level: 1,
+        primary: BOT_PRIMARIES[i % BOT_PRIMARIES.length]!,
+        profileId: "",
+      });
+      const ps = this.state.players.get(id);
+      if (ps) ps.ready = true;
+    }
+    for (const id of this.bots) {
+      if (Number(id.slice(4)) <= wanted) continue;
+      this.sim.removePlayer(id);
+      this.state.players.delete(id);
+      this.views.delete(id);
+      this.lastInputTick.delete(id);
+      this.botDriver.forget(id);
+      this.bots.delete(id);
     }
   }
 

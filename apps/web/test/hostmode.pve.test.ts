@@ -74,7 +74,7 @@ const input = (buttons = 0) => ({
 
 describe("host mode: Outbreak co-op", () => {
   it("lobby → mission: enemies and mission state reach the guest; downed guest revived by the host; results recorded once", async () => {
-    const host = new HostRoom({ code: "OUTBK", map: "industrial", host: HOST, headless: true });
+    const host = new HostRoom({ code: "OUTBK", map: "industrial", host: HOST, headless: true, bots: 0 });
     rooms.push(host);
     host.send(C2S.SETTINGS, { mode: "outbreak" });
     await ticks(host, 1);
@@ -162,7 +162,7 @@ describe("host mode: Outbreak co-op", () => {
   }, 30_000);
 
   it("rejoining under a new seat is no free revive; after a wipe the next PvP match has nobody downed", async () => {
-    const host = new HostRoom({ code: "OUTB2", map: "industrial", host: HOST, headless: true });
+    const host = new HostRoom({ code: "OUTB2", map: "industrial", host: HOST, headless: true, bots: 0 });
     rooms.push(host);
     host.send(C2S.SETTINGS, { mode: "survival" });
     await ticks(host, 1);

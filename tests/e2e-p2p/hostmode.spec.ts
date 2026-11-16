@@ -168,12 +168,14 @@ test("host alone: the practice bots move, fight and hurt the host", async () => 
   await a.getByTestId("nav-rooms").click();
   await a.getByTestId("create-room").click();
   await expect(a.getByTestId("host-hint")).toBeVisible({ timeout: 15_000 });
-  await expect(a.getByText("Bot", { exact: true })).toHaveCount(3);
+  await expect(a.getByText("Bot", { exact: true })).toHaveCount(8);
+  await a.getByTestId("bots-count").selectOption("9");
+  await expect(a.getByText("Bot", { exact: true })).toHaveCount(9);
   await a.getByTestId("start-match").click();
   await phaseIs(a, "playing", 30_000);
   const selfId = (await hooks(a, (h) => h.selfId()))!;
   const start = (await hooks(a, (h) => h.players())).filter((p) => p.id.startsWith("bot:"));
-  expect(start.length).toBe(3);
+  expect(start.length).toBe(9);
   let lowest = 100;
   let botDamage = 0;
   let moved = 0;
