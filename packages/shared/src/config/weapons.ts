@@ -26,6 +26,7 @@ export type WeaponId =
   | "autoshotgun"
   | "heavysniper"
   | "grenadelauncher"
+  | "grenade"
   | "railgun"
   | "flamethrower"
   | "claws";
@@ -811,6 +812,44 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     },
     sound: { body: 60, pitch: 0.65, decay: 0.3, noise: 0.85, crack: 0.3, gain: 0.7 },
   },
+  grenade: {
+    id: "grenade",
+    index: 24,
+    name: "Frag Grenade",
+    blurb: "Hand grenade: short throw, wide blast that hits everyone around the impact.",
+    slotKind: "loot",
+    fireMode: "semi",
+    damage: 0,
+    pellets: 1,
+    rpm: 40,
+    magSize: 1,
+    reserveAmmo: 3,
+    reloadSec: 1.1,
+    spreadDeg: 1.2,
+    bloomPerShotDeg: 1.5,
+    maxBloomDeg: 4,
+    bloomRecoveryDegPerSec: 6,
+    movingSpreadDeg: 3,
+    evenPelletSpread: false,
+    rangePx: 480,
+    falloffStartPx: 480,
+    minDamageMult: 1,
+    moveSpeedMult: 1,
+    swapSec: 0.35,
+    splash: { radius: 160, damage: 95 },
+    fx: {
+      tracerColor: 0x8bd96b,
+      tracerWidth: 4,
+      tracerSpeed: 650,
+      muzzleScale: 0.3,
+      recoilKickPx: 2,
+      shake: 1.6,
+      laserSight: false,
+      category: "mounted",
+      recoilRotDeg: 6,
+    },
+    sound: { body: 60, pitch: 0.65, decay: 0.3, noise: 0.85, crack: 0.3, gain: 0.7 },
+  },
   railgun: {
     id: "railgun",
     index: 21,
@@ -1037,6 +1076,7 @@ export const CHEST_WEAPONS: readonly { id: WeaponId; weight: number }[] = [
   { id: "sniper", weight: 2 },
   { id: "minigun", weight: 2 },
   { id: "grenadelauncher", weight: 2 },
+  { id: "grenade", weight: 3 },
   { id: "railgun", weight: 1 },
   { id: "heavysniper", weight: 1 },
   { id: "rpg", weight: 1 },

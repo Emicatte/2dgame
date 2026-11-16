@@ -58,6 +58,7 @@ describe("weapon visual families", () => {
       autoshotgun: "shotgun",
       heavysniper: "sniper",
       grenadelauncher: "mounted",
+      grenade: "mounted",
       railgun: "sniper",
       flamethrower: "shotgun",
       claws: "pistol",
