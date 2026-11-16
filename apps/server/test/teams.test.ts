@@ -260,6 +260,7 @@ describe("MatchRules (shared by the dedicated and browser-hosted rooms)", () => 
     const solo = setup();
     solo.rules.setMode("tdm");
     solo.join("human");
+    solo.state.hostId = "human";
     solo.rules.switchTeam("human", 2);
     for (const id of ["bot:1", "bot:2"]) {
       solo.bots.add(id);

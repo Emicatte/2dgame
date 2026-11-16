@@ -302,7 +302,7 @@ export class MatchRules {
       return 0;
     }
     if (this.isBot(id)) {
-      p.team = this.botTeam();
+      p.team = this.botTeamFor(id);
       return p.team;
     }
     p.team = 0;
@@ -318,10 +318,12 @@ export class MatchRules {
     return team;
   }
 
-  /** Practice targets play for the team the (single) human is not on. */
-  botTeam(): number {
-    const human = this.humans().find((p) => p.team === TEAM_ALPHA || p.team === TEAM_BRAVO);
-    return human?.team === TEAM_BRAVO ? TEAM_ALPHA : TEAM_BRAVO;
+  /** Bots 1…allyBots play on the host's team, the others against it. */
+  botTeamFor(id: string): number {
+    const host = this.sim.players.get(this.state.hostId);
+    const enemy = host?.team === TEAM_BRAVO ? TEAM_ALPHA : TEAM_BRAVO;
+    const ally = enemy === TEAM_BRAVO ? TEAM_ALPHA : TEAM_BRAVO;
+    return Number(id.slice(4)) <= this.state.allyBots ? ally : enemy;
   }
 
   /** A player asks to move to another team (lobby/results only, target must have room). */
@@ -374,9 +376,9 @@ export class MatchRules {
     this.retargetBots();
   }
 
-  private retargetBots(): void {
-    const t = this.botTeam();
-    for (const p of this.sim.players.values()) if (this.isBot(p.id)) p.team = this.teamMode ? t : 0;
+  retargetBots(): void {
+    for (const p of this.sim.players.values())
+      if (this.isBot(p.id)) p.team = this.teamMode ? this.botTeamFor(p.id) : 0;
   }
 
   /** Mirrors teams and scores into the synchronized state. */
