@@ -82,6 +82,8 @@ export const settingsSchema = z.object({
   mode: modeSchema.optional(),
   /** Bots in the match (combat modes). */
   bots: z.number().int().min(MATCH_LIMITS.bots.min).max(MATCH_LIMITS.bots.max).optional(),
+  /** Team modes: how many of the bots play on the host's team. */
+  allyBots: z.number().int().min(0).max(MATCH_LIMITS.bots.max).optional(),
   /** Team modes: players per team (1v1 … 4v4). */
   teamSize: z.number().int().min(TEAM_SIZE.min).max(TEAM_SIZE.max).optional(),
   friendlyFire: z.boolean().optional(),

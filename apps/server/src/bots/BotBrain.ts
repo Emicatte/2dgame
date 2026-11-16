@@ -256,7 +256,7 @@ export class BotBrain {
         const sl = me.sim.slots[i];
         const w = sl && sl.id >= 0 ? weaponByIndex(sl.id) : undefined;
         if (!sl || !w || (sl.mag === 0 && (fighting || sl.reserve === 0))) return 0;
-        return w.damage * w.pellets * w.rpm;
+        return (w.splash?.damage ?? w.damage) * w.pellets * w.rpm;
       };
       let best = me.sim.slot;
       for (let i = 0; i < me.sim.slots.length; i++) if (power(i) > power(best) * 1.15) best = i;

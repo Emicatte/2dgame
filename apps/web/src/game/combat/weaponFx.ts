@@ -195,6 +195,7 @@ export const WEAPON_SHAPES: Readonly<Record<string, { len: number; h: number }>>
   autoshotgun: { len: 32, h: 9 },
   heavysniper: { len: 52, h: 8 },
   grenadelauncher: { len: 32, h: 10 },
+  grenade: { len: 12, h: 10 },
   railgun: { len: 48, h: 8 },
   flamethrower: { len: 36, h: 9 },
   claws: { len: 12, h: 10 },

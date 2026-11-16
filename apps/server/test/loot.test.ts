@@ -31,7 +31,7 @@ function setup() {
     p.protectedUntil = 0;
     return p;
   };
-  return { sim, a: add("a"), b: add("b") };
+  return { sim, add, a: add("a"), b: add("b") };
 }
 
 let seq = 0;
@@ -159,6 +159,36 @@ describe("loot: chests, shields, new weapons", () => {
     for (const e of sim.step(SERVER_TICK_MS, "live")) events.push(e.t);
     expect(events).toContain("boom");
     expect(b.hp).toBeLessThan(PLAYER.maxHealth - 50);
+    expect(a.hp).toBe(PLAYER.maxHealth);
+  });
+
+  it("a frag grenade's blast hits several players at once", () => {
+    const { sim, add, a, b } = setup();
+    const c = add("c");
+    a.sim.x = 1100;
+    a.sim.y = 480;
+    b.sim.x = 1100;
+    b.sim.y = 640;
+    c.sim.x = 1040;
+    c.sim.y = 660;
+    a.sim.slots[2] = { id: WEAPONS.grenade.index, mag: 1, reserve: 3 };
+    frame(sim, a, 0, 0, 2);
+    for (let i = 0; i < 60; i++) frame(sim, a, 0, Math.PI / 2);
+    sim.enqueue(a.id, [
+      quantizeInput({
+        seq: ++seq,
+        mx: 0,
+        my: 0,
+        aim: Math.PI / 2,
+        buttons: BTN.FIRE,
+        slot: -1,
+        viewTick: sim.tick,
+      }),
+    ]);
+    const events = sim.step(SERVER_TICK_MS, "live").map((e) => e.t);
+    expect(events).toContain("boom");
+    expect(b.hp).toBeLessThan(PLAYER.maxHealth);
+    expect(c.hp).toBeLessThan(PLAYER.maxHealth);
     expect(a.hp).toBe(PLAYER.maxHealth);
   });
 });

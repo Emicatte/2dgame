@@ -88,6 +88,13 @@ describe("host mode: browser-hosted room", () => {
     await join(host, 1);
     await ticks(host, 3);
     expect(bots()).toBe(2);
+    // Team modes: the host splits the bots between its team and the other one.
+    host.send(C2S.SETTINGS, { mode: "tdm", allyBots: 1 });
+    await ticks(host, 1);
+    const me = host.state.players.get(host.sessionId)!.team;
+    const sides = [...host.state.players.entries()].filter(([id]) => id.startsWith("bot:"));
+    expect(sides.filter(([, p]) => p.team === me)).toHaveLength(1);
+    expect(sides.filter(([, p]) => p.team !== me)).toHaveLength(1);
     host.send(C2S.SETTINGS, { mode: "hideseek" });
     expect(bots()).toBe(0);
   });

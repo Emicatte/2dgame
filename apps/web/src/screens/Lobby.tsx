@@ -578,6 +578,23 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                       </select>
                     </div>
                   )}
+                  {botsAllowed && teams && s.bots > 0 && (
+                    <div className="setting-row">
+                      <span>Bots on my team</span>
+                      <select
+                        className="input"
+                        data-testid="ally-bots"
+                        value={Math.min(s.allyBots, s.bots)}
+                        onChange={(e) => session.updateSettings({ allyBots: Number(e.target.value) })}
+                      >
+                        {[...Array(s.bots + 1).keys()].map((n) => (
+                          <option key={n} value={n}>
+                            {n} with me · {s.bots - n} against
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   {teams && humans.length >= 2 && (
                     <Button size="sm" onClick={() => session.balanceTeams()} data-testid="balance-teams">
                       Balance teams by level

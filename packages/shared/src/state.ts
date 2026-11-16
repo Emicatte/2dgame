@@ -436,6 +436,8 @@ export const MatchState = schema(
     maxPlayers: t.uint8().default(0),
     /** Bots the host asked for (combat modes). */
     bots: t.uint8().default(0),
+    /** Team modes: bots on the host's team (the rest play against it). */
+    allyBots: t.uint8().default(0),
     tickRate: t.uint8().default(0),
     winnerId: t.string().default(""),
     matchIndex: t.uint16().default(0),

@@ -706,6 +706,10 @@ export class HostRoom {
       this.state.bots = s.bots;
       this.syncPracticeTargets();
     }
+    if (s.allyBots !== undefined && s.allyBots !== this.state.allyBots) {
+      this.state.allyBots = s.allyBots;
+      this.rules.retargetBots();
+    }
     if (s.map && s.map !== this.state.mapId) {
       if (this.rules.mapAllowed(s.map)) {
         this.switchMap(s.map);
