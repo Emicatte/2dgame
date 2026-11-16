@@ -1076,7 +1076,7 @@ export const CHEST_WEAPONS: readonly { id: WeaponId; weight: number }[] = [
   { id: "sniper", weight: 2 },
   { id: "minigun", weight: 2 },
   { id: "grenadelauncher", weight: 2 },
-  { id: "grenade", weight: 3 },
+  { id: "grenade", weight: 10 },
   { id: "railgun", weight: 1 },
   { id: "heavysniper", weight: 1 },
   { id: "rpg", weight: 1 },
