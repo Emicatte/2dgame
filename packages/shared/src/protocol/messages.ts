@@ -27,6 +27,8 @@ export const C2S = {
   VOTE: "vote",
   /** Leave the running match but stay in the room (back in at the next match). */
   LEAVE_MATCH: "leaveMatch",
+  /** Text chat (lobby and match). */
+  CHAT: "chat",
 } as const;
 
 /** Server → client message types. */
@@ -34,6 +36,7 @@ export const S2C = {
   EVENTS: "ev",
   NOTICE: "notice",
   RESULTS: "results",
+  CHAT: "chat",
 } as const;
 
 export type RoomKind = "quick" | "private";
@@ -121,6 +124,16 @@ export const loadoutSchema = z.object({
   primary: weaponIdSchema,
   skin: z.string().max(32),
 });
+
+export const CHAT_MAX_LEN = 120;
+/** Minimum interval between two chat lines of the same player (anti-spam). */
+export const CHAT_MIN_INTERVAL_MS = 500;
+export const chatSchema = z.object({ text: z.string().trim().min(1).max(CHAT_MAX_LEN) });
+export interface ChatMessage {
+  from: string;
+  name: string;
+  text: string;
+}
 
 export const kickSchema = z.object({ id: z.string().min(1).max(64) });
 

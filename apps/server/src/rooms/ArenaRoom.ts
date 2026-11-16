@@ -4,6 +4,9 @@ import { StateView } from "@colyseus/schema";
 import {
   abilitySchema,
   C2S,
+  CHAT_MIN_INTERVAL_MS,
+  type ChatMessage,
+  chatSchema,
   DEFAULT_MAP,
   DEFAULT_SKIN,
   decodeInput,
@@ -128,6 +131,7 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
   private code = "";
   private readonly views = new Map<string, PlayerState>();
   private readonly lastInputTick = new Map<string, number>();
+  private readonly lastChat = new Map<string, number>();
   private leavers: ComputedResult[] = [];
   private matchStartedAt: Date | null = null;
   private matchStartPlayers = 0;
@@ -218,6 +222,13 @@ export class ArenaRoom extends Room<{ state: MatchState; metadata: RoomMetadata 
     this.onMessage(C2S.LEAVE_MATCH, (client) => this.handleLeaveMatch(client.sessionId));
     this.onMessage(C2S.VOTE, voteSchema, (client, msg) => {
       if (this.state.phase === "results") this.rules.vote(client.sessionId, msg.map);
+    });
+    this.onMessage(C2S.CHAT, chatSchema, (client, msg) => {
+      const name = this.state.players.get(client.sessionId)?.name;
+      const now = Date.now();
+      if (!name || now - (this.lastChat.get(client.sessionId) ?? 0) < CHAT_MIN_INTERVAL_MS) return;
+      this.lastChat.set(client.sessionId, now);
+      this.broadcast(S2C.CHAT, { from: client.sessionId, name, text: msg.text } satisfies ChatMessage);
     });
     this.onMessage("ping", pingSchema, (client, msg) => {
       const ps = this.state.players.get(client.sessionId);

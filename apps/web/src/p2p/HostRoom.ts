@@ -2,6 +2,9 @@ import { Encoder, StateView } from "@colyseus/schema";
 import {
   abilitySchema,
   C2S,
+  CHAT_MIN_INTERVAL_MS,
+  type ChatMessage,
+  chatSchema,
   decodeInput,
   hashString,
   type InputBatch,
@@ -150,6 +153,7 @@ export class HostRoom {
   private readonly rules: MatchRules;
   private readonly encoder: Encoder<MatchState>;
   private readonly views = new Map<string, PlayerState>();
+  private readonly lastChat = new Map<string, number>();
   private readonly seats = new Map<string, Seat>();
   private readonly pending = new Set<PeerLink>();
   private readonly lastInputTick = new Map<string, number>();
@@ -623,6 +627,15 @@ export class HostRoom {
         const msg = parse(kickSchema);
         if (msg && id === this.sessionId && msg.id !== this.sessionId)
           this.kick(msg.id, CLOSE.KICKED, "kicked by host");
+        return;
+      }
+      case C2S.CHAT: {
+        const msg = parse(chatSchema);
+        const name = this.state.players.get(id)?.name;
+        const now = performance.now();
+        if (!msg || !name || now - (this.lastChat.get(id) ?? -1e9) < CHAT_MIN_INTERVAL_MS) return;
+        this.lastChat.set(id, now);
+        this.broadcast(S2C.CHAT, { from: id, name, text: msg.text } satisfies ChatMessage);
         return;
       }
       case "ping": {

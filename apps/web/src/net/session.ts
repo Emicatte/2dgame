@@ -2,6 +2,7 @@ import { Client, type Room } from "@colyseus/sdk";
 import {
   type AbilityMessage,
   C2S,
+  type ChatMessage,
   DEFAULT_PRIMARY,
   DEFAULT_SKIN,
   type GameMode,
@@ -120,6 +121,8 @@ export interface SessionState {
   away: boolean;
   /** Status line of the running mode (MatchState.modeText). */
   modeText: string;
+  /** Chat lines of this room (last 50). */
+  chat: (ChatMessage & { at: number })[];
 }
 
 const initialState: SessionState = {
@@ -154,6 +157,7 @@ const initialState: SessionState = {
   voteMaps: [],
   away: false,
   modeText: "",
+  chat: [],
 };
 
 export const sessionStore = createStore<SessionState>({ ...initialState });
@@ -331,6 +335,9 @@ class GameSession {
       gameEvents.emit("net", { events, tick: room.state.tick + 1 });
     });
     room.onMessage(S2C.NOTICE, (msg: NoticeMessage) => gameEvents.emit("notice", msg));
+    room.onMessage(S2C.CHAT, (msg: ChatMessage) =>
+      sessionStore.patch({ chat: [...sessionStore.get().chat, { ...msg, at: Date.now() }].slice(-50) }),
+    );
     room.onMessage(S2C.RESULTS, (raw: ResultsMessage) => {
       // Host mode: this browser records its own match in the local profile.
       const msg =
@@ -434,6 +441,10 @@ class GameSession {
   }
 
   /** Leaves the running match only: stays in the room (and team) for the next match. */
+  chat(text: string) {
+    this.send(C2S.CHAT, { text });
+  }
+
   leaveMatch() {
     this.send(C2S.LEAVE_MATCH, {});
   }
