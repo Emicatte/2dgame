@@ -2010,3 +2010,102 @@
   font-size: 0.72rem;
   color: var(--signal);
 }
+
+/* ------------------------------------------------------------------ chat */
+.chat {
+  position: fixed;
+  z-index: var(--z-overlay);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.chat--lobby {
+  right: 20px;
+  bottom: 76px;
+  width: min(340px, calc(100vw - 40px));
+  height: 300px;
+  padding: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+}
+.chat--game {
+  left: 20px;
+  bottom: 150px;
+  width: min(360px, calc(100vw - 40px));
+  pointer-events: none;
+}
+.chat__list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  word-break: break-word;
+}
+.chat--game .chat__list {
+  max-height: 200px;
+}
+.chat--game .chat__line {
+  background: rgba(14, 15, 17, 0.7);
+  padding: 2px 6px;
+  border-radius: 3px;
+  align-self: flex-start;
+}
+.chat__line b {
+  color: var(--accent);
+  margin-right: 4px;
+}
+.chat__line.is-me b {
+  color: var(--muted);
+}
+.chat__empty {
+  color: var(--muted);
+  margin: auto;
+}
+.chat__input {
+  pointer-events: auto;
+  width: 100%;
+  padding: 7px 9px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  outline: none;
+}
+.chat__input:focus {
+  border-color: var(--accent);
+}
+.chat-toggle {
+  position: fixed;
+  z-index: var(--z-overlay);
+  right: 20px;
+  bottom: 20px;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-2);
+  color: inherit;
+  border: 1px solid var(--line-2);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.chat-toggle:hover {
+  border-color: var(--accent);
+}
+.chat-toggle__badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  padding: 0 4px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  border-radius: 9px;
+}

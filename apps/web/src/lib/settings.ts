@@ -58,7 +58,7 @@ export const DEFAULT_BINDINGS: Record<Action, string> = {
   scoreboard: "Tab",
   propMenu: "KeyQ",
   lock: "KeyC",
-  taunt: "KeyT",
+  taunt: "KeyB",
   decoy: "KeyG",
   swap: "KeyV",
 };
@@ -148,6 +148,8 @@ export function migrateSettings(raw: unknown): Settings {
       if (k in DEFAULT_BINDINGS && typeof v === "string" && v) bindings[k as Action] = v;
     }
   }
+  // T now opens the match chat: the old taunt default moves to its new key.
+  if (bindings.taunt === "KeyT") bindings.taunt = DEFAULT_BINDINGS.taunt;
   const L = CROSSHAIR_LIMITS;
   // Fields this function does not validate (added later) load as stored, like before; keys that
   // are not settings at all are dropped.

@@ -213,7 +213,7 @@ export class ModeLayer {
   /**
    * Party mode keys. G is the role ability: sonar for seekers and hunters, a noise decoy (thrown
    * at the crosshair) for Hide & Seek hiders, a decoy object for props. Props also: Q picker, E
-   * copy what you look at, C lock, T taunt, V swap with a real object.
+   * copy what you look at, C lock, B taunt, V swap with a real object.
    */
   handleInput(
     controls: InputManager,
@@ -893,4 +893,4 @@ function sameKinds(a: { index: number }[], b: { index: number }[]): boolean {
 }
 
 /** Exposed for the HUD: the prop key reminders. */
-export const PROP_KEYS_HELP = `Q choose · E copy · C lock · T taunt · G decoy (${PROP_HUNT.decoySec}s) · V swap with a nearby object`;
+export const PROP_KEYS_HELP = `Q choose · E copy · C lock · B taunt · G decoy (${PROP_HUNT.decoySec}s) · V swap with a nearby object`;

@@ -16,6 +16,7 @@ import {
   weaponByIndex,
 } from "@scrapline/shared";
 import { useEffect, useRef, useState } from "react";
+import { Chat } from "../components/Chat.tsx";
 import { Button, formatClock, Panel } from "../components/ui.tsx";
 import { type HudObjective, type HudVehicle, hudStore, uiStore } from "../game/hudStore.ts";
 import { brMinimapStore } from "../game/modes/BrLayer.ts";
@@ -412,6 +413,7 @@ export function InGame({ onSettings }: { onSettings: () => void }) {
 
   return (
     <>
+      <Chat inGame />
       <div className="hud" data-testid="hud">
         <div className="netstat">
           <span className={`netstat__dot ${statusClass}`} />

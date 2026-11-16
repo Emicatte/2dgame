@@ -27,6 +27,7 @@ import {
   TEAMS,
 } from "@scrapline/shared";
 import { useRef, useState } from "react";
+import { Chat } from "../components/Chat.tsx";
 import { mapThumb } from "../components/mapThumbs.ts";
 import { Button, formatClock, hexColor, LevelChip, Panel } from "../components/ui.tsx";
 import { MODE_FLAGS } from "../lib/modeFlags.ts";
@@ -630,6 +631,7 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
           </Panel>
         </div>
       </div>
+      <Chat />
     </div>
   );
 }
