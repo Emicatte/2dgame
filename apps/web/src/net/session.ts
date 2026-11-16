@@ -87,6 +87,7 @@ export interface SessionState {
   durationSec: number;
   killLimit: number;
   maxPlayers: number;
+  bots: number;
   tickRate: number;
   phaseEndTick: number;
   tick: number;
@@ -138,6 +139,7 @@ const initialState: SessionState = {
   durationSec: 0,
   killLimit: 0,
   maxPlayers: 8,
+  bots: 0,
   tickRate: 20,
   phaseEndTick: 0,
   tick: 0,
@@ -408,6 +410,7 @@ class GameSession {
       durationSec: state.durationSec,
       killLimit: state.killLimit,
       maxPlayers: state.maxPlayers,
+      bots: state.bots,
       tickRate: state.tickRate,
       phaseEndTick: state.phaseEndTick,
       tick: phase === "playing" ? s.tick : state.tick,

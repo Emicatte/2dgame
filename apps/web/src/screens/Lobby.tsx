@@ -3,6 +3,7 @@ import {
   EXPERIENCE_CATEGORY_OF,
   type GameMode,
   isPveMode,
+  isRoleMode,
   isRoundMode,
   isTeamMode,
   MAPS,
@@ -141,6 +142,7 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
     ));
 
   const humans = s.players.filter((p) => !p.id.startsWith("bot:"));
+  const botsAllowed = !isPveMode(s.mode) && !isRoleMode(s.mode) && MODES[s.mode].weapons !== "None";
   const def = MODES[s.mode];
   /** Rounds (count picked here, no duration): the role modes and the team round modes. */
   const rounds = isRoundMode(s.mode);
@@ -238,10 +240,12 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
               })}
             </div>
           ) : (
-            <Panel title={`Players ${s.players.length}/${s.maxPlayers}`}>
+            <Panel
+              title={`Players ${humans.length}/${s.maxPlayers}${s.players.length > humans.length ? ` · ${s.players.length - humans.length} bots` : ""}`}
+            >
               <div className="player-list" data-testid="lobby-players">
                 {s.players.map(row)}
-                {emptyRows(Math.min(3, s.maxPlayers - s.players.length), "ffa")}
+                {emptyRows(Math.min(3, s.maxPlayers - humans.length), "ffa")}
               </div>
             </Panel>
           )}
@@ -550,8 +554,25 @@ export function Lobby({ onOpenLoadout }: { onOpenLoadout: () => void }) {
                         onChange={(e) => session.updateSettings({ maxPlayers: Number(e.target.value) })}
                       >
                         {[2, 3, 4, 5, 6, 7, 8].map((n) => (
-                          <option key={n} value={n} disabled={n < s.players.length}>
+                          <option key={n} value={n} disabled={n < humans.length}>
                             {n}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {botsAllowed && (
+                    <div className="setting-row">
+                      <span>Bots</span>
+                      <select
+                        className="input"
+                        data-testid="bots-count"
+                        value={s.bots}
+                        onChange={(e) => session.updateSettings({ bots: Number(e.target.value) })}
+                      >
+                        {[...Array(MATCH_LIMITS.bots.max + 1).keys()].map((n) => (
+                          <option key={n} value={n}>
+                            {n === 0 ? "Off" : n}
                           </option>
                         ))}
                       </select>

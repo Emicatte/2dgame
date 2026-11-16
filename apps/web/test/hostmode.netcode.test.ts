@@ -43,6 +43,7 @@ describe("host mode netcode (120 ms RTT, real time)", () => {
       map: "industrial",
       host: { name: "Host", level: 1, skin: "foundry", primary: "rifle", profileId: "host-prof-1" },
       headless: true,
+      bots: 0,
     });
     rooms.push(host);
     host.start();

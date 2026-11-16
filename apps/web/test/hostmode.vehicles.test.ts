@@ -45,6 +45,7 @@ describe("host mode vehicle netcode (120 ms RTT, real time)", () => {
       map: "urban",
       host: { name: "Host", level: 1, skin: "foundry", primary: "rifle", profileId: "host-prof-v" },
       headless: true,
+      bots: 0,
       debug: {
         spawns: [
           { x: 700 * K, y: 1280 * K - 50 },

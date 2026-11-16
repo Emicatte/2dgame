@@ -27,6 +27,7 @@ async function arenaWithGuest() {
     map: "industrial",
     host: { name: "Hosty", level: 3, skin: "foundry", primary: "rifle", profileId: "host-profile-1" },
     headless: true,
+    bots: 0,
   });
   rooms.push(host);
   const pending = PeerRoom.join(

@@ -68,6 +68,8 @@ export const MATCH_DEFAULTS = {
   maxPlayers: 8,
   durationSec: 7 * 60,
   killLimit: 20,
+  /** Bots added to a lobby (combat modes); the host picks 0–12. */
+  bots: 8,
   countdownSec: 5,
   /** Quick match rooms start on their own after this many seconds once minPlayers are present. */
   quickMatchAutoStartSec: 12,
@@ -80,6 +82,7 @@ export const MATCH_LIMITS = {
   durationSec: { min: 120, max: 20 * 60 },
   killLimit: { min: 1, max: 200 },
   maxPlayers: { min: 2, max: 8 },
+  bots: { min: 0, max: 12 },
 } as const;
 
 export const NICKNAME = { min: 2, max: 16 } as const;

@@ -5,6 +5,7 @@ import {
   C2S,
   encodeInput,
   type GuestSessionResponse,
+  MATCH_DEFAULTS,
   MatchState,
   type NetEvent,
   quantizeInput,
@@ -150,8 +151,8 @@ describe("ArenaRoom over real sockets", () => {
       MatchState,
     );
     await until(() => a.state.code?.length === 5, 3000, "room code");
-    // Alone in a private room: three training targets are added for solo practice.
-    await until(() => a.state.players.size === 4, 3000, "practice targets");
+    // Alone in a private room: the default bots are added for solo practice.
+    await until(() => a.state.players.size === 1 + MATCH_DEFAULTS.bots, 3000, "practice targets");
     const lookup = await fetch(`${URL}/api/rooms/code/${a.state.code}`);
     expect(lookup.status).toBe(200);
     const { roomId } = (await lookup.json()) as { roomId: string };

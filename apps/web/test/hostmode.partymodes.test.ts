@@ -36,7 +36,7 @@ afterEach(async () => {
 });
 
 async function arena(map: "depot" | "industrial", links: PeerLink[] = []) {
-  const host = new HostRoom({ code: "PARTY", map, host: HOST, headless: true });
+  const host = new HostRoom({ code: "PARTY", map, host: HOST, headless: true, bots: 0 });
   rooms.push(host);
   const pending = PeerRoom.join(
     async () => {
@@ -158,7 +158,7 @@ describe("host mode: party modes", () => {
   });
 
   it("round modes refuse to start alone", async () => {
-    const host = new HostRoom({ code: "SOLO1", map: "depot", host: HOST, headless: true });
+    const host = new HostRoom({ code: "SOLO1", map: "depot", host: HOST, headless: true, bots: 0 });
     rooms.push(host);
     const notices: string[] = [];
     host.onMessage(S2C.NOTICE, (m) => notices.push((m as { text: string }).text));

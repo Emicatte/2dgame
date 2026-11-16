@@ -20,7 +20,7 @@ afterEach(async () => {
 });
 
 function makeHost() {
-  const host = new HostRoom({ code: "TEAMS", map: "industrial", host: HOST, headless: true });
+  const host = new HostRoom({ code: "TEAMS", map: "industrial", host: HOST, headless: true, bots: 0 });
   rooms.push(host);
   return host;
 }

@@ -80,6 +80,8 @@ export const settingsSchema = z.object({
   killLimit: z.number().int().min(MATCH_LIMITS.killLimit.min).max(MATCH_LIMITS.killLimit.max).optional(),
   maxPlayers: z.number().int().min(MATCH_LIMITS.maxPlayers.min).max(MATCH_LIMITS.maxPlayers.max).optional(),
   mode: modeSchema.optional(),
+  /** Bots in the match (combat modes). */
+  bots: z.number().int().min(MATCH_LIMITS.bots.min).max(MATCH_LIMITS.bots.max).optional(),
   /** Team modes: players per team (1v1 … 4v4). */
   teamSize: z.number().int().min(TEAM_SIZE.min).max(TEAM_SIZE.max).optional(),
   friendlyFire: z.boolean().optional(),

@@ -44,6 +44,7 @@ describe("host mode under load (8 players, 6 vehicles)", () => {
       map: "urban",
       host: { name: "Host", level: 1, skin: "foundry", primary: "rifle", profileId: "host-load-0" },
       headless: true,
+      bots: 0,
       debug: { spawns: SPAWNS },
     });
     rooms.push(host);

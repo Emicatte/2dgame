@@ -1,4 +1,12 @@
-import { BTN, C2S, encodeInput, type NetEvent, type ResultsMessage, S2C } from "@scrapline/shared";
+import {
+  BTN,
+  C2S,
+  encodeInput,
+  MATCH_DEFAULTS,
+  type NetEvent,
+  type ResultsMessage,
+  S2C,
+} from "@scrapline/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { HostRoom } from "../src/p2p/HostRoom.ts";
 import { breakLink, memoryLinkPair, type PeerLink } from "../src/p2p/link.ts";
@@ -29,7 +37,7 @@ afterEach(async () => {
 });
 
 function makeHost(): HostRoom {
-  const host = new HostRoom({ code: "ABCDE", map: "industrial", host: HOST, headless: true });
+  const host = new HostRoom({ code: "ABCDE", map: "industrial", host: HOST, headless: true, bots: 0 });
   rooms.push(host);
   return host;
 }
@@ -70,10 +78,23 @@ async function ticks(host: HostRoom, n: number) {
 }
 
 describe("host mode: browser-hosted room", () => {
+  it("bots: default lineup, chosen by the host, kept with friends, none in round modes", async () => {
+    const host = new HostRoom({ code: "BOTSX", map: "industrial", host: HOST, headless: true });
+    rooms.push(host);
+    const bots = () => [...host.state.players.keys()].filter((id) => id.startsWith("bot:")).length;
+    expect(bots()).toBe(MATCH_DEFAULTS.bots);
+    host.send(C2S.SETTINGS, { bots: 2 });
+    expect(bots()).toBe(2);
+    await join(host, 1);
+    await ticks(host, 3);
+    expect(bots()).toBe(2);
+    host.send(C2S.SETTINGS, { mode: "hideseek" });
+    expect(bots()).toBe(0);
+  });
+
   it("a guest joins and sees the same lobby; owner-only fields reach only their owner", async () => {
     const host = makeHost();
-    // Alone in the lobby, the host gets three practice targets (as on the dedicated server).
-    expect(host.state.players.size).toBe(4);
+    expect(host.state.players.size).toBe(1);
     const guest = await join(host, 1);
     await ticks(host, 3);
 
