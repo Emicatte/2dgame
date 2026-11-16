@@ -326,6 +326,7 @@ export class BotBrain {
     let mx = 0;
     let my = 0;
     let aim = me.sim.aim;
+    let aimDist: number | undefined;
 
     if (this.mode === "fight" && enemy) {
       const dx = enemy.sim.x - pos.x;
@@ -345,6 +346,7 @@ export class BotBrain {
       this.wobble += (this.rng() * 2 - 1) * err * 0.6;
       this.wobble = Math.max(-err, Math.min(err, this.wobble * 0.9));
       aim = Math.atan2(dy, dx) + this.wobble;
+      aimDist = d;
       // Bursts once it has reacted, while it has something in the magazine.
       if (tick >= this.reactAt && !reloading && !empty && d <= (weapon?.rangePx ?? 900)) {
         if (tick >= this.pauseUntil && tick >= this.fireUntil) {
@@ -415,7 +417,7 @@ export class BotBrain {
       mx /= l;
       my /= l;
     }
-    return { mx, my, aim, buttons, slot };
+    return { mx, my, aim, buttons, slot, aimDist };
   }
 
   private reset(): void {

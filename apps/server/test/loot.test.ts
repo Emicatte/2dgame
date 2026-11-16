@@ -183,10 +183,12 @@ describe("loot: chests, shields, new weapons", () => {
         buttons: BTN.FIRE,
         slot: -1,
         viewTick: sim.tick,
+        aimDist: 170,
       }),
     ]);
-    const events = sim.step(SERVER_TICK_MS, "live").map((e) => e.t);
-    expect(events).toContain("boom");
+    // Lands where it was aimed (170 px), not on the first thing in the way.
+    const boom = sim.step(SERVER_TICK_MS, "live").find((e) => e.t === "boom");
+    expect(boom && Math.round(Math.hypot(boom.x - 1100, boom.y - 480))).toBe(170);
     expect(b.hp).toBeLessThan(PLAYER.maxHealth);
     expect(c.hp).toBeLessThan(PLAYER.maxHealth);
     expect(a.hp).toBe(PLAYER.maxHealth);

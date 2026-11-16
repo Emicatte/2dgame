@@ -74,6 +74,8 @@ export interface WeaponDef {
   swapSec: number;
   /** Explosive (rocket): no direct damage; everything within `radius` of the impact takes up to `damage`. */
   splash?: { radius: number; damage: number };
+  /** Thrown (grenade): lands where the player aimed (up to rangePx), flying over walls and players. */
+  lob?: boolean;
   /** Visual-only feedback. */
   fx: {
     tracerColor: number;
@@ -837,6 +839,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     moveSpeedMult: 1,
     swapSec: 0.35,
     splash: { radius: 160, damage: 95 },
+    lob: true,
     fx: {
       tracerColor: 0x8bd96b,
       tracerWidth: 4,
