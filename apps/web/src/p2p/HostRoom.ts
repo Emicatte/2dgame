@@ -783,7 +783,8 @@ export class HostRoom {
     this.state.winnerTeam = 0;
     this.state.matchIndex += 1;
     this.state.phaseEndTick = this.sim.tick + this.sim.secToTicks(MATCH_DEFAULTS.countdownSec);
-    for (const ps of this.state.players.values()) ps.ready = false;
+    // People confirm again for the next match; bots are always ready.
+    for (const [id, ps] of this.state.players) ps.ready = this.bots.has(id);
     for (const id of this.lastInputTick.keys()) this.lastInputTick.set(id, this.sim.tick);
     this.syncPickups(true);
   }

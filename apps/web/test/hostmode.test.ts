@@ -78,6 +78,16 @@ async function ticks(host: HostRoom, n: number) {
 }
 
 describe("host mode: browser-hosted room", () => {
+  it("bots stay ready when a match starts (play again without recreating the arena)", () => {
+    const host = new HostRoom({ code: "BOTSR", map: "industrial", host: HOST, headless: true, bots: 2 });
+    rooms.push(host);
+    host.send(C2S.START, {});
+    expect(host.state.phase).toBe("countdown");
+    const bots = [...host.state.players.entries()].filter(([id]) => id.startsWith("bot:"));
+    expect(bots).toHaveLength(2);
+    expect(bots.every(([, p]) => p.ready)).toBe(true);
+  });
+
   it("bots: default lineup, chosen by the host, kept with friends, none in round modes", async () => {
     const host = new HostRoom({ code: "BOTSX", map: "industrial", host: HOST, headless: true });
     rooms.push(host);
