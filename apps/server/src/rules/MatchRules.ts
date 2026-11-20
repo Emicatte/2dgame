@@ -355,7 +355,7 @@ export class MatchRules {
 
   /**
    * Before a match starts: everybody has a team, and with two or more humans neither team is
-   * empty (otherwise there is nobody to fight) — in that case teams are rebalanced.
+   * empty, bots included (otherwise there is nobody to fight) — in that case teams are rebalanced.
    */
   prepareMatch(): void {
     if (this.sim.ctl) {
@@ -371,9 +371,15 @@ export class MatchRules {
     if (!this.teamMode) return;
     const humans = this.humans();
     for (const p of humans) if (p.team !== TEAM_ALPHA && p.team !== TEAM_BRAVO) this.assign(p.id);
-    const c = this.counts();
-    if (humans.length >= 2 && (c[TEAM_ALPHA] === 0 || c[TEAM_BRAVO] === 0)) this.balance();
+    // Teams chosen in the lobby stay: humans together against the bots is fine. Only when a side
+    // would have nobody at all (bots counted) are the humans rebalanced.
     this.retargetBots();
+    const all = [...this.sim.players.values()];
+    const empty = [TEAM_ALPHA, TEAM_BRAVO].some((t) => !all.some((p) => p.team === t));
+    if (humans.length >= 2 && empty) {
+      this.balance();
+      this.retargetBots();
+    }
   }
 
   retargetBots(): void {

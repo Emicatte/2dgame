@@ -19,6 +19,8 @@ import {
   ROLE,
   SABOTAGE,
   SERVER_TICK_MS,
+  TEAM_ALPHA,
+  TEAM_BRAVO,
   WEAPONS,
 } from "@scrapline/shared";
 import { describe, expect, it } from "vitest";
@@ -375,5 +377,21 @@ describe("Vehicle Pursuit and Convoy", () => {
     truck.status = VEHICLE_WRECK;
     ticks(sim, 2);
     expect(ctl.wins[ctl.defendTeam]).toBe(1);
+  });
+});
+
+describe("Team modes with bots", () => {
+  it("two humans on the same team stay together against the bots; without bots they are split", () => {
+    const { sim, state, rules } = setup("tdm", "industrial", ["a", "b", "bot:1", "bot:2"]);
+    state.hostId = "a";
+    for (const id of ["a", "b"]) sim.players.get(id)!.team = TEAM_ALPHA;
+    rules.prepareMatch();
+    expect(sim.players.get("a")!.team).toBe(TEAM_ALPHA);
+    expect(sim.players.get("b")!.team).toBe(TEAM_ALPHA);
+    expect(sim.players.get("bot:1")!.team).toBe(TEAM_BRAVO);
+    const solo = setup("tdm", "industrial", ["a", "b"]);
+    for (const id of ["a", "b"]) solo.sim.players.get(id)!.team = TEAM_ALPHA;
+    solo.rules.prepareMatch();
+    expect(solo.sim.players.get("a")!.team).not.toBe(solo.sim.players.get("b")!.team);
   });
 });
