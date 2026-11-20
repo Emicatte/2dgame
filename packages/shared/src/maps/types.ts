@@ -164,6 +164,8 @@ export interface HideSpotDef extends Vec2 {
 
 /** Hide & Seek and Prop Hunt data of a map. */
 export interface PartyMapDef {
+  /** Generated from the arena (no authored decor): props are only drawn by Prop Hunt. */
+  auto?: boolean;
   /** Where seekers / hunters wait (frozen, blindfolded) during the hiding time. */
   seekerPen: readonly Vec2[];
   /** Where hiders / props start. */

@@ -93,7 +93,15 @@ export type DisguiseKind =
   | "extinguisher"
   | "gascan"
   | "sofa"
-  | "speaker";
+  | "speaker"
+  | "car"
+  | "scooter"
+  | "dumpster"
+  | "fridge"
+  | "bench"
+  | "washer"
+  | "pallet"
+  | "hydrant";
 
 export interface DisguiseDef {
   kind: DisguiseKind;
@@ -140,6 +148,15 @@ export const DISGUISES: readonly DisguiseDef[] = [
   { kind: "gascan", index: 15, name: "Gas can", radius: 12, w: 24, h: 20, health: 55, speed: 1.05 },
   { kind: "sofa", index: 16, name: "Sofa", radius: 28, w: 60, h: 34, health: 160, speed: 0.75 },
   { kind: "speaker", index: 17, name: "Speaker", radius: 16, w: 30, h: 30, health: 80, speed: 1 },
+  // 0.9.x: vehicles and street / home objects.
+  { kind: "car", index: 18, name: "Car", radius: 34, w: 84, h: 44, health: 220, speed: 0.7 },
+  { kind: "scooter", index: 19, name: "Scooter", radius: 15, w: 36, h: 18, health: 70, speed: 1.05 },
+  { kind: "dumpster", index: 20, name: "Dumpster", radius: 30, w: 66, h: 40, health: 180, speed: 0.75 },
+  { kind: "fridge", index: 21, name: "Fridge", radius: 20, w: 38, h: 36, health: 120, speed: 0.9 },
+  { kind: "bench", index: 22, name: "Bench", radius: 22, w: 56, h: 22, health: 100, speed: 0.95 },
+  { kind: "washer", index: 23, name: "Washing machine", radius: 18, w: 34, h: 34, health: 100, speed: 0.95 },
+  { kind: "pallet", index: 24, name: "Pallet stack", radius: 22, w: 46, h: 40, health: 110, speed: 0.9 },
+  { kind: "hydrant", index: 25, name: "Fire hydrant", radius: 11, w: 22, h: 22, health: 50, speed: 1.08 },
 ];
 
 /**

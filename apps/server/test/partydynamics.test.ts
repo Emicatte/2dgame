@@ -4,6 +4,7 @@ import {
   HIDE_SEEK,
   MAPS,
   MatchState,
+  mapsForMode,
   NET,
   type NetEvent,
   PARTY_ABILITIES,
@@ -158,9 +159,9 @@ describe("Prop Hunt: swap, hunters' sonar, more objects", () => {
     return { sim, state, ctl, hunter, prop };
   }
 
-  it("every party map offers all 18 objects", () => {
-    expect(DISGUISES.length).toBe(18);
-    for (const id of ["depot", "motel", "market"] as const) {
+  it("every party map offers all 26 objects (cars included)", () => {
+    expect(DISGUISES.length).toBe(26);
+    for (const id of mapsForMode("prophunt")) {
       const kinds = new Set(MAPS[id].party!.props.map((p) => p.kind));
       expect(kinds.size, id).toBe(DISGUISES.length);
     }

@@ -116,8 +116,16 @@ describe("maps", () => {
       );
     });
 
-    it("offers Prop Hunt only on maps with transformable objects", () => {
-      expect(mapsForMode("prophunt")).toEqual(["depot", "motel", "market"]);
+    it("offers Hide & Seek and Prop Hunt on every arena (generated party data where not authored)", () => {
+      const arenas = mapsForMode("prophunt");
+      expect(arenas.length).toBeGreaterThanOrEqual(12);
+      expect(mapsForMode("hideseek")).toEqual(arenas);
+      for (const id of arenas) {
+        const party = MAPS[id].party!;
+        expect(party.props.length).toBeGreaterThanOrEqual(45);
+        expect(party.hiderSpawns.length).toBeGreaterThanOrEqual(4);
+        expect(validateMap(MAPS[id])).toEqual([]);
+      }
       for (const id of ["depot", "motel", "market"] as const) {
         expect(mapsForMode("hideseek")).toContain(id);
         expect(mapsForMode("infection")).toContain(id);
