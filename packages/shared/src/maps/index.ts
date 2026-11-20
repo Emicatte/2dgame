@@ -1,6 +1,6 @@
 import { PLAYER } from "../config/game.ts";
 import type { GameMode } from "../config/modes.ts";
-import { disguiseByName } from "../config/party.ts";
+import { DISGUISES, disguiseByName } from "../config/party.ts";
 import { VEHICLES } from "../config/vehicles.ts";
 import { buildCollisionWorld, type CollisionWorld, circleIntersectsRect } from "../sim/collision.ts";
 import type { Vec2 } from "../sim/math.ts";
@@ -28,7 +28,7 @@ import { MOTEL_STRIP } from "./motel.ts";
 import { MOUNTAIN_OUTPOST } from "./mountain.ts";
 import { NEON_DISTRICT } from "./neon.ts";
 import { KESSLER_ROAD } from "./outskirts.ts";
-import { type MapDef, type MapId, SHOOT_THROUGH, TALL_SOLIDS } from "./types.ts";
+import { type MapDef, type MapId, type PropSpotDef, SHOOT_THROUGH, TALL_SOLIDS } from "./types.ts";
 import { URBAN_WARFARE } from "./urban.ts";
 import { HALVORSEN_WORKS } from "./works.ts";
 
@@ -77,7 +77,7 @@ const EXPANDED = new Set([
 const LISTED: Record<string, MapDef> = Object.fromEntries([
   ...Object.entries(BASE_MAPS).map(([id, m]) => [
     id,
-    EXPANDED.has(id) ? expandArena(withChests(m)) : withChests(m),
+    withParty(EXPANDED.has(id) ? expandArena(withChests(m)) : withChests(m)),
   ]),
   ...MAZE_DEFAULT_IDS.map((id) => {
     const p = parseMazeId(id)!;
@@ -89,6 +89,43 @@ const LISTED: Record<string, MapDef> = Object.fromEntries([
   }),
 ]);
 const generated = new Map<string, MapDef>();
+
+/**
+ * Hide & Seek / Prop Hunt data. Arenas without authored party data get it generated (teams' spawns
+ * as pen and hider starts, prop spots on a grid next to walls and cover); authored party maps get
+ * two of each object kind they lack. Spots are free, apart from each other and from the starts.
+ */
+function withParty(map: MapDef): MapDef {
+  const authored = map.party;
+  if (map.pve || (map.modes && !authored)) return map;
+  const world = buildCollisionWorld(map.width, map.height, map.solids);
+  const seekerPen = authored?.seekerPen ?? (map.teamSpawns?.[2] ?? map.spawns).slice(0, 4);
+  const hiderSpawns = authored?.hiderSpawns ?? [...(map.teamSpawns?.[1] ?? map.spawns)];
+  const starts = [...seekerPen, ...hiderSpawns];
+  const props: PropSpotDef[] = [...(authored?.props ?? [])];
+  const want = authored
+    ? DISGUISES.filter((d) => !props.some((p) => p.kind === d.kind)).flatMap((d) => [d, d])
+    : null;
+  if (want?.length === 0) return map;
+  const step = 190;
+  for (let y = step; y < map.height - 60; y += step)
+    for (let x = step / 2 + ((y / step) % 2) * (step / 2); x < map.width - 60; x += step) {
+      const p = { x, y };
+      // Next kind (in a varied order) that fits here: big ones like cars need room.
+      const pool = want ?? DISGUISES.map((_, k) => DISGUISES[(props.length * 7 + k) % DISGUISES.length]!);
+      const def = pool.find((d) => isFreeSpot(world, p, d.radius + 8));
+      if (!def || isFreeSpot(world, p, def.radius + 70)) continue;
+      const near = (q: Vec2, r: number) => Math.hypot(q.x - x, q.y - y) < r;
+      if (starts.some((q) => near(q, def.radius + PLAYER.radius + 30))) continue;
+      if (props.some((q) => near(q, def.radius + (disguiseByName(q.kind)?.radius ?? 30) + 8))) continue;
+      props.push({ x, y, kind: def.kind });
+      want?.splice(want.indexOf(def), 1);
+    }
+  const party = authored
+    ? { ...authored, props }
+    : { auto: true, seekerPen, hiderSpawns, shadows: [], hideSpots: [], props };
+  return { ...map, party };
+}
 
 /**
  * Every map, with its loot chests added to the pickups. Maze ids of any seed resolve too: the map
@@ -138,7 +175,8 @@ export function mapModes(map: MapDef): GameMode[] {
   if (map.vehicleSpawns?.length) out.push("mayhem");
   // Pursuit and Convoy need ground vehicles to drive.
   if (map.vehicleSpawns?.some((v) => v.kind !== "heli")) out.push("pursuit", "convoy", "racing");
-  if (!map.large) out.push("gungame", "hideseek", "infection", "sabotage", "hotpotato");
+  if (!map.large) out.push("gungame", "infection", "sabotage", "hotpotato");
+  out.push("hideseek");
   if (map.party?.props.length) out.push("prophunt");
   return out;
 }

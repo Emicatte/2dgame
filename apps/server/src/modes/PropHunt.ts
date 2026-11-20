@@ -56,11 +56,8 @@ export class PropHuntMode extends RoundMode {
   private readonly cdTaunt = new Map<string, number>();
   private readonly cdDecoy = new Map<string, number>();
   private readonly cdSwap = new Map<string, number>();
-  private readonly lastMove = new Map<string, { x: number; y: number; tick: number }>();
   private readonly aliveTicks = new Map<string, number>();
   private readonly alivePaid = new Map<string, number>();
-  private hintsDone = 0;
-  private huntStart = 0;
 
   /** Kinds a prop may turn into: those present on this map. */
   get kinds(): DisguiseDef[] {
@@ -104,8 +101,6 @@ export class PropHuntMode extends RoundMode {
     this.cdTaunt.clear();
     this.cdDecoy.clear();
     this.cdSwap.clear();
-    this.lastMove.clear();
-    this.hintsDone = 0;
     // Most spots get a real object, slightly moved and turned: a round never looks exactly like
     // the map file, so an object "off its spot" is not proof of a player.
     for (const spot of this.sim.map.party?.props ?? []) {
@@ -132,7 +127,6 @@ export class PropHuntMode extends RoundMode {
   }
 
   protected override onHuntStart(): void {
-    this.huntStart = this.sim.tick;
     // Nobody hunts a person: an undisguised prop becomes a random object it fits as.
     for (const p of this.aliveSide(ROLE.HIDER)) {
       if (this.disguise.has(p.id)) continue;
@@ -249,7 +243,6 @@ export class PropHuntMode extends RoundMode {
       this.disguise.set(p.id, id);
     }
     if (!auto) this.locked.delete(p.id);
-    this.lastMove.set(p.id, { x: p.sim.x, y: p.sim.y, tick: this.sim.tick });
     this.bodies.tick = -1;
     return true;
   }
@@ -372,7 +365,6 @@ export class PropHuntMode extends RoundMode {
     p.sim.vy = 0;
     p.hp = Math.max(1, Math.min(255, Math.round((p.hp / (prev?.health ?? PLAYER.maxHealth)) * def.health)));
     this.locked.delete(p.id);
-    this.lastMove.set(p.id, { x: p.sim.x, y: p.sim.y, tick });
     this.cdSwap.set(p.id, tick + this.tickOf(PARTY_ABILITIES.swap.cooldownSec));
     this.bodies.tick = -1;
     return null;
@@ -479,7 +471,6 @@ export class PropHuntMode extends RoundMode {
   // ------------------------------------------------------------------ hunt: points and hints
 
   protected override huntTick(): void {
-    const tick = this.sim.tick;
     const every = this.tickOf(PROP_HUNT.points.aliveEverySec);
     for (const p of this.aliveSide(ROLE.HIDER)) {
       const t = (this.aliveTicks.get(p.id) ?? 0) + 1;
@@ -490,21 +481,8 @@ export class PropHuntMode extends RoundMode {
         this.addPoints(p, (units - paid) * PROP_HUNT.points.alive);
         this.alivePaid.set(p.id, units);
       }
-      // Standing still: tracked from the last real move.
-      const m = this.lastMove.get(p.id);
-      if (!m || Math.hypot(p.sim.x - m.x, p.sim.y - m.y) > PROP_HUNT.stillPx) {
-        this.lastMove.set(p.id, { x: p.sim.x, y: p.sim.y, tick });
-      } else if (tick - m.tick >= this.tickOf(PROP_HUNT.stillSec)) {
-        this.pingAround(p, PROP_HUNT.stillPingRadius, PROP_HUNT.hintSec);
-        this.lastMove.set(p.id, { x: p.sim.x, y: p.sim.y, tick });
-      }
     }
-    const next = PROP_HUNT.hints[this.hintsDone];
-    if (next && tick - this.huntStart >= this.tickOf(next.atSec)) {
-      this.hintsDone++;
-      for (const p of this.aliveSide(ROLE.HIDER)) this.pingAround(p, next.radius, PROP_HUNT.hintSec);
-      this.emit({ t: "hint", n: this.hintsDone });
-    }
+    // No automatic pings: hunters only find props with their own sonar (G).
   }
 
   // ------------------------------------------------------------------ hidden information

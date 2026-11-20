@@ -573,17 +573,13 @@ describe("Prop Hunt", () => {
     expect(ctl.kindOf(prop)?.kind).toBe("bin");
   });
 
-  it("hints: approximate areas that contain the prop and are not centred on it; standing still earns a ping", () => {
-    const { sim, state, ctl, prop } = huntWithProp();
-    for (let i = 0; i < PROP_HUNT.stillSec + 5 && state.pings.size === 0; i++) {
+  it("no automatic pings: a prop standing still through the hint times is never revealed", () => {
+    const { sim, state, ctl } = huntWithProp();
+    const last = Math.max(PROP_HUNT.stillSec, ...PROP_HUNT.hints.map((h) => h.atSec)) + 5;
+    for (let i = 0; i < last; i++) {
       ticks(sim, sec(1));
       ctl.sync(state);
-    }
-    expect(state.pings.size).toBeGreaterThanOrEqual(1);
-    for (const ping of state.pings.values()) {
-      const d = Math.hypot(ping.x - prop.sim.x, ping.y - prop.sim.y);
-      expect(d).toBeLessThan(ping.r);
-      expect(d).toBeGreaterThan(10);
+      expect(state.pings.size).toBe(0);
     }
   });
 

@@ -26,7 +26,7 @@ export function renderMap(map: MapDef, scale = 1, opts: { props?: boolean } = {}
   for (const d of map.decor) drawDecor(ctx, d, map.theme, rand);
   drawShadows(ctx, map);
   for (const s of map.solids) drawSolid(ctx, s, map, rand);
-  if (map.party) drawParty(ctx, map, opts.props !== false);
+  if (map.party) drawParty(ctx, map, opts.props !== false && !map.party.auto);
   drawBorder(ctx, map);
   return c;
 }

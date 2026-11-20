@@ -341,6 +341,130 @@ export function drawPropShape(ctx: CanvasRenderingContext2D, def: DisguiseDef): 
       ctx.fill();
       break;
     }
+    case "car": {
+      ctx.fillStyle = hex(0x161719);
+      for (const [wx, wy] of [
+        [x + 12, y - 2],
+        [x + w - 26, y - 2],
+        [x + 12, y + h - 6],
+        [x + w - 26, y + h - 6],
+      ] as const) {
+        rr(ctx, wx, wy, 14, 8, 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = hex(0x8a2b2b);
+      rr(ctx, x, y + 2, w, h - 4, 10);
+      ctx.fill();
+      ctx.fillStyle = hex(0xa83a36);
+      rr(ctx, x + 2, y + 3, w - 4, h - 9, 9);
+      ctx.fill();
+      ctx.fillStyle = hex(0x22303a);
+      rr(ctx, x + w * 0.52, y + 7, 12, h - 16, 3);
+      ctx.fill();
+      rr(ctx, x + w * 0.2, y + 7, 9, h - 16, 3);
+      ctx.fill();
+      ctx.fillStyle = hex(0x9c3532);
+      rr(ctx, x + w * 0.31, y + 7, w * 0.2, h - 16, 3);
+      ctx.fill();
+      ctx.fillStyle = hex(0xf2e6a8);
+      ctx.fillRect(x + w - 4, y + 6, 3, 6);
+      ctx.fillRect(x + w - 4, y + h - 14, 3, 6);
+      break;
+    }
+    case "scooter": {
+      ctx.fillStyle = hex(0x111214);
+      ctx.beginPath();
+      ctx.arc(x + 6, 0, 6, 0, Math.PI * 2);
+      ctx.arc(x + w - 6, 0, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0x3d7fa8);
+      rr(ctx, x + 6, y + 2, w - 12, h - 6, 5);
+      ctx.fill();
+      ctx.fillStyle = hex(0x23262b);
+      rr(ctx, x + 10, y + 4, 12, h - 10, 3);
+      ctx.fill();
+      ctx.fillStyle = hex(0xb9bec6);
+      ctx.fillRect(x + w - 9, y - 1, 2, h + 1);
+      break;
+    }
+    case "dumpster": {
+      ctx.fillStyle = hex(0x1f4a2c);
+      rr(ctx, x, y, w, h, 3);
+      ctx.fill();
+      ctx.fillStyle = hex(0x2c6a3e);
+      rr(ctx, x + 2, y + 2, w / 2 - 3, h - 6, 2);
+      ctx.fill();
+      rr(ctx, x + w / 2 + 1, y + 2, w / 2 - 3, h - 6, 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0x173522);
+      ctx.fillRect(x + 4, y + h / 2 - 2, w - 8, 3);
+      break;
+    }
+    case "fridge":
+    case "washer": {
+      ctx.fillStyle = hex(0xb8bcc2);
+      rr(ctx, x, y, w, h, 4);
+      ctx.fill();
+      ctx.fillStyle = hex(0xe6e8eb);
+      rr(ctx, x + 1, y + 1, w - 2, h - 4, 4);
+      ctx.fill();
+      ctx.strokeStyle = hex(0x9097a0);
+      ctx.lineWidth = 2;
+      if (def.kind === "fridge") {
+        ctx.beginPath();
+        ctx.moveTo(x + 3, y + h * 0.38);
+        ctx.lineTo(x + w - 3, y + h * 0.38);
+        ctx.stroke();
+        ctx.fillStyle = hex(0x7d848d);
+        ctx.fillRect(x + w - 8, y + 5, 3, 7);
+        ctx.fillRect(x + w - 8, y + h * 0.48, 3, 9);
+      } else {
+        ctx.fillStyle = hex(0x3b4a5a);
+        ctx.beginPath();
+        ctx.arc(0, 2, w * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = hex(0x7d848d);
+        ctx.fillRect(x + 4, y + 3, 8, 3);
+      }
+      break;
+    }
+    case "bench":
+    case "pallet": {
+      const bench = def.kind === "bench";
+      ctx.fillStyle = hex(bench ? 0x2b2d31 : 0x5a4126);
+      rr(ctx, x, y, w, h, 2);
+      ctx.fill();
+      ctx.fillStyle = hex(bench ? 0x8a6238 : 0xa98352);
+      const n = bench ? 3 : 5;
+      const slat = (h - 4) / n;
+      for (let i = 0; i < n; i++) ctx.fillRect(x + 2, y + 2 + i * slat, w - 4, slat - 2);
+      if (!bench) {
+        ctx.fillStyle = hex(0x6e5233);
+        ctx.fillRect(x + 4, y, 5, h);
+        ctx.fillRect(-2, y, 5, h);
+        ctx.fillRect(x + w - 9, y, 5, h);
+      }
+      break;
+    }
+    case "hydrant": {
+      ctx.fillStyle = hex(0x8f1f1a);
+      ctx.beginPath();
+      ctx.arc(0, 0, w / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0xc0332a);
+      ctx.beginPath();
+      ctx.arc(0, -1, w / 2 - 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0xd9a63c);
+      ctx.beginPath();
+      ctx.arc(0, -1, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hex(0x8f1f1a);
+      ctx.fillRect(x - 2, -3, 5, 6);
+      ctx.fillRect(x + w - 3, -3, 5, 6);
+      break;
+    }
   }
 }
 
