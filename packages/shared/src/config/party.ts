@@ -166,7 +166,7 @@ export const DISGUISES: readonly DisguiseDef[] = [
  */
 export const PARTY_ABILITIES = {
   /** Seekers / hunters: a pulse that pings (approximately) everyone hiding within range. */
-  sonar: { cooldownSec: 30, rangePx: 450, pingRadius: 130, pingSec: 4 },
+  sonar: { cooldownSec: 30, rangePx: 700, pingRadius: 130, pingSec: 4 },
   /** Hide & Seek hiders: a fake ping where they aim, up to range. */
   noise: { cooldownSec: 25, rangePx: 420, pingRadius: 110, pingSec: 4 },
   /** Prop Hunt props: become the nearest real object in range; your old object stays behind. */

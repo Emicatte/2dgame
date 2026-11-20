@@ -295,16 +295,20 @@ export abstract class RoundMode extends BaseMode {
    */
   protected roleAbility(p: ServerPlayer, msg: AbilityMessage): string | null {
     if (msg.a !== "sonar" || !this.sonar) return null;
-    if (this.sideOf(p.id) !== ROLE.SEEKER || !p.alive || this.stage !== "hunt") return null;
+    if (this.sideOf(p.id) !== ROLE.SEEKER || !p.alive) return null;
+    if (this.stage !== "hunt" && this.stage !== "overtime") return "The sonar works once the hunt starts";
     const tick = this.sim.tick;
     if (tick < (this.cdAbility.get(p.id) ?? 0)) return "Sonar is recharging";
     const s = PARTY_ABILITIES.sonar;
     this.cdAbility.set(p.id, tick + this.tickOf(s.cooldownSec));
     this.emit({ t: "sonar", x: Math.round(p.sim.x), y: Math.round(p.sim.y), r: s.rangePx });
+    let found = 0;
     for (const h of this.aliveSide(ROLE.HIDER))
-      if ((h.sim.x - p.sim.x) ** 2 + (h.sim.y - p.sim.y) ** 2 <= s.rangePx ** 2)
+      if ((h.sim.x - p.sim.x) ** 2 + (h.sim.y - p.sim.y) ** 2 <= s.rangePx ** 2) {
         this.pingAround(h, s.pingRadius, s.pingSec);
-    return null;
+        found++;
+      }
+    return found ? null : "Sonar: nothing in range";
   }
 
   override over(): string | null {

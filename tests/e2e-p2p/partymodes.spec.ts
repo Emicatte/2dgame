@@ -271,7 +271,7 @@ test("Prop Hunt: the prop transforms (Q), hunters get the objects only when the 
   expect(aId).toBeTruthy();
 });
 
-test("Prop Hunt 0.8.1: 18 objects in the picker, swap (V) to a nearby object, the hunter's sonar (G)", async () => {
+test("Prop Hunt 0.8.1: 26 objects in the picker, swap (V) to a nearby object, the hunter's sonar (G)", async () => {
   const { a, b } = await twoPlayers();
   await arenaFor(a, b, "prophunt");
   expect(
@@ -282,7 +282,7 @@ test("Prop Hunt 0.8.1: 18 objects in the picker, swap (V) to a nearby object, th
   await startMatch(a, b);
   await stageIs(a, "prep");
   await a.keyboard.press("KeyQ");
-  await expect(a.locator('[data-testid^="prop-kind-"]')).toHaveCount(18);
+  await expect(a.locator('[data-testid^="prop-kind-"]')).toHaveCount(26);
   await shot(a, "prophunt-picker-18");
   await a.keyboard.press("KeyQ");
   await stageIs(b, "hunt", 45_000);
