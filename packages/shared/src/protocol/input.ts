@@ -30,6 +30,8 @@ export interface WireInput {
   a: number;
   /** Button bit flags (BTN). */
   b: number;
+  /** Aim distance in px, sent only with a thrown weapon in hand. */
+  d?: number;
   /** Requested weapon slot 0-2, or -1 for no change. */
   w: number;
   /** Server tick the client was rendering for remote players * VIEW_SCALE (lag compensation). */
@@ -44,10 +46,12 @@ export interface InputFrame {
   buttons: number;
   slot: number;
   viewTick: number;
+  /** Distance to the aimed point (thrown weapons only). */
+  aimDist?: number;
 }
 
 export function encodeInput(f: InputFrame): WireInput {
-  return {
+  const w: WireInput = {
     s: f.seq,
     x: f.mx,
     y: f.my,
@@ -56,10 +60,12 @@ export function encodeInput(f: InputFrame): WireInput {
     w: f.slot,
     v: Math.round(f.viewTick * VIEW_SCALE),
   };
+  if (f.aimDist !== undefined) w.d = Math.min(4000, Math.round(f.aimDist));
+  return w;
 }
 
 export function decodeInput(w: WireInput): InputFrame {
-  return {
+  const f: InputFrame = {
     seq: w.s,
     mx: w.x,
     my: w.y,
@@ -68,6 +74,8 @@ export function decodeInput(w: WireInput): InputFrame {
     slot: w.w,
     viewTick: w.v / VIEW_SCALE,
   };
+  if (w.d !== undefined) f.aimDist = w.d;
+  return f;
 }
 
 /** Round-trips a frame through the wire encoding so the client predicts with exactly what the server gets. */
@@ -91,6 +99,7 @@ export const wireInputSchema = z.object({
     .min(-Math.ceil(Math.PI * AIM_SCALE) - 1)
     .max(Math.ceil(Math.PI * AIM_SCALE) + 1),
   b: z.number().int().min(0).max(63),
+  d: z.number().int().min(0).max(4000).optional(),
   w: z.number().int().min(-1).max(2),
   v: z
     .number()

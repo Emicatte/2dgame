@@ -1518,7 +1518,10 @@ export class ArenaScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- loop
 
+  private lobGfx?: Phaser.GameObjects.Graphics;
+
   override update(): void {
+    this.drawLobAim();
     // Real elapsed time: Phaser's smoothed delta would slow the fixed-step simulation down on
     // low frame rates, making the player move slower than the server's real-time budget.
     const now = performance.now();
@@ -1636,6 +1639,37 @@ export class ArenaScene extends Phaser.Scene {
    * position, at most one fixed step (a few px) from the drawn body: parallel and within that
    * distance of the crosshair.
    */
+  /** Thrown weapon in hand: distance from the player to the cursor (where it lands). */
+  private lobDist(): number | undefined {
+    const sim = this.predictor.sim;
+    if (!weaponByIndex(sim.slots[sim.slot]?.id ?? -1)?.lob) return undefined;
+    const p = this.input_pointer();
+    return Math.hypot(p.worldX - sim.x, p.worldY - sim.y);
+  }
+
+  /** Aim preview for thrown weapons: an arc to the landing point and the blast circle. */
+  private drawLobAim() {
+    if (!this.lobGfx) this.lobGfx = this.add.graphics().setDepth(900);
+    const g = this.lobGfx;
+    g.clear();
+    const sim = this.predictor.sim;
+    const def = weaponByIndex(sim.slots[sim.slot]?.id ?? -1);
+    const dist = this.lobDist();
+    if (!def?.lob || dist === undefined || !this.predictorAlive || this.predictor.mount) return;
+    const d = Math.min(dist, def.rangePx);
+    const a = this.aimAngle();
+    const x = sim.x + Math.cos(a) * d;
+    const y = sim.y + Math.sin(a) * d;
+    const arc = new Phaser.Curves.QuadraticBezier(
+      new Phaser.Math.Vector2(sim.x, sim.y),
+      new Phaser.Math.Vector2((sim.x + x) / 2, (sim.y + y) / 2 - d * 0.45),
+      new Phaser.Math.Vector2(x, y),
+    );
+    g.lineStyle(3, 0xffffff, 0.55).strokePoints(arc.getPoints(20));
+    g.fillStyle(0xffffff, 0.12).fillCircle(x, y, def.splash?.radius ?? 0);
+    g.lineStyle(2, 0xffffff, 0.6).strokeCircle(x, y, def.splash?.radius ?? 0);
+  }
+
   private aimAngle(): number {
     const pointer = this.input_pointer();
     const me = this.views.get(this.room?.sessionId ?? "");
@@ -1679,6 +1713,7 @@ export class ArenaScene extends Phaser.Scene {
       buttons: ap ? ap.buttons : buttons,
       slot: this.pendingSlot,
       viewTick: Math.max(0, this.clock.renderTick()),
+      aimDist: ap ? undefined : this.lobDist(),
     });
     this.pendingSlot = -1;
     const alive = this.predictorAlive && phase === "playing";
@@ -1688,7 +1723,7 @@ export class ArenaScene extends Phaser.Scene {
       (e) => {
         switch (e.kind) {
           case "shot":
-            this.localShot(e.shot.weapon, e.shot.angles);
+            this.localShot(e.shot.weapon, e.shot.angles, e.shot.dist);
             break;
           case "dry":
             sfx.dry();
@@ -1725,7 +1760,7 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
-  private localShot(weaponIndex: number, angles: number[]) {
+  private localShot(weaponIndex: number, angles: number[], lobDist?: number) {
     const def = weaponByIndex(weaponIndex);
     if (!def) return;
     const me = this.views.get(this.room?.sessionId ?? "");
@@ -1787,6 +1822,7 @@ export class ArenaScene extends Phaser.Scene {
     const opts = { airWorld: airWorldFor(this.map), shooterAir: (ride?.alt ?? 0) >= AIRBORNE_ALT };
     const ends = angles.map((a) => {
       const r = tracePellet(world, ox, oy, a, def.rangePx, targets, this.room?.sessionId ?? "", opts);
+      if (def.lob) r.dist = Math.min(lobDist ?? def.rangePx, def.rangePx);
       return {
         x: ox + Math.cos(a) * r.dist,
         y: oy + Math.sin(a) * r.dist,

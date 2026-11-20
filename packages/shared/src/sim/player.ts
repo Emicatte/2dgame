@@ -102,6 +102,8 @@ export interface ShotIntent {
   ox: number;
   oy: number;
   angles: number[];
+  /** Thrown weapons: aimed distance. */
+  dist?: number;
 }
 
 export type SimEvent =
@@ -394,7 +396,10 @@ function stepWeapons(s: PlayerSim, input: InputFrame, ctx: StepContext, dt: numb
         angles.push(s.aim + offset);
       }
       s.bloom = Math.min(w.maxBloomDeg, s.bloom + w.bloomPerShotDeg);
-      ctx.emit?.({ kind: "shot", shot: { seq: input.seq, weapon: w.index, ox: s.x, oy: s.y, angles } });
+      ctx.emit?.({
+        kind: "shot",
+        shot: { seq: input.seq, weapon: w.index, ox: s.x, oy: s.y, angles, dist: input.aimDist },
+      });
     } else if (canStartReload()) {
       s.reload = secToSteps(w.reloadSec);
       ctx.emit?.({ kind: "reloadStart", weapon: w.index });

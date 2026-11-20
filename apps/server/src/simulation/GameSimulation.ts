@@ -903,6 +903,8 @@ export class GameSimulation {
         });
       }
     }
+    // Thrown: lands where it was aimed, over walls and players.
+    if (weapon.lob) dists[0] = Math.round(Math.min(shot.dist ?? weapon.rangePx, weapon.rangePx));
     this.events.push({
       t: "shot",
       p: shooter.id,
@@ -917,7 +919,7 @@ export class GameSimulation {
     if (weapon.splash) {
       // Rockets: no direct hit damage, the explosion at the end of the flight does it all.
       const a = shot.angles[0] ?? 0;
-      const d = Math.max(0, (dists[0] ?? 0) - 4);
+      const d = weapon.lob ? (dists[0] ?? 0) : Math.max(0, (dists[0] ?? 0) - 4);
       const before = shooter.stats.damageDealt;
       this.explode(
         shooter,
